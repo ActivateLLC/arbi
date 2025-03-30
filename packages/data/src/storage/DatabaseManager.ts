@@ -265,13 +265,13 @@ export class DatabaseManager {
   ): Promise<any> {
     return this.sequelize.query(sql, {
       replacements: options.replacements,
-      type: options.type ? (this.sequelize.QueryTypes as any)[options.type] : undefined,
+      type: options.type,
       transaction: options.transaction,
     });
   }
 
   /**
-   * Get the Sequelize instance
+   * Access the Sequelize instance directly
    */
   public getSequelize(): Sequelize {
     return this.sequelize;

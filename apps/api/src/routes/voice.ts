@@ -5,25 +5,40 @@ import { ApiError } from '../middleware/errorHandler';
 
 const router = Router();
 
-// Initialize voice interface
-const voiceInterface = new VoiceInterface({
-  speechRecognition: {
-    apiKey: process.env.OPENAI_API_KEY,
-    model: 'whisper-1',
-    language: 'en',
-  },
-  speechSynthesis: {
-    apiKey: process.env.ELEVENLABS_API_KEY,
-    voice: 'Sarah',
-    model: 'eleven_multilingual_v2',
-  },
-});
+// Initialize voice interface only if API keys are available
+let voiceInterface: VoiceInterface | null = null;
+
+const initVoiceInterface = () => {
+  if (voiceInterface) return voiceInterface;
+
+  if (!process.env.OPENAI_API_KEY) {
+    throw new ApiError('OPENAI_API_KEY environment variable is required for voice features', 503);
+  }
+
+  voiceInterface = new VoiceInterface({
+    speechRecognition: {
+      apiKey: process.env.OPENAI_API_KEY,
+      model: 'whisper-1',
+      language: 'en',
+    },
+    speechSynthesis: {
+      apiKey: process.env.ELEVENLABS_API_KEY,
+      voice: 'Sarah',
+      model: 'eleven_multilingual_v2',
+    },
+  });
+
+  return voiceInterface;
+};
 
 // GET /api/voice/health
 router.get('/health', (req: Request, res: Response) => {
+  const isConfigured = !!process.env.OPENAI_API_KEY && !!process.env.ELEVENLABS_API_KEY;
   res.status(200).json({
-    status: 'ok',
-    message: 'Voice Interface is operational',
+    status: isConfigured ? 'ok' : 'unconfigured',
+    message: isConfigured
+      ? 'Voice Interface is operational'
+      : 'Voice Interface requires OPENAI_API_KEY and ELEVENLABS_API_KEY environment variables',
   });
 });
 
@@ -38,7 +53,8 @@ router.post('/recognize', async (req: Request, res: Response, next: NextFunction
     const audioBuffer = Buffer.from(req.body.audio, 'base64');
 
     // Recognize speech
-    const result = await voiceInterface.recognize(audioBuffer);
+    const vi = initVoiceInterface();
+    const result = await vi.recognize(audioBuffer);
 
     res.status(200).json({
       text: result.text,
@@ -65,7 +81,8 @@ router.post('/synthesize', async (req: Request, res: Response, next: NextFunctio
     };
 
     // Synthesize speech
-    const result = await voiceInterface.synthesize(text);
+    const vi = initVoiceInterface();
+    const result = await vi.synthesize(text);
 
     // Convert audio buffer to base64
     const base64Audio = Buffer.from(result.audioBuffer).toString('base64');
@@ -89,7 +106,8 @@ router.post('/conversation', async (req: Request, res: Response, next: NextFunct
     }
 
     // Start conversation
-    const result = await voiceInterface.conversation(prompt, responseSpeech);
+    const vi = initVoiceInterface();
+    const result = await vi.conversation(prompt, responseSpeech);
 
     res.status(200).json({
       text: result.text,

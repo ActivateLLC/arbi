@@ -1,5 +1,5 @@
-import browserUse from 'browser-use';
-import { v4 as uuidv4 } from 'uuid';
+import { chromium } from 'playwright';
+import { randomBytes } from 'crypto';
 
 import type { BrowserConfig, BrowserSession } from '../types';
 
@@ -14,11 +14,11 @@ export class BrowserManager {
 
   public async createSession(config: BrowserConfig = {}): Promise<string> {
     const mergedConfig = { ...this.defaultConfig, ...config };
-    
-    const browser = await browserUse.launch({
+
+    const browser = await chromium.launch({
       headless: mergedConfig.headless ?? true,
     });
-    
+
     const page = await browser.newPage();
     
     if (mergedConfig.userAgent) {
@@ -30,10 +30,10 @@ export class BrowserManager {
     }
     
     if (mergedConfig.cookies && mergedConfig.cookies.length > 0) {
-      await page.setCookies(...mergedConfig.cookies);
+      await page.context().addCookies(mergedConfig.cookies);
     }
 
-    const sessionId = uuidv4();
+    const sessionId = randomBytes(16).toString('hex');
     this.sessions.set(sessionId, {
       id: sessionId,
       startTime: new Date(),

@@ -10,9 +10,9 @@ const arbitrageEngine = new ArbitrageEngine();
 
 // Default user settings (in production, this would come from database)
 const defaultUserSettings: UserBudgetSettings = {
-  dailyLimit: 500,
-  perOpportunityMax: 200,
-  monthlyLimit: 5000,
+  dailyLimit: 1000,
+  perOpportunityMax: 400,
+  monthlyLimit: 10000,
   reserveFund: 1000,
   riskTolerance: 'moderate',
   enabledStrategies: ['ecommerce_arbitrage']
@@ -32,14 +32,19 @@ router.get('/opportunities', async (req: Request, res: Response, next: NextFunct
   try {
     const userId = req.query.userId as string || 'demo-user';
 
+    // Get filters from query parameters
+    const minProfit = req.query.minProfit ? parseFloat(req.query.minProfit as string) : 10;
+    const minROI = req.query.minROI ? parseFloat(req.query.minROI as string) : 10;
+    const maxPrice = req.query.maxPrice ? parseFloat(req.query.maxPrice as string) : 500;
+
     const config: ScoutConfig = {
       enabled: true,
       scanInterval: 60,
       sources: ['amazon', 'ebay'],
       filters: {
-        minProfit: 20,
-        minROI: 20,
-        maxPrice: 500
+        minProfit,
+        minROI,
+        maxPrice
       }
     };
 
@@ -64,10 +69,13 @@ router.get('/opportunities', async (req: Request, res: Response, next: NextFunct
     // Filter to only recommended opportunities
     const recommended = analyzed.filter(a => a.recommended);
 
+    // Debug mode: return all opportunities
+    const returnAll = req.query.all === 'true';
+
     res.status(200).json({
       totalFound: opportunities.length,
       recommended: recommended.length,
-      opportunities: recommended,
+      opportunities: returnAll ? analyzed : recommended,
       settings: defaultUserSettings
     });
   } catch (error) {

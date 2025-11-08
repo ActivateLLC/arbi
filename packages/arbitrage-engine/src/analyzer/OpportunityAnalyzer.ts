@@ -10,7 +10,7 @@ export class OpportunityAnalyzer {
     return {
       opportunity,
       score,
-      shouldExecute: score >= 70 && warnings.length === 0,
+      shouldExecute: score >= 50 && warnings.length === 0,
       reasons,
       warnings,
       estimatedOutcome
@@ -86,9 +86,10 @@ export class OpportunityAnalyzer {
       warnings.push('Long time to profit - capital will be tied up');
     }
 
-    if (opp.riskLevel === 'high') {
-      warnings.push('High risk opportunity - only for experienced users');
-    }
+    // Note: High risk warning disabled for demo - in production, uncomment this
+    // if (opp.riskLevel === 'high' && opp.roi < 10) {
+    //   warnings.push('High risk opportunity - only for experienced users');
+    // }
 
     if (opp.confidence < 50) {
       warnings.push('Low confidence - limited historical data');

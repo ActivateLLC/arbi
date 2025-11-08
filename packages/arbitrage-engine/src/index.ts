@@ -3,6 +3,9 @@ export * from './types';
 
 // Export scouts
 export * from './scouts/ECommerceScout';
+export * from './scouts/WebScraperScout';
+export * from './scouts/EbayScout';
+export * from './scouts/RainforestScout';
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';

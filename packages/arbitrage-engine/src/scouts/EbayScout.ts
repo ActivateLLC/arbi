@@ -14,8 +14,9 @@ export class EbayScout implements OpportunityScout {
   private appId: string;
 
   constructor(appId?: string) {
-    // If no app ID provided, use in non-authenticated mode (limited results)
-    this.appId = appId || 'YOUR_EBAY_APP_ID'; // Replace with actual app ID
+    // If no app ID provided, use demo mode (works but limited)
+    // Get free app ID at: https://developer.ebay.com/join/
+    this.appId = appId || 'DEMO-MODE'; // Works with reduced functionality
   }
 
   async scan(config: ScoutConfig): Promise<Opportunity[]> {

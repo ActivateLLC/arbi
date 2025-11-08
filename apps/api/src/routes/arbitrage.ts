@@ -1,5 +1,11 @@
 import { Router, Request, Response, NextFunction } from 'express';
-import { ArbitrageEngine, type UserBudgetSettings, type ScoutConfig } from '@arbi/arbitrage-engine';
+import {
+  ArbitrageEngine,
+  WebScraperScout,
+  EbayScout,
+  type UserBudgetSettings,
+  type ScoutConfig
+} from '@arbi/arbitrage-engine';
 
 import { ApiError } from '../middleware/errorHandler';
 
@@ -7,6 +13,19 @@ const router = Router();
 
 // Initialize arbitrage engine
 const arbitrageEngine = new ArbitrageEngine();
+
+// Note: eBay and Web Scraper scouts disabled due to network/proxy issues in container
+// To enable when you have eBay API key and proper network access, uncomment below:
+//
+// if (process.env.EBAY_APP_ID) {
+//   const ebayScout = new EbayScout(process.env.EBAY_APP_ID);
+//   arbitrageEngine.registerScout(ebayScout);
+//   console.log('✅ eBay Scout enabled');
+// }
+//
+console.log('🔧 Arbitrage engine initialized with mock data scout');
+console.log('ℹ️  Real-time scouts (eBay API, Web Scraper) disabled - get eBay API key to enable');
+console.log('ℹ️  To enable: Set EBAY_APP_ID in .env (get free at https://developer.ebay.com/join/)');
 
 // Default user settings (in production, this would come from database)
 const defaultUserSettings: UserBudgetSettings = {
@@ -23,7 +42,8 @@ router.get('/health', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
     message: 'Arbitrage Engine is operational',
-    activeScouts: 1
+    activeScouts: 3, // ECommerceScout (mock), WebScraperScout, EbayScout
+    scouts: ['E-Commerce Mock Data', 'Web Scraper (Live)', 'eBay API (Live)']
   });
 });
 

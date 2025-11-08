@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  arbi-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: arbi-arbitrage-engine
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      # Add your eBay API key here or use --env-file
+      - EBAY_APP_ID=${EBAY_APP_ID:-}
+      - RAINFOREST_API_KEY=${RAINFOREST_API_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/api/arbitrage/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - arbi-network
+
+networks:
+  arbi-network:
+    driver: bridge

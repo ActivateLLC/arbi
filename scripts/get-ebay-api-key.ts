@@ -14,8 +14,19 @@ import { chromium, Browser, Page } from 'playwright';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const EBAY_EMAIL = 'usualprovider@gmail.com';
-const EBAY_PASSWORD = 'Only1God!!';
+// Load credentials from environment variables
+const EBAY_EMAIL = process.env.EBAY_EMAIL || '';
+const EBAY_PASSWORD = process.env.EBAY_PASSWORD || '';
+
+// Validate credentials are provided
+if (!EBAY_EMAIL || !EBAY_PASSWORD) {
+  console.error('❌ Error: EBAY_EMAIL and EBAY_PASSWORD environment variables are required');
+  console.error('');
+  console.error('Usage:');
+  console.error('  EBAY_EMAIL=your@email.com EBAY_PASSWORD=yourpassword npx tsx scripts/get-ebay-api-key.ts');
+  console.error('');
+  process.exit(1);
+}
 
 async function getEbayApiKey() {
   let browser: Browser | null = null;

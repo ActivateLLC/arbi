@@ -7,16 +7,11 @@ RUN npm install -g pnpm@8
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/api/package.json ./apps/api/
-COPY packages/*/package.json ./packages/*/
+# Copy all source code (pnpm workspaces need full structure)
+COPY . .
 
 # Install dependencies (use --no-frozen-lockfile for Railway compatibility)
 RUN pnpm install --no-frozen-lockfile
-
-# Copy source code
-COPY . .
 
 # Build all packages
 RUN pnpm build

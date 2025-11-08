@@ -68,7 +68,7 @@ PORT=3000
 If you want to try locally first:
 
 1. **Open browser:** https://developer.ebay.com/join/
-2. **Sign in** with usualprovider@gmail.com
+2. **Sign in** with your eBay account
 3. **Click:** "Get Keys" or "Create a Keyset"
 4. **Name your app:** Arbi Arbitrage Bot
 5. **Select:** Production environment

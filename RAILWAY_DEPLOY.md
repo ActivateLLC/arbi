@@ -39,7 +39,11 @@ This guide will help you deploy the Arbi Arbitrage Engine backend to Railway.
 Railway will:
 1. Install dependencies with `pnpm install --no-frozen-lockfile`
 2. Build all packages with `pnpm build`
-3. Start the API server from `apps/api/dist/index.js`
+3. Start the API server with `node apps/api/dist/index.js`
+
+**Note:** The start command uses an absolute path from the repository root to avoid shell builtin dependencies. Alternative start methods:
+- Direct: `node apps/api/dist/index.js`
+- Script: `./start.sh` (includes startup diagnostics)
 
 ## Health Checks
 

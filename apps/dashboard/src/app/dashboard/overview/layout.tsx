@@ -9,7 +9,7 @@ import {
   CardFooter
 } from '@/components/ui/card';
 import { IconTrendingDown, IconTrendingUp } from '@tabler/icons-react';
-import type { ReactNode } from 'react';
+import * as React from 'react';
 
 export default function OverViewLayout({
   sales,
@@ -17,10 +17,10 @@ export default function OverViewLayout({
   bar_stats,
   area_stats
 }: {
-  sales: ReactNode;
-  pie_stats: ReactNode;
-  bar_stats: ReactNode;
-  area_stats: ReactNode;
+  sales: React.ReactNode;
+  pie_stats: React.ReactNode;
+  bar_stats: React.ReactNode;
+  area_stats: React.ReactNode;
 }) {
   return (
     <PageContainer>

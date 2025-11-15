@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import type { ReactNode } from 'react';
 import * as LabelPrimitive from '@radix-ui/react-label';
 import { Slot } from '@radix-ui/react-slot';
 import {
@@ -23,7 +24,7 @@ const Form = ({
   form,
   className
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onSubmit: (data: any) => void;
   form: UseFormReturn<any, any, undefined>;
   className?: string;

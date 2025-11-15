@@ -4,7 +4,7 @@ import { SortableContext, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { cva } from 'class-variance-authority';
 import { IconGripVertical } from '@tabler/icons-react';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { ColumnActions } from './column-action';
@@ -108,7 +108,7 @@ export function BoardColumn({ column, tasks, isOverlay }: BoardColumnProps) {
   );
 }
 
-export function BoardContainer({ children }: { children: React.ReactNode }) {
+export function BoardContainer({ children }: { children: ReactNode }) {
   const dndContext = useDndContext();
 
   const variations = cva('px-2  pb-4 md:px-0 flex lg:justify-start', {

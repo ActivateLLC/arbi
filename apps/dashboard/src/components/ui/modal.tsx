@@ -1,4 +1,5 @@
 'use client';
+import type { FC, ReactNode } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -12,10 +13,10 @@ interface ModalProps {
   description: string;
   isOpen: boolean;
   onClose: () => void;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
-export const Modal: React.FC<ModalProps> = ({
+export const Modal: FC<ModalProps> = ({
   title,
   description,
   isOpen,

@@ -9,7 +9,10 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "build:api": "pnpm --filter @arbi/api build",
     "dev": "turbo run dev",
+    "dev:api": "pnpm --filter @arbi/api dev",
+    "start:api": "pnpm --filter @arbi/api start",
     "test": "turbo run test",
     "lint": "turbo run lint",
     "format": "prettier --write \"**/*.{ts,tsx,md}\"",

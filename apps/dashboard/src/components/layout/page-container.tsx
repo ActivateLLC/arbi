@@ -1,11 +1,11 @@
-import React from 'react';
+import type { ReactNode } from 'react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 
 export default function PageContainer({
   children,
   scrollable = true
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   scrollable?: boolean;
 }) {
   return (

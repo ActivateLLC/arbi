@@ -7,6 +7,7 @@ import type { Metadata, Viewport } from 'next';
 import { cookies } from 'next/headers';
 import NextTopLoader from 'nextjs-toploader';
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
+import type { ReactNode } from 'react';
 import './globals.css';
 import './theme.css';
 
@@ -16,8 +17,8 @@ const META_THEME_COLORS = {
 };
 
 export const metadata: Metadata = {
-  title: 'Next Shadcn',
-  description: 'Basic dashboard with Next.js and Shadcn'
+  title: 'ARBI - Autonomous Arbitrage System',
+  description: 'Real-time arbitrage opportunity tracking and autonomous scanning for profitable deals'
 };
 
 export const viewport: Viewport = {
@@ -27,7 +28,7 @@ export const viewport: Viewport = {
 export default async function RootLayout({
   children
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   const cookieStore = await cookies();
   const activeThemeValue = cookieStore.get('active_theme')?.value;

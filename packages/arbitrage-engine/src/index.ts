@@ -6,12 +6,18 @@ export * from './scouts/ECommerceScout';
 export * from './scouts/WebScraperScout';
 export * from './scouts/EbayScout';
 export * from './scouts/RainforestScout';
+export * from './scouts/ebayScout'; // New real eBay integration
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';
 
 // Export risk manager
 export * from './risk-manager/RiskManager';
+
+// Export autonomous components (NEW!)
+export * from './calculators/profitCalculator';
+export * from './scorers/opportunityScorer';
+export * from './autonomous/autonomousEngine';
 
 // Main Arbitrage Engine
 import type { Opportunity, OpportunityScout, ScoutConfig, UserBudgetSettings, OpportunityAnalysis, RiskAssessment } from './types';

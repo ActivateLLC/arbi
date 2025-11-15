@@ -1,1 +1,1 @@
-web: cd apps/api && node dist/index.js
+web: node apps/api/dist/index.js

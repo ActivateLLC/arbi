@@ -7,6 +7,12 @@
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
   },
+  "pnpm": {
+    "overrides": {
+      "@types/react": "19.0.1",
+      "@types/react-dom": "19.0.2"
+    }
+  },
   "scripts": {
     "build": "turbo run build",
     "build:api": "pnpm --filter @arbi/api build",

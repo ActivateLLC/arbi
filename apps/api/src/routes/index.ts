@@ -5,6 +5,7 @@ import webRoutes from './web';
 import voiceRoutes from './voice';
 import paymentRoutes from './payment';
 import arbitrageRoutes from './arbitrage';
+import autonomousRoutes from './autonomous';
 
 const router = Router();
 
@@ -22,5 +23,8 @@ router.use('/payment', paymentRoutes);
 
 // Arbitrage routes
 router.use('/arbitrage', arbitrageRoutes);
+
+// Autonomous arbitrage routes (NEW - Multi-category intelligent scanning)
+router.use('/autonomous', autonomousRoutes);
 
 export default router;

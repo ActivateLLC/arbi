@@ -32,9 +32,24 @@ app.use('/api', apiRoutes);
 // Error handling middleware
 app.use(errorHandler);
 
-// Start server
-app.listen(port, () => {
-  logger.info(`Server running on port ${port}`);
+// Start server - bind to 0.0.0.0 for Railway/Docker compatibility
+const server = app.listen(port, '0.0.0.0', () => {
+  logger.info(`✅ Server running on http://0.0.0.0:${port}`);
+  logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
+  logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+});
+
+// Handle server errors
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    logger.error(`❌ Port ${port} is already in use`);
+  } else if (error.code === 'EACCES') {
+    logger.error(`❌ Port ${port} requires elevated privileges`);
+  } else {
+    logger.error(`❌ Server error:`, error);
+  }
+  process.exit(1);
 });
 
 // Handle unhandled rejections

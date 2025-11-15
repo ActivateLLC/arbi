@@ -1,11 +1,53 @@
+# Railway ignore file - optimize deployment size
+# Exclude development and non-production files
+
+# Dependencies (will be installed during build)
 node_modules
+**/node_modules
+
+# Git and version control
 .git
+.gitignore
+.github
 .husky
+
+# Documentation (keep essential ones)
 *.md
 !README.md
+!RAILWAY_DEPLOY.md
+
+# Environment files (use Railway dashboard for env vars)
 .env
 .env.*
 !.env.example
+
+# Logs and temp files
 *.log
+logs
+tmp
+temp
+
+# Build artifacts (will be rebuilt)
 dist
+build
+.turbo
+.next
+
+# Frontend app (not needed for API deployment)
 apps/web
+
+# Development tools
+.vscode
+.idea
+*.swp
+*.swo
+
+# Test files
+**/*.test.ts
+**/*.spec.ts
+__tests__
+coverage
+
+# Unnecessary config packages
+packages/eslint-config
+packages/tsconfig

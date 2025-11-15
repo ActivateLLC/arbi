@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import type { ReactNode } from 'react';
 import * as LabelPrimitive from '@radix-ui/react-label';
 import { Slot } from '@radix-ui/react-slot';
 import {
@@ -17,15 +18,19 @@ import {
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 
-const Form = ({
+const Form = <
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues extends FieldValues | undefined = undefined
+>({
   children,
   onSubmit,
   form,
   className
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   onSubmit: (data: any) => void;
-  form: UseFormReturn<any, any, undefined>;
+  form: UseFormReturn<TFieldValues, TContext, TTransformedValues>;
   className?: string;
 }) => {
   return (

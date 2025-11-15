@@ -8,11 +8,11 @@ import {
   KBarSearch
 } from 'kbar';
 import { useRouter } from 'next/navigation';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import RenderResults from './render-result';
 import useThemeSwitching from './use-theme-switching';
 
-export default function KBar({ children }: { children: React.ReactNode }) {
+export default function KBar({ children }: { children: ReactNode }) {
   const router = useRouter();
 
   // These action are for the navigation
@@ -60,7 +60,7 @@ export default function KBar({ children }: { children: React.ReactNode }) {
     </KBarProvider>
   );
 }
-const KBarComponent = ({ children }: { children: React.ReactNode }) => {
+const KBarComponent = ({ children }: { children: ReactNode }) => {
   useThemeSwitching();
 
   return (

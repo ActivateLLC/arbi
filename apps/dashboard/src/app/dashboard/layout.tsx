@@ -4,16 +4,17 @@ import Header from '@/components/layout/header';
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar';
 import type { Metadata } from 'next';
 import { cookies } from 'next/headers';
+import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'Next Shadcn Dashboard Starter',
-  description: 'Basic dashboard with Next.js and Shadcn'
+  title: 'ARBI Dashboard - Autonomous Arbitrage System',
+  description: 'Real-time arbitrage opportunity tracking and autonomous scanning'
 };
 
 export default async function DashboardLayout({
   children
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   // Persisting the sidebar state in the cookie.
   const cookieStore = await cookies();

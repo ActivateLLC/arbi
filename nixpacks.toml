@@ -12,7 +12,7 @@ cmds = [
 ]
 
 [start]
-cmd = "cd apps/api && node dist/index.js"
+cmd = "node apps/api/dist/index.js"
 
 [variables]
 NODE_ENV = "production"

@@ -18,7 +18,11 @@ import {
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 
-const Form = ({
+const Form = <
+  TFieldValues extends FieldValues = FieldValues,
+  TContext = any,
+  TTransformedValues extends FieldValues | undefined = undefined
+>({
   children,
   onSubmit,
   form,
@@ -26,7 +30,7 @@ const Form = ({
 }: {
   children: ReactNode;
   onSubmit: (data: any) => void;
-  form: UseFormReturn<any, any, undefined>;
+  form: UseFormReturn<TFieldValues, TContext, TTransformedValues>;
   className?: string;
 }) => {
   return (

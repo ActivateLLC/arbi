@@ -28,6 +28,7 @@ export interface AutonomousConfig {
   autoBuyScore: number; // Score threshold for auto-buy (default: 90)
   dailyBudget: number; // Maximum daily spending (default: 500)
   enabledPlatforms: string[]; // Which platforms to scan (default: all)
+  remoteOnly: boolean; // Only scan platforms that ship (no local pickup) (default: true)
 }
 
 export class AutonomousEngine {
@@ -44,13 +45,16 @@ export class AutonomousEngine {
     this.profitCalculator = new ProfitCalculator();
     this.scorer = new OpportunityScorer();
 
-    // Register all available scouts (multi-platform scanning)
+    // Register remote-only scouts (no physical pickup required)
     this.registerScout('ebay', this.ebayScout);
     this.registerScout('amazon', new RainforestScout());
     this.registerScout('retail', new ECommerceScout());
     this.registerScout('webscraper', new WebScraperScout());
 
-    console.log('🤖 Autonomous Engine initialized with multi-platform support');
+    // Note: Facebook Marketplace NOT registered - requires local pickup/physical handling
+    // If you want local arbitrage, you'd need to add FacebookMarketplaceScout here
+
+    console.log('🤖 Autonomous Engine initialized with remote-only arbitrage');
     console.log(`   Platforms: ${Array.from(this.scouts.keys()).join(', ')}`);
   }
 

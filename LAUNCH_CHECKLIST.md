@@ -22,7 +22,7 @@
 **Step 1: Get Your API Key**
 ```
 1. Open browser: https://developer.ebay.com/join/
-2. Sign in with: usualprovider@gmail.com / Only1God!!
+2. Sign in with your eBay account
 3. Click "Get Keys" or "Create Application"
 4. Name your app: "Arbi Arbitrage Bot"
 5. Environment: Choose "Production"

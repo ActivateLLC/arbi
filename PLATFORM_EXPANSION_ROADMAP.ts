@@ -3,6 +3,16 @@
  *
  * This document outlines the platforms we can add to ARBI
  * for maximum arbitrage coverage
+ *
+ * ⚠️  IMPORTANT: REMOTE-ONLY STRATEGY
+ * ==================================
+ * Current configuration focuses on platforms that SHIP products.
+ * Platforms requiring local pickup or physical handling are DISABLED.
+ *
+ * ✅ ENABLED: eBay, Amazon, Mercari, Poshmark, Walmart, Online Retail
+ * ❌ DISABLED: Facebook Marketplace, OfferUp, Craigslist, Local Auctions
+ *
+ * This allows for 100% remote arbitrage with no physical product handling.
  */
 
 export const PLATFORM_EXPANSION_ROADMAP = {
@@ -22,7 +32,9 @@ export const PLATFORM_EXPANSION_ROADMAP = {
       implementation: "Use Puppeteer to scrape search results",
       cost: "$0 (web scraping)",
       timeToImplement: "1-2 days",
-      why: "Local sellers don't know market prices - massive arbitrage gaps"
+      why: "Local sellers don't know market prices - massive arbitrage gaps",
+      requiresPhysicalHandling: true,
+      status: "DISABLED - Requires local pickup and physical product handling"
     },
 
     {
@@ -35,7 +47,9 @@ export const PLATFORM_EXPANSION_ROADMAP = {
       implementation: "HTTP requests + cheerio parsing",
       cost: "$0",
       timeToImplement: "1 day",
-      why: "Casual sellers price low, quick turnover"
+      why: "Casual sellers price low, quick turnover",
+      requiresPhysicalHandling: false,
+      status: "READY - Ships nationally, remote-friendly"
     },
 
     {
@@ -48,7 +62,9 @@ export const PLATFORM_EXPANSION_ROADMAP = {
       implementation: "Web scraping",
       cost: "$0",
       timeToImplement: "1 day",
-      why: "Fashion arbitrage has 50-200% margins"
+      why: "Fashion arbitrage has 50-200% margins",
+      requiresPhysicalHandling: false,
+      status: "READY - Ships nationally, remote-friendly"
     },
 
     {
@@ -61,7 +77,9 @@ export const PLATFORM_EXPANSION_ROADMAP = {
       implementation: "Web scraping",
       cost: "$0",
       timeToImplement: "1 day",
-      why: "Local sellers undervalue items significantly"
+      why: "Local sellers undervalue items significantly",
+      requiresPhysicalHandling: true,
+      status: "DISABLED - Requires local pickup and physical product handling"
     },
 
     {
@@ -74,7 +92,9 @@ export const PLATFORM_EXPANSION_ROADMAP = {
       implementation: "Multi-city scraper with proxies",
       cost: "$20/month (proxies)",
       timeToImplement: "2-3 days",
-      why: "Free to post = desperate sellers = big discounts"
+      why: "Free to post = desperate sellers = big discounts",
+      requiresPhysicalHandling: true,
+      status: "DISABLED - Requires local pickup and physical product handling"
     }
   ],
 

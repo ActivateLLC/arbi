@@ -34,14 +34,33 @@ export class ImageHostingService {
   private uploadUrl: string;
 
   constructor() {
-    this.cloudName = process.env.CLOUDINARY_CLOUD_NAME || '';
-    this.apiKey = process.env.CLOUDINARY_API_KEY || '';
-    this.apiSecret = process.env.CLOUDINARY_API_SECRET || '';
+    // Support both CLOUDINARY_URL and individual env vars
+    const cloudinaryUrl = process.env.CLOUDINARY_URL;
+
+    if (cloudinaryUrl) {
+      // Parse cloudinary://api_key:api_secret@cloud_name
+      const match = cloudinaryUrl.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+      if (match) {
+        this.apiKey = match[1];
+        this.apiSecret = match[2];
+        this.cloudName = match[3];
+      } else {
+        this.cloudName = '';
+        this.apiKey = '';
+        this.apiSecret = '';
+      }
+    } else {
+      // Fall back to individual variables
+      this.cloudName = process.env.CLOUDINARY_CLOUD_NAME || '';
+      this.apiKey = process.env.CLOUDINARY_API_KEY || '';
+      this.apiSecret = process.env.CLOUDINARY_API_SECRET || '';
+    }
+
     this.uploadUrl = `https://api.cloudinary.com/v1_1/${this.cloudName}/image/upload`;
 
     if (!this.cloudName || !this.apiKey || !this.apiSecret) {
       console.warn('⚠️  Cloudinary credentials not configured. Image hosting will fail.');
-      console.warn('   Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET');
+      console.warn('   Set CLOUDINARY_URL or individual env vars (CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET)');
     }
   }
 

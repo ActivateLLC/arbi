@@ -8,15 +8,34 @@ const router = Router();
  */
 router.get('/test/cloudinary', async (req: Request, res: Response) => {
   try {
-    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
-    const apiKey = process.env.CLOUDINARY_API_KEY;
-    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+    let cloudName: string | undefined;
+    let apiKey: string | undefined;
+    let apiSecret: string | undefined;
+
+    // Support both CLOUDINARY_URL and individual env vars
+    const cloudinaryUrl = process.env.CLOUDINARY_URL;
+
+    if (cloudinaryUrl) {
+      // Parse cloudinary://api_key:api_secret@cloud_name
+      const match = cloudinaryUrl.match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+      if (match) {
+        apiKey = match[1];
+        apiSecret = match[2];
+        cloudName = match[3];
+      }
+    } else {
+      // Fall back to individual variables
+      cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+      apiKey = process.env.CLOUDINARY_API_KEY;
+      apiSecret = process.env.CLOUDINARY_API_SECRET;
+    }
 
     if (!cloudName || !apiKey || !apiSecret) {
       return res.status(500).json({
         success: false,
         error: 'Cloudinary credentials not configured',
         env: {
+          cloudinaryUrl: !!cloudinaryUrl,
           cloudName: !!cloudName,
           apiKey: !!apiKey,
           apiSecret: !!apiSecret
@@ -137,11 +156,12 @@ router.get('/test/all', async (req: Request, res: Response) => {
     ebay: { configured: false, working: false }
   };
 
-  // Check Cloudinary
+  // Check Cloudinary (supports both CLOUDINARY_URL and individual vars)
   results.cloudinary.configured = !!(
-    process.env.CLOUDINARY_CLOUD_NAME &&
-    process.env.CLOUDINARY_API_KEY &&
-    process.env.CLOUDINARY_API_SECRET
+    process.env.CLOUDINARY_URL ||
+    (process.env.CLOUDINARY_CLOUD_NAME &&
+     process.env.CLOUDINARY_API_KEY &&
+     process.env.CLOUDINARY_API_SECRET)
   );
 
   // Check Rainforest

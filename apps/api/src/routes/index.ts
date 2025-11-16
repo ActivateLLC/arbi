@@ -6,6 +6,7 @@ import voiceRoutes from './voice';
 import paymentRoutes from './payment';
 import arbitrageRoutes from './arbitrage';
 import autonomousRoutes from './autonomous';
+import testApiRoutes from './test-apis';
 
 const router = Router();
 
@@ -26,5 +27,8 @@ router.use('/arbitrage', arbitrageRoutes);
 
 // Autonomous arbitrage routes (NEW - Multi-category intelligent scanning)
 router.use('/autonomous', autonomousRoutes);
+
+// API testing routes
+router.use('/', testApiRoutes);
 
 export default router;

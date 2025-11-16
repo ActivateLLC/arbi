@@ -1,6 +1,10 @@
 import { EbayScout, EbayProduct } from '../scouts/ebayScout';
+import { RainforestScout } from '../scouts/RainforestScout';
+import { ECommerceScout } from '../scouts/ECommerceScout';
+import { WebScraperScout } from '../scouts/WebScraperScout';
 import { ProfitCalculator, ProfitCalculation } from '../calculators/profitCalculator';
 import { OpportunityScorer, OpportunityScore } from '../scorers/opportunityScorer';
+import type { OpportunityScout } from '../types';
 
 export interface ArbitrageOpportunity {
   id: string;
@@ -10,6 +14,7 @@ export interface ArbitrageOpportunity {
   foundAt: Date;
   expiresAt: Date;
   status: 'pending' | 'alerted' | 'purchased' | 'expired';
+  source: string; // Track which platform found this
 }
 
 export interface AutonomousConfig {
@@ -22,9 +27,12 @@ export interface AutonomousConfig {
   autoBuyEnabled: boolean; // Enable autonomous purchases (default: false)
   autoBuyScore: number; // Score threshold for auto-buy (default: 90)
   dailyBudget: number; // Maximum daily spending (default: 500)
+  enabledPlatforms: string[]; // Which platforms to scan (default: all)
+  remoteOnly: boolean; // Only scan platforms that ship (no local pickup) (default: true)
 }
 
 export class AutonomousEngine {
+  private scouts: Map<string, OpportunityScout> = new Map();
   private ebayScout: EbayScout;
   private profitCalculator: ProfitCalculator;
   private scorer: OpportunityScorer;
@@ -36,44 +44,123 @@ export class AutonomousEngine {
     this.ebayScout = new EbayScout();
     this.profitCalculator = new ProfitCalculator();
     this.scorer = new OpportunityScorer();
+
+    // Register remote-only scouts (no physical pickup required)
+    this.registerScout('ebay', this.ebayScout);
+    this.registerScout('amazon', new RainforestScout());
+    this.registerScout('retail', new ECommerceScout());
+    this.registerScout('webscraper', new WebScraperScout());
+
+    // Note: Facebook Marketplace NOT registered - requires local pickup/physical handling
+    // If you want local arbitrage, you'd need to add FacebookMarketplaceScout here
+
+    console.log('🤖 Autonomous Engine initialized with remote-only arbitrage');
+    console.log(`   Platforms: ${Array.from(this.scouts.keys()).join(', ')}`);
   }
 
   /**
-   * Run autonomous scan for opportunities
+   * Register a new platform scout
+   */
+  registerScout(name: string, scout: OpportunityScout | EbayScout): void {
+    this.scouts.set(name, scout as any);
+    console.log(`✅ Registered scout: ${name}`);
+  }
+
+  /**
+   * Get list of enabled platforms
+   */
+  getEnabledPlatforms(): string[] {
+    return Array.from(this.scouts.keys());
+  }
+
+  /**
+   * Run autonomous scan for opportunities across ALL platforms
    * This should be called by a cron job / background worker
    */
   async runScan(config: AutonomousConfig): Promise<ArbitrageOpportunity[]> {
-    console.log('🤖 Starting autonomous arbitrage scan...');
+    console.log('🤖 Starting multi-platform autonomous arbitrage scan...');
+    console.log(`   Platforms: ${this.getEnabledPlatforms().join(', ')}`);
 
     const startTime = Date.now();
     const foundOpportunities: ArbitrageOpportunity[] = [];
 
     try {
-      // 1. Scan eBay for products
-      const products = await this.scanEbayForDeals(config);
-      console.log(`📦 Found ${products.length} potential products on eBay`);
+      // Scan all platforms in parallel for maximum speed
+      const platformScans = Array.from(this.scouts.entries()).map(async ([platformName, scout]) => {
+        try {
+          console.log(`🔍 Scanning ${platformName}...`);
 
-      // 2. Analyze each product
-      for (const product of products) {
-        const opportunity = await this.analyzeProduct(product, config);
+          if (platformName === 'ebay') {
+            // eBay uses custom logic (existing implementation)
+            const products = await this.scanEbayForDeals(config);
+            console.log(`📦 ${platformName}: Found ${products.length} potential products`);
 
-        if (opportunity && opportunity.score.score >= config.minScore) {
-          foundOpportunities.push(opportunity);
-          this.opportunities.set(opportunity.id, opportunity);
+            const opportunities: ArbitrageOpportunity[] = [];
+            for (const product of products) {
+              const opportunity = await this.analyzeProduct(product, config);
+              if (opportunity && opportunity.score.score >= config.minScore) {
+                opportunity.source = platformName;
+                opportunities.push(opportunity);
+              }
+            }
+            return opportunities;
+          } else {
+            // Other scouts use the OpportunityScout interface
+            const scoutConfig = {
+              filters: {
+                minProfit: config.minProfit,
+                minROI: config.minROI,
+                maxPrice: config.maxPrice,
+                categories: config.categories
+              }
+            };
 
-          console.log(
-            `✅ Found opportunity: ${product.title.substring(0, 50)}... Score: ${opportunity.score.score}`
-          );
+            const scoutOpportunities = await scout.scan(scoutConfig);
+            console.log(`📦 ${platformName}: Found ${scoutOpportunities.length} opportunities`);
 
-          // 3. Take autonomous action based on score
-          await this.handleOpportunity(opportunity, config);
+            // Convert scout opportunities to ArbitrageOpportunity format
+            return scoutOpportunities.map(opp => this.convertToArbitrageOpportunity(opp, platformName));
+          }
+        } catch (error) {
+          console.error(`❌ ${platformName} scan failed:`, error);
+          return [];
         }
+      });
+
+      // Wait for all platform scans to complete
+      const allPlatformResults = await Promise.all(platformScans);
+
+      // Flatten results from all platforms
+      const allOpportunities = allPlatformResults.flat();
+
+      // Process each opportunity
+      for (const opportunity of allOpportunities) {
+        foundOpportunities.push(opportunity);
+        this.opportunities.set(opportunity.id, opportunity);
+
+        console.log(
+          `✅ [${opportunity.source.toUpperCase()}] ${opportunity.product.title.substring(0, 40)}... Score: ${opportunity.score.score} | Profit: $${opportunity.profit.netProfit.toFixed(2)}`
+        );
+
+        // Take autonomous action based on score
+        await this.handleOpportunity(opportunity, config);
       }
 
       const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-      console.log(
-        `🎯 Scan complete! Found ${foundOpportunities.length} opportunities in ${duration}s`
-      );
+      console.log('\n' + '='.repeat(60));
+      console.log(`🎯 Multi-platform scan complete in ${duration}s`);
+      console.log(`   Total opportunities found: ${foundOpportunities.length}`);
+
+      // Show breakdown by platform
+      const byPlatform = foundOpportunities.reduce((acc, opp) => {
+        acc[opp.source] = (acc[opp.source] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>);
+
+      Object.entries(byPlatform).forEach(([platform, count]) => {
+        console.log(`   ${platform}: ${count} opportunities`);
+      });
+      console.log('='.repeat(60) + '\n');
 
       this.lastScanTime = new Date();
 
@@ -82,6 +169,68 @@ export class AutonomousEngine {
       console.error('❌ Error during autonomous scan:', error);
       return foundOpportunities;
     }
+  }
+
+  /**
+   * Convert OpportunityScout result to ArbitrageOpportunity format
+   */
+  private convertToArbitrageOpportunity(
+    opp: any,
+    source: string
+  ): ArbitrageOpportunity {
+    // Create a mock EbayProduct from the opportunity data
+    const product: EbayProduct = {
+      id: opp.id || String(Date.now()),
+      title: opp.title,
+      price: opp.buyPrice,
+      condition: opp.productInfo?.condition || 'new',
+      itemWebUrl: opp.metadata?.buyUrl || '',
+      imageUrl: opp.productInfo?.imageUrl || '',
+      seller: {
+        username: opp.buySource || source,
+        feedbackScore: 1000,
+        positivePercentage: 99
+      },
+      shippingCost: 0,
+      location: 'USA'
+    };
+
+    // Create profit calculation
+    const profit: ProfitCalculation = {
+      sourcePrice: opp.buyPrice,
+      targetPrice: opp.sellPrice,
+      netProfit: opp.estimatedProfit,
+      profitMargin: (opp.estimatedProfit / opp.sellPrice) * 100,
+      roi: opp.roi,
+      fees: {
+        ebayFee: opp.sellPrice * 0.13,
+        paypalFee: opp.sellPrice * 0.03,
+        shippingCost: opp.metadata?.fees?.shipping || 8
+      },
+      totalCost: opp.buyPrice + (opp.metadata?.fees?.shipping || 8),
+      totalRevenue: opp.sellPrice
+    };
+
+    // Create score
+    const score: OpportunityScore = {
+      score: Math.min(opp.confidence || 75, 100),
+      tier: opp.confidence > 85 ? 'excellent' : opp.confidence > 70 ? 'high' : 'medium',
+      confidence: opp.confidence || 75,
+      reasoning: `Found on ${source}. ${opp.description}`,
+      greenFlags: opp.metadata?.greenFlags || [],
+      redFlags: opp.metadata?.redFlags || []
+    };
+
+    return {
+      id: opp.id || `${source}-${Date.now()}`,
+      product,
+      profit,
+      score,
+      foundAt: opp.discoveredAt || new Date(),
+      expiresAt: opp.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000),
+      status: 'pending',
+      source
+    };
   }
 
   /**

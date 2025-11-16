@@ -1,0 +1,202 @@
+// Dropshipping Database Schema
+//
+// Tracks zero-capital arbitrage listings across platforms
+
+model DropshippingListing {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Source platform (where we buy from)
+  sourcePlatform     String  // 'ebay', 'amazon', 'walmart', etc.
+  sourceItemId       String  // Platform-specific item ID
+  sourceUrl          String
+  sourcePrice        Float
+  sourceShipping     Float   @default(0)
+  sourceSellerName   String?
+  sourceSellerRating Float?
+  sourceInStock      Boolean @default(true)
+  sourceLastChecked  DateTime @default(now())
+
+  // Destination platform (where we sell on)
+  destinationPlatform   String  // 'ebay', 'amazon', 'walmart', etc.
+  destinationListingId  String? // Created after auto-listing
+  destinationUrl        String?
+  destinationPrice      Float
+  destinationShipping   Float   @default(0)
+
+  // Product data
+  title       String
+  description String    @db.Text
+  condition   String    // 'new', 'used', 'refurbished', 'open_box'
+  images      Json      // Array of HostedImage objects
+  specs       Json?     // Product specifications
+  upc         String?
+  brand       String?
+  mpn         String?
+
+  // Profitability calculations
+  buyPrice   Float  // sourcePrice + sourceShipping
+  sellPrice  Float  // destinationPrice - fees
+  platformFees Float
+  paymentFees  Float
+  netProfit    Float
+  roi          Float  // Return on investment %
+
+  // Status tracking
+  status       String   @default("ready_to_list")
+  // Status values: 'ready_to_list', 'listed', 'sold', 'fulfilled', 'out_of_stock', 'error', 'cancelled'
+
+  listedAt     DateTime?
+  soldAt       DateTime?
+  fulfilledAt  DateTime?
+
+  // Monitoring configuration
+  availabilityCheckInterval Int      @default(15) // minutes
+  nextAvailabilityCheck     DateTime @default(now())
+
+  // Error tracking
+  lastError     String?
+  errorCount    Int      @default(0)
+  errorAt       DateTime?
+
+  // Relations
+  orders        DropshippingOrder[]
+  statusHistory DropshippingStatusHistory[]
+
+  @@index([status])
+  @@index([sourcePlatform])
+  @@index([destinationPlatform])
+  @@index([sourceInStock])
+  @@index([nextAvailabilityCheck])
+  @@index([createdAt])
+}
+
+model DropshippingOrder {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Related listing
+  listing   DropshippingListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId String
+
+  // Destination order (customer's order)
+  destinationOrderId   String  @unique
+  destinationPlatform  String
+  destinationOrderDate DateTime
+  customerPaid         Float
+  customerName         String
+  customerEmail        String?
+
+  // Shipping address
+  shippingAddress Json // { name, address1, address2, city, state, zip, country }
+
+  // Source order (our purchase)
+  sourceOrderId       String?
+  sourcePlatform      String
+  sourcePurchaseDate  DateTime?
+  sourcePaid          Float?
+  sourceTrackingNumber String?
+  sourceCarrier        String?
+
+  // Status
+  status String @default("pending")
+  // Status values: 'pending', 'source_ordered', 'shipped', 'delivered', 'refunded', 'error'
+
+  // Timestamps
+  sourceOrderedAt DateTime?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+  refundedAt      DateTime?
+
+  // Error tracking
+  lastError  String?
+  errorCount Int      @default(0)
+
+  @@index([status])
+  @@index([destinationOrderId])
+  @@index([createdAt])
+}
+
+model DropshippingStatusHistory {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  // Related listing
+  listing   DropshippingListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  listingId String
+
+  // Status change
+  fromStatus String
+  toStatus   String
+  reason     String?
+  metadata   Json?
+
+  @@index([listingId])
+  @@index([createdAt])
+}
+
+model DropshippingConfig {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String @unique
+
+  // Enabled platforms
+  enabledSourcePlatforms      String[] // ['ebay', 'walmart', etc.]
+  enabledDestinationPlatforms String[] // ['amazon', 'ebay', etc.]
+
+  // Thresholds
+  minROI           Float  @default(20)   // Minimum 20% ROI
+  minProfit        Float  @default(5)    // Minimum $5 profit
+  maxSourcePrice   Float  @default(100)  // Maximum $100 source price
+  maxListings      Int    @default(100)  // Maximum active listings
+
+  // Monitoring
+  availabilityCheckInterval Int @default(15) // Check every 15 minutes
+
+  // Auto-listing
+  autoListingEnabled Boolean @default(false)
+  autoListingScore   Int     @default(80) // Only auto-list 80+ score opportunities
+
+  // Auto-fulfillment
+  autoFulfillmentEnabled Boolean @default(false)
+  autoFulfillmentMaxPrice Float  @default(50) // Only auto-fulfill up to $50
+
+  // Notifications
+  emailNotifications  Boolean @default(true)
+  smsNotifications    Boolean @default(false)
+  notificationEmail   String?
+  notificationPhone   String?
+
+  @@index([userId])
+}
+
+// Statistics and analytics
+model DropshippingStats {
+  id        String   @id @default(cuid())
+  date      DateTime @default(now())
+
+  userId    String
+
+  // Daily stats
+  listingsCreated    Int   @default(0)
+  listingsSold       Int   @default(0)
+  listingsCancelled  Int   @default(0)
+
+  revenue            Float @default(0)
+  costs              Float @default(0)
+  profit             Float @default(0)
+
+  avgROI             Float @default(0)
+  avgProfit          Float @default(0)
+
+  // By platform
+  platformStats      Json? // { ebay: { revenue, profit, orders }, amazon: { ... } }
+
+  @@unique([userId, date])
+  @@index([userId])
+  @@index([date])
+}

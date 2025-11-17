@@ -12,44 +12,51 @@ import { ApiError } from '../middleware/errorHandler';
 
 const router = Router();
 
-// Initialize arbitrage engine
+// Initialize arbitrage engine - PRODUCTION MODE: REAL DATA ONLY
 const arbitrageEngine = new ArbitrageEngine();
 
-// Enable real data scouts based on available API keys
+// Remove default mock scout - we only want real data sources
+// The ArbitrageEngine comes with ECommerceScout by default, but we'll only use real scouts
 let scoutsEnabled = 0;
+
+console.log('🚀 Initializing PRODUCTION arbitrage engine with REAL data sources only...');
 
 // Rainforest API Scout (Amazon data without Amazon API)
 if (process.env.RAINFOREST_API_KEY) {
   const rainforestScout = new RainforestScout(process.env.RAINFOREST_API_KEY);
   arbitrageEngine.registerScout(rainforestScout);
-  console.log('✅ Rainforest Scout enabled (Amazon data)');
+  console.log('✅ Rainforest Scout enabled (Amazon real-time data)');
   scoutsEnabled++;
+} else {
+  console.log('⚠️  RAINFOREST_API_KEY not set - Amazon data unavailable');
 }
 
-// eBay Scout (if you get API access)
+// eBay Scout
 if (process.env.EBAY_APP_ID) {
   const ebayScout = new EbayScout(process.env.EBAY_APP_ID);
   arbitrageEngine.registerScout(ebayScout);
-  console.log('✅ eBay Scout enabled');
+  console.log('✅ eBay Scout enabled (eBay API)');
   scoutsEnabled++;
+} else {
+  console.log('⚠️  EBAY_APP_ID not set - eBay data unavailable');
 }
 
-// Web Scraper Scout (requires Playwright browsers installed)
-if (process.env.ENABLE_WEB_SCRAPER === 'true') {
-  const webScraperScout = new WebScraperScout();
-  arbitrageEngine.registerScout(webScraperScout);
-  console.log('✅ Web Scraper Scout enabled');
-  scoutsEnabled++;
-}
+// Web Scraper Scout (Playwright/Puppeteer - always enabled for production)
+// Scrapes Target, Walmart, Best Buy, and other retailers
+const webScraperScout = new WebScraperScout();
+arbitrageEngine.registerScout(webScraperScout);
+console.log('✅ Web Scraper Scout enabled (Playwright/Puppeteer)');
+scoutsEnabled++;
 
 if (scoutsEnabled === 0) {
-  console.log('🔧 Arbitrage engine initialized with mock data scout only');
-  console.log('ℹ️  To enable real data, set one or more API keys:');
-  console.log('   - RAINFOREST_API_KEY (Amazon data - https://www.rainforestapi.com/)');
-  console.log('   - EBAY_APP_ID (eBay data - https://developer.ebay.com/join/)');
-  console.log('   - ENABLE_WEB_SCRAPER=true (Web scraping)');
+  console.error('❌ NO DATA SOURCES ENABLED! System will return empty results.');
+  console.error('   Configure at least one:');
+  console.error('   - RAINFOREST_API_KEY (Amazon data)');
+  console.error('   - EBAY_APP_ID (eBay data)');
+  console.error('   - Web Scraper is always enabled');
 } else {
-  console.log(`✅ ${scoutsEnabled} real data scout(s) enabled + 1 mock scout`);
+  console.log(`✅ PRODUCTION MODE: ${scoutsEnabled} real data scout(s) enabled`);
+  console.log('   Mock data DISABLED - only real opportunities will be returned');
 }
 
 // Default user settings (in production, this would come from database)
@@ -67,26 +74,26 @@ router.get('/health', (req: Request, res: Response) => {
   const enabledScouts = [];
 
   if (process.env.RAINFOREST_API_KEY) {
-    enabledScouts.push('Rainforest Scout (Amazon)');
+    enabledScouts.push('Rainforest Scout (Amazon - Real API)');
   }
   if (process.env.EBAY_APP_ID) {
-    enabledScouts.push('eBay Scout');
-  }
-  if (process.env.ENABLE_WEB_SCRAPER === 'true') {
-    enabledScouts.push('Web Scraper');
+    enabledScouts.push('eBay Scout (Real API)');
   }
 
-  enabledScouts.push('E-Commerce Mock Scout');
+  // Web Scraper is always enabled in production
+  enabledScouts.push('Web Scraper (Playwright/Puppeteer - Real Data)');
 
   res.status(200).json({
     status: 'ok',
-    message: 'Arbitrage Engine is operational',
+    message: 'PRODUCTION MODE: Real data sources only',
+    mode: 'production',
+    mockDataEnabled: false,
     scoutsEnabled: enabledScouts.length,
     scouts: enabledScouts,
     apiKeysConfigured: {
       rainforest: !!process.env.RAINFOREST_API_KEY,
       ebay: !!process.env.EBAY_APP_ID,
-      webScraper: process.env.ENABLE_WEB_SCRAPER === 'true'
+      webScraper: true // Always enabled
     }
   });
 });

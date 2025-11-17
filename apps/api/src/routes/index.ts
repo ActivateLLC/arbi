@@ -6,6 +6,7 @@ import voiceRoutes from './voice';
 import paymentRoutes from './payment';
 import arbitrageRoutes from './arbitrage';
 import autonomousRoutes from './autonomous';
+import payoutRoutes from './payout';
 
 const router = Router();
 
@@ -20,6 +21,9 @@ router.use('/voice', voiceRoutes);
 
 // Payment routes
 router.use('/payment', paymentRoutes);
+
+// Payout routes (automated profit transfers to bank)
+router.use('/payout', payoutRoutes);
 
 // Arbitrage routes
 router.use('/arbitrage', arbitrageRoutes);

@@ -1,7 +1,19 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../middleware/errorHandler';
+import Stripe from 'stripe';
 
 const router = Router();
+
+// Initialize Stripe if API key is available
+const stripe = process.env.STRIPE_SECRET_KEY
+  ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' })
+  : null;
+
+if (stripe) {
+  console.log('✅ Stripe initialized - Real bank transfers enabled');
+} else {
+  console.log('⚠️  STRIPE_SECRET_KEY not set - Using simulation mode');
+}
 
 /**
  * Automated Profit Payout System
@@ -43,7 +55,7 @@ const mockExecutedTrades: ExecutedTrade[] = [];
  */
 router.post('/execute', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { opportunityId, buyPrice, sellPrice, productTitle } = req.body;
+    const { opportunityId, buyPrice, sellPrice, productTitle, connectedAccountId } = req.body;
 
     if (!opportunityId || !buyPrice || !sellPrice) {
       throw new ApiError(400, 'Missing required fields: opportunityId, buyPrice, sellPrice');
@@ -64,14 +76,21 @@ router.post('/execute', async (req: Request, res: Response, next: NextFunction) 
 
     mockExecutedTrades.push(trade);
 
-    // Calculate payout
-    const payoutResult = await processProfitPayout(trade);
+    // Calculate payout - pass connectedAccountId for real Stripe transfers
+    const payoutResult = await processProfitPayout(trade, connectedAccountId);
+
+    const message = payoutResult.status === 'completed'
+      ? stripe && connectedAccountId
+        ? `Trade executed! $${payoutResult.netUserPayout.toFixed(2)} transferred to your bank (arrives in 1-2 days)`
+        : `Trade executed! $${payoutResult.netUserPayout.toFixed(2)} payout ${stripe ? 'processed' : 'simulated'}`
+      : `Trade executed but payout failed: ${payoutResult.error}`;
 
     res.status(200).json({
       success: true,
       trade,
       payout: payoutResult,
-      message: `Trade executed! $${payoutResult.netUserPayout.toFixed(2)} transferred to your bank account.`
+      message,
+      realMoneyTransfer: !!(stripe && connectedAccountId)
     });
   } catch (error) {
     next(error);
@@ -178,40 +197,74 @@ function calculatePayout(grossProfit: number): Omit<PayoutResult, 'tradeId' | 't
 /**
  * Process profit payout via Stripe
  */
-async function processProfitPayout(trade: ExecutedTrade): Promise<PayoutResult> {
+async function processProfitPayout(trade: ExecutedTrade, connectedAccountId?: string): Promise<PayoutResult> {
   const payout = calculatePayout(trade.actualProfit);
 
+  console.log(`💰 Payout Processing:`);
+  console.log(`   Trade: ${trade.productTitle}`);
+  console.log(`   Gross Profit: $${payout.grossProfit.toFixed(2)}`);
+  console.log(`   Platform Commission (25%): $${payout.platformCommission.toFixed(2)}`);
+  console.log(`   User Share (75%): $${payout.userPayout.toFixed(2)}`);
+  console.log(`   Stripe Fee: $${payout.stripeFee.toFixed(2)}`);
+  console.log(`   NET to User's Bank: $${payout.netUserPayout.toFixed(2)}`);
+
   try {
-    // In production, this would use actual Stripe API via MCP
-    // For now, simulating the transfer
-    const mockTransferId = `tr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let transferId: string;
+    let status: 'pending' | 'completed' | 'failed' = 'completed';
 
-    console.log(`💰 Payout Processing:`);
-    console.log(`   Trade: ${trade.productTitle}`);
-    console.log(`   Gross Profit: $${payout.grossProfit.toFixed(2)}`);
-    console.log(`   Platform Commission (25%): $${payout.platformCommission.toFixed(2)}`);
-    console.log(`   User Share (75%): $${payout.userPayout.toFixed(2)}`);
-    console.log(`   Stripe Fee: $${payout.stripeFee.toFixed(2)}`);
-    console.log(`   NET to User's Bank: $${payout.netUserPayout.toFixed(2)}`);
-    console.log(`   Transfer ID: ${mockTransferId}`);
+    if (stripe && connectedAccountId) {
+      // REAL STRIPE TRANSFER - Send money to user's connected account
+      console.log(`   🔄 Creating real Stripe transfer to: ${connectedAccountId}`);
 
-    // Simulated Stripe transfer
-    // In production with MCP Stripe:
-    // const transfer = await stripe.transfers.create({
-    //   amount: Math.round(payout.netUserPayout * 100), // cents
-    //   currency: 'usd',
-    //   destination: bankAccountId,
-    //   description: `Arbitrage profit: ${trade.productTitle}`
-    // });
+      const transfer = await stripe.transfers.create({
+        amount: Math.round(payout.netUserPayout * 100), // Convert to cents
+        currency: 'usd',
+        destination: connectedAccountId,
+        description: `Arbitrage profit: ${trade.productTitle}`,
+        metadata: {
+          tradeId: trade.opportunityId,
+          productTitle: trade.productTitle,
+          grossProfit: payout.grossProfit.toString(),
+          platformCommission: payout.platformCommission.toString()
+        }
+      });
+
+      transferId = transfer.id;
+      console.log(`   ✅ Real Stripe transfer created: ${transferId}`);
+      console.log(`   💰 $${payout.netUserPayout.toFixed(2)} will arrive in 1-2 business days`);
+
+    } else if (stripe) {
+      // Stripe configured but no connected account - create payout to default account
+      console.log(`   🔄 Creating Stripe payout to platform default account`);
+
+      const payoutResponse = await stripe.payouts.create({
+        amount: Math.round(payout.netUserPayout * 100),
+        currency: 'usd',
+        description: `Arbitrage profit: ${trade.productTitle}`,
+        metadata: {
+          tradeId: trade.opportunityId
+        }
+      });
+
+      transferId = payoutResponse.id;
+      console.log(`   ✅ Real Stripe payout created: ${transferId}`);
+
+    } else {
+      // SIMULATION MODE - No Stripe configured
+      transferId = `tr_sim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      console.log(`   ⚠️  SIMULATION MODE - No real transfer (STRIPE_SECRET_KEY not set)`);
+      console.log(`   Transfer ID (simulated): ${transferId}`);
+    }
 
     return {
       tradeId: trade.opportunityId,
       ...payout,
-      transferId: mockTransferId,
-      status: 'completed'
+      transferId,
+      status
     };
+
   } catch (error: any) {
-    console.error('Payout failed:', error.message);
+    console.error('❌ Payout failed:', error.message);
     return {
       tradeId: trade.opportunityId,
       ...payout,

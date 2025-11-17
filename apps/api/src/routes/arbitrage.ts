@@ -3,6 +3,7 @@ import {
   ArbitrageEngine,
   WebScraperScout,
   EbayScout,
+  RainforestScout,
   type UserBudgetSettings,
   type ScoutConfig
 } from '@arbi/arbitrage-engine';
@@ -14,18 +15,42 @@ const router = Router();
 // Initialize arbitrage engine
 const arbitrageEngine = new ArbitrageEngine();
 
-// Note: eBay and Web Scraper scouts disabled due to network/proxy issues in container
-// To enable when you have eBay API key and proper network access, uncomment below:
-//
-// if (process.env.EBAY_APP_ID) {
-//   const ebayScout = new EbayScout(process.env.EBAY_APP_ID);
-//   arbitrageEngine.registerScout(ebayScout);
-//   console.log('✅ eBay Scout enabled');
-// }
-//
-console.log('🔧 Arbitrage engine initialized with mock data scout');
-console.log('ℹ️  Real-time scouts (eBay API, Web Scraper) disabled - get eBay API key to enable');
-console.log('ℹ️  To enable: Set EBAY_APP_ID in .env (get free at https://developer.ebay.com/join/)');
+// Enable real data scouts based on available API keys
+let scoutsEnabled = 0;
+
+// Rainforest API Scout (Amazon data without Amazon API)
+if (process.env.RAINFOREST_API_KEY) {
+  const rainforestScout = new RainforestScout(process.env.RAINFOREST_API_KEY);
+  arbitrageEngine.registerScout(rainforestScout);
+  console.log('✅ Rainforest Scout enabled (Amazon data)');
+  scoutsEnabled++;
+}
+
+// eBay Scout (if you get API access)
+if (process.env.EBAY_APP_ID) {
+  const ebayScout = new EbayScout(process.env.EBAY_APP_ID);
+  arbitrageEngine.registerScout(ebayScout);
+  console.log('✅ eBay Scout enabled');
+  scoutsEnabled++;
+}
+
+// Web Scraper Scout (requires Playwright browsers installed)
+if (process.env.ENABLE_WEB_SCRAPER === 'true') {
+  const webScraperScout = new WebScraperScout();
+  arbitrageEngine.registerScout(webScraperScout);
+  console.log('✅ Web Scraper Scout enabled');
+  scoutsEnabled++;
+}
+
+if (scoutsEnabled === 0) {
+  console.log('🔧 Arbitrage engine initialized with mock data scout only');
+  console.log('ℹ️  To enable real data, set one or more API keys:');
+  console.log('   - RAINFOREST_API_KEY (Amazon data - https://www.rainforestapi.com/)');
+  console.log('   - EBAY_APP_ID (eBay data - https://developer.ebay.com/join/)');
+  console.log('   - ENABLE_WEB_SCRAPER=true (Web scraping)');
+} else {
+  console.log(`✅ ${scoutsEnabled} real data scout(s) enabled + 1 mock scout`);
+}
 
 // Default user settings (in production, this would come from database)
 const defaultUserSettings: UserBudgetSettings = {

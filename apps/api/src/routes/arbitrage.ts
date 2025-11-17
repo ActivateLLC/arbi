@@ -64,11 +64,30 @@ const defaultUserSettings: UserBudgetSettings = {
 
 // GET /api/arbitrage/health
 router.get('/health', (req: Request, res: Response) => {
+  const enabledScouts = [];
+
+  if (process.env.RAINFOREST_API_KEY) {
+    enabledScouts.push('Rainforest Scout (Amazon)');
+  }
+  if (process.env.EBAY_APP_ID) {
+    enabledScouts.push('eBay Scout');
+  }
+  if (process.env.ENABLE_WEB_SCRAPER === 'true') {
+    enabledScouts.push('Web Scraper');
+  }
+
+  enabledScouts.push('E-Commerce Mock Scout');
+
   res.status(200).json({
     status: 'ok',
     message: 'Arbitrage Engine is operational',
-    activeScouts: 3, // ECommerceScout (mock), WebScraperScout, EbayScout
-    scouts: ['E-Commerce Mock Data', 'Web Scraper (Live)', 'eBay API (Live)']
+    scoutsEnabled: enabledScouts.length,
+    scouts: enabledScouts,
+    apiKeysConfigured: {
+      rainforest: !!process.env.RAINFOREST_API_KEY,
+      ebay: !!process.env.EBAY_APP_ID,
+      webScraper: process.env.ENABLE_WEB_SCRAPER === 'true'
+    }
   });
 });
 

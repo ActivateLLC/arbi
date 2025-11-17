@@ -2,8 +2,17 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
+import { getDatabase } from '../config/database';
 
 const router = Router();
+
+// Get database instance (may not be available if DB not configured)
+let db: ReturnType<typeof getDatabase> | null = null;
+try {
+  db = getDatabase();
+} catch (error) {
+  console.log('⚠️  Database not available for marketplace - using in-memory storage');
+}
 
 // Initialize Stripe
 const stripe = process.env.STRIPE_SECRET_KEY
@@ -53,6 +62,7 @@ interface MarketplaceListing {
   status: 'active' | 'sold' | 'expired';
   listedAt: Date;
   expiresAt: Date;
+  soldAt?: Date;
 }
 
 interface BuyerOrder {
@@ -73,13 +83,147 @@ interface BuyerOrder {
   supplierOrderId?: string;
   supplierPurchaseStatus: 'pending' | 'completed' | 'failed';
   shipmentTrackingNumber?: string;
+  shipmentCarrier?: string;
   status: 'payment_received' | 'purchasing_from_supplier' | 'shipped' | 'delivered' | 'refunded';
+  actualProfit?: number;
+  refundId?: string;
+  refundedAt?: Date;
   createdAt: Date;
+  deliveredAt?: Date;
 }
 
-// In-memory storage (replace with database in production)
+// In-memory storage (fallback if database not available)
 const listings: Map<string, MarketplaceListing> = new Map();
 const orders: Map<string, BuyerOrder> = new Map();
+
+/**
+ * Helper functions for database/memory abstraction
+ */
+async function saveListing(listing: MarketplaceListing): Promise<void> {
+  if (db) {
+    try {
+      await db.create('MarketplaceListing', listing);
+    } catch (error: any) {
+      console.error('❌ Database save failed, using memory:', error.message);
+      listings.set(listing.listingId, listing);
+    }
+  } else {
+    listings.set(listing.listingId, listing);
+  }
+}
+
+async function getListing(listingId: string): Promise<MarketplaceListing | null> {
+  if (db) {
+    try {
+      const result = await db.findOne('MarketplaceListing', { where: { listingId } });
+      return result as MarketplaceListing | null;
+    } catch (error: any) {
+      console.error('❌ Database query failed, using memory:', error.message);
+      return listings.get(listingId) || null;
+    }
+  }
+  return listings.get(listingId) || null;
+}
+
+async function getListings(status?: string): Promise<MarketplaceListing[]> {
+  if (db) {
+    try {
+      const where = status ? { status } : {};
+      const results = await db.find('MarketplaceListing', {
+        where,
+        order: [['listedAt', 'DESC']]
+      });
+      return results as MarketplaceListing[];
+    } catch (error: any) {
+      console.error('❌ Database query failed, using memory:', error.message);
+      const allListings = Array.from(listings.values());
+      return status ? allListings.filter(l => l.status === status) : allListings;
+    }
+  }
+
+  const allListings = Array.from(listings.values());
+  const filtered = status ? allListings.filter(l => l.status === status) : allListings;
+  return filtered.sort((a, b) => b.listedAt.getTime() - a.listedAt.getTime());
+}
+
+async function updateListing(listingId: string, data: Partial<MarketplaceListing>): Promise<void> {
+  if (db) {
+    try {
+      await db.update('MarketplaceListing', data, { where: { listingId } });
+    } catch (error: any) {
+      console.error('❌ Database update failed, using memory:', error.message);
+      const existing = listings.get(listingId);
+      if (existing) {
+        listings.set(listingId, { ...existing, ...data });
+      }
+    }
+  } else {
+    const existing = listings.get(listingId);
+    if (existing) {
+      listings.set(listingId, { ...existing, ...data });
+    }
+  }
+}
+
+async function saveOrder(order: BuyerOrder): Promise<void> {
+  if (db) {
+    try {
+      await db.create('BuyerOrder', order);
+    } catch (error: any) {
+      console.error('❌ Database save failed, using memory:', error.message);
+      orders.set(order.orderId, order);
+    }
+  } else {
+    orders.set(order.orderId, order);
+  }
+}
+
+async function getOrder(orderId: string): Promise<BuyerOrder | null> {
+  if (db) {
+    try {
+      const result = await db.findOne('BuyerOrder', { where: { orderId } });
+      return result as BuyerOrder | null;
+    } catch (error: any) {
+      console.error('❌ Database query failed, using memory:', error.message);
+      return orders.get(orderId) || null;
+    }
+  }
+  return orders.get(orderId) || null;
+}
+
+async function getOrders(): Promise<BuyerOrder[]> {
+  if (db) {
+    try {
+      const results = await db.find('BuyerOrder', {
+        order: [['createdAt', 'DESC']]
+      });
+      return results as BuyerOrder[];
+    } catch (error: any) {
+      console.error('❌ Database query failed, using memory:', error.message);
+      return Array.from(orders.values());
+    }
+  }
+  return Array.from(orders.values());
+}
+
+async function updateOrder(orderId: string, data: Partial<BuyerOrder>): Promise<void> {
+  if (db) {
+    try {
+      await db.update('BuyerOrder', data, { where: { orderId } });
+    } catch (error: any) {
+      console.error('❌ Database update failed, using memory:', error.message);
+      const existing = orders.get(orderId);
+      if (existing) {
+        orders.set(orderId, { ...existing, ...data });
+      }
+    }
+  } else {
+    const existing = orders.get(orderId);
+    if (existing) {
+      orders.set(orderId, { ...existing, ...data });
+    }
+  }
+}
 
 /**
  * POST /api/marketplace/list
@@ -144,7 +288,7 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
     };
 
-    listings.set(listingId, listing);
+    await saveListing(listing);
 
     console.log(`✅ Marketplace listing created: ${listingId}`);
     console.log(`   Product: ${productTitle}`);
@@ -176,12 +320,10 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
  * GET /api/marketplace/listings
  * Get all active marketplace listings
  */
-router.get('/listings', (req: Request, res: Response) => {
+router.get('/listings', async (req: Request, res: Response) => {
   const status = req.query.status as string || 'active';
 
-  const filteredListings = Array.from(listings.values())
-    .filter(listing => listing.status === status)
-    .sort((a, b) => b.listedAt.getTime() - a.listedAt.getTime());
+  const filteredListings = await getListings(status);
 
   res.status(200).json({
     total: filteredListings.length,
@@ -206,7 +348,7 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
       throw new ApiError(400, 'Missing required checkout fields');
     }
 
-    const listing = listings.get(listingId);
+    const listing = await getListing(listingId);
     if (!listing) {
       throw new ApiError(404, 'Listing not found');
     }
@@ -263,11 +405,10 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
       createdAt: new Date()
     };
 
-    orders.set(orderId, order);
+    await saveOrder(order);
 
     // Update listing status
-    listing.status = 'sold';
-    listings.set(listingId, listing);
+    await updateListing(listingId, { status: 'sold', soldAt: new Date() });
 
     console.log(`📦 Order created: ${orderId}`);
     console.log(`   Next: Automatically purchasing from supplier...`);
@@ -295,21 +436,20 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
  * Automatically purchase from supplier after buyer payment
  */
 async function purchaseFromSupplier(orderId: string): Promise<void> {
-  const order = orders.get(orderId);
+  const order = await getOrder(orderId);
   if (!order) {
     console.error(`❌ Order not found: ${orderId}`);
     return;
   }
 
-  const listing = listings.get(order.listingId);
+  const listing = await getListing(order.listingId);
   if (!listing) {
     console.error(`❌ Listing not found: ${order.listingId}`);
     return;
   }
 
   try {
-    order.status = 'purchasing_from_supplier';
-    orders.set(orderId, order);
+    await updateOrder(orderId, { status: 'purchasing_from_supplier' });
 
     console.log(`🛒 Purchasing from supplier: ${listing.supplierPlatform}`);
     console.log(`   Product: ${listing.productTitle}`);
@@ -329,11 +469,13 @@ async function purchaseFromSupplier(orderId: string): Promise<void> {
     // Simulate API call delay
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    order.supplierOrderId = supplierOrderId;
-    order.supplierPurchaseStatus = 'completed';
-    order.status = 'shipped';
-    order.shipmentTrackingNumber = `TRACK${Date.now()}`;
-    orders.set(orderId, order);
+    await updateOrder(orderId, {
+      supplierOrderId,
+      supplierPurchaseStatus: 'completed',
+      status: 'shipped',
+      shipmentTrackingNumber: `TRACK${Date.now()}`,
+      actualProfit: order.amountPaid - listing.supplierPrice
+    });
 
     const actualProfit = order.amountPaid - listing.supplierPrice;
 
@@ -347,18 +489,24 @@ async function purchaseFromSupplier(orderId: string): Promise<void> {
 
   } catch (error: any) {
     console.error(`❌ Supplier purchase failed:`, error.message);
-    order.supplierPurchaseStatus = 'failed';
-    order.status = 'refunded';
-    orders.set(orderId, order);
 
     // Refund buyer if supplier purchase fails
+    let refundId: string | undefined;
     if (stripe) {
-      await stripe.refunds.create({
+      const refund = await stripe.refunds.create({
         payment_intent: order.paymentIntentId,
         reason: 'requested_by_customer'
       });
+      refundId = refund.id;
       console.log(`💸 Buyer refunded: $${order.amountPaid}`);
     }
+
+    await updateOrder(orderId, {
+      supplierPurchaseStatus: 'failed',
+      status: 'refunded',
+      refundId,
+      refundedAt: new Date()
+    });
   }
 }
 
@@ -366,9 +514,8 @@ async function purchaseFromSupplier(orderId: string): Promise<void> {
  * GET /api/marketplace/orders
  * Get order history and profits
  */
-router.get('/orders', (req: Request, res: Response) => {
-  const orderList = Array.from(orders.values())
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+router.get('/orders', async (req: Request, res: Response) => {
+  const orderList = await getOrders();
 
   const stats = {
     totalOrders: orderList.length,
@@ -377,10 +524,10 @@ router.get('/orders', (req: Request, res: Response) => {
     successfulOrders: 0
   };
 
+  // Calculate profits from actualProfit field (already stored in DB)
   orderList.forEach(order => {
-    const listing = listings.get(order.listingId);
-    if (listing && order.supplierPurchaseStatus === 'completed') {
-      stats.totalProfit += (order.amountPaid - listing.supplierPrice);
+    if (order.supplierPurchaseStatus === 'completed' && order.actualProfit) {
+      stats.totalProfit += order.actualProfit;
       stats.successfulOrders++;
     }
   });
@@ -401,24 +548,29 @@ router.get('/orders', (req: Request, res: Response) => {
  * GET /api/marketplace/health
  * Check marketplace system status
  */
-router.get('/health', (req: Request, res: Response) => {
+router.get('/health', async (req: Request, res: Response) => {
+  const allListings = await getListings();
+  const allOrders = await getOrders();
+
   res.status(200).json({
     status: 'ok',
     mode: 'dropshipping',
     capitalRequired: 0,
     physicalHandling: false,
+    persistence: db ? 'database' : 'memory',
     features: {
       buyerPaysFirst: true,
       directShipping: true,
       cloudinaryHosting: !!(process.env.CLOUDINARY_CLOUD_NAME),
       stripePayments: !!stripe,
-      autoSupplierPurchase: true
+      autoSupplierPurchase: true,
+      databasePersistence: !!db
     },
     stats: {
-      activeListings: Array.from(listings.values()).filter(l => l.status === 'active').length,
-      totalListings: listings.size,
-      totalOrders: orders.size,
-      pendingOrders: Array.from(orders.values()).filter(o => o.status === 'payment_received').length
+      activeListings: allListings.filter(l => l.status === 'active').length,
+      totalListings: allListings.length,
+      totalOrders: allOrders.length,
+      pendingOrders: allOrders.filter(o => o.status === 'payment_received').length
     }
   });
 });

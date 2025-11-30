@@ -34,8 +34,9 @@ export class ArbitrageEngine {
     this.analyzer = new OpportunityAnalyzer();
     this.riskManager = new RiskManager();
 
-    // Register default scouts
-    this.registerScout(new ECommerceScout());
+    // PRODUCTION MODE: No default scouts
+    // Scouts must be explicitly registered with real data sources
+    // (RainforestScout, EbayScout, WebScraperScout)
   }
 
   registerScout(scout: OpportunityScout): void {

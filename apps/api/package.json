@@ -16,15 +16,17 @@
   "dependencies": {
     "@arbi/ai-engine": "workspace:*",
     "@arbi/arbitrage-engine": "workspace:*",
-    "@arbi/web-automation": "workspace:*",
-    "@arbi/voice-interface": "workspace:*",
-    "@arbi/transaction": "workspace:*",
     "@arbi/data": "workspace:*",
+    "@arbi/transaction": "workspace:*",
+    "@arbi/voice-interface": "workspace:*",
+    "@arbi/web-automation": "workspace:*",
+    "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
+    "stripe": "^19.3.1",
     "winston": "^3.11.0"
   },
   "devDependencies": {

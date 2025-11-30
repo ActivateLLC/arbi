@@ -13,18 +13,18 @@ import type {
 } from '../types';
 
 interface HyperswitchPaymentMethodCard {
-  number: unknown;
-  exp_month: unknown;
-  exp_year: unknown;
-  cvc: unknown;
-  name: unknown;
+  number: string;
+  exp_month: number;
+  exp_year: number;
+  cvc: string;
+  name: string;
 }
 
 interface HyperswitchPaymentMethodBankTransfer {
-  account_number: unknown;
-  routing_number: unknown;
-  account_type: unknown;
-  bank_name: unknown;
+  account_number: string;
+  routing_number: string;
+  account_type: string;
+  bank_name: string;
 }
 
 interface HyperswitchPaymentMethod {
@@ -256,19 +256,19 @@ export class HyperswitchPaymentManager {
     switch (paymentMethod.type) {
       case 'card':
         mappedMethod.card = {
-          number: details.number,
-          exp_month: details.expMonth,
-          exp_year: details.expYear,
-          cvc: details.cvc,
-          name: details.name,
+          number: String(details.number || ''),
+          exp_month: Number(details.expMonth) || 0,
+          exp_year: Number(details.expYear) || 0,
+          cvc: String(details.cvc || ''),
+          name: String(details.name || ''),
         };
         break;
       case 'bank_transfer':
         mappedMethod.bank_transfer = {
-          account_number: details.accountNumber,
-          routing_number: details.routingNumber,
-          account_type: details.accountType,
-          bank_name: details.bankName,
+          account_number: String(details.accountNumber || ''),
+          routing_number: String(details.routingNumber || ''),
+          account_type: String(details.accountType || ''),
+          bank_name: String(details.bankName || ''),
         };
         break;
       // Add other payment methods as needed

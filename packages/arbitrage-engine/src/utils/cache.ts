@@ -108,7 +108,26 @@ export class SimpleCache<T = unknown> {
   }
 }
 
-// Export a singleton instance for shared caching
-export const opportunityCache = new SimpleCache(5 * 60 * 1000); // 5 minutes
-export const priceCache = new SimpleCache(10 * 60 * 1000); // 10 minutes
-export const apiCache = new SimpleCache(60 * 1000); // 1 minute
+/**
+ * Factory function to create an opportunity cache
+ * @param ttl TTL in milliseconds (default: 5 minutes)
+ */
+export function createOpportunityCache<T = unknown>(ttl: number = 5 * 60 * 1000): SimpleCache<T> {
+  return new SimpleCache<T>(ttl);
+}
+
+/**
+ * Factory function to create a price cache
+ * @param ttl TTL in milliseconds (default: 10 minutes)
+ */
+export function createPriceCache<T = unknown>(ttl: number = 10 * 60 * 1000): SimpleCache<T> {
+  return new SimpleCache<T>(ttl);
+}
+
+/**
+ * Factory function to create an API response cache
+ * @param ttl TTL in milliseconds (default: 1 minute)
+ */
+export function createApiCache<T = unknown>(ttl: number = 60 * 1000): SimpleCache<T> {
+  return new SimpleCache<T>(ttl);
+}

@@ -107,7 +107,7 @@ export interface PaymentProcessor {
   name: string;
   process: (request: PaymentRequest) => Promise<PaymentResponse>;
   refund: (request: RefundRequest) => Promise<RefundResponse>;
-  validateWebhook: (payload: any, signature: string) => boolean;
+  validateWebhook: (payload: unknown, signature: string) => boolean;
 }
 
 export interface SecurityConfig {

@@ -1,6 +1,5 @@
 import type {
   PaymentConfig,
-  PaymentProcessor,
   PaymentProcessorConfig,
   PaymentRequest,
   PaymentResponse,
@@ -8,6 +7,7 @@ import type {
   RefundResponse,
   SecurityConfig,
 } from './types';
+
 import { SecurityManager } from './security/SecurityManager';
 import { HyperswitchPaymentManager } from './payment/HyperswitchPaymentManager';
 
@@ -61,7 +61,7 @@ export class TransactionManager {
    */
   public validateWebhook(
     processorName: string,
-    payload: any,
+    payload: unknown,
     signature: string
   ): boolean {
     const processor = this.paymentManager.getProcessor(processorName);

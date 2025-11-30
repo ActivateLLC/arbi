@@ -7,6 +7,8 @@
 
 import { ArbitrageEngine } from '@arbi/arbitrage-engine';
 
+import type { Opportunity } from '@arbi/arbitrage-engine';
+
 interface AutoListingConfig {
   scanIntervalMinutes: number;
   minScore: number;
@@ -113,7 +115,7 @@ export class AutonomousListingJob {
       console.log(`   Auto-listing top ${toList.length} opportunities...`);
 
       // List each opportunity on marketplace
-      for (const { opportunity, analysis } of toList) {
+      for (const { opportunity } of toList) {
         await this.listOnMarketplace(opportunity, config.markupPercentage);
       }
 
@@ -127,10 +129,13 @@ export class AutonomousListingJob {
    * List a single opportunity on marketplace
    */
   private async listOnMarketplace(
-    opportunity: any,
+    opportunity: Opportunity,
     markupPercentage: number
   ): Promise<void> {
     try {
+      // Extract image URL from productInfo if available
+      const imageUrls = opportunity.productInfo?.imageUrl ? [opportunity.productInfo.imageUrl] : [];
+      
       // Call marketplace listing API
       const response = await fetch('http://localhost:3000/api/marketplace/list', {
         method: 'POST',
@@ -141,10 +146,10 @@ export class AutonomousListingJob {
           opportunityId: opportunity.id,
           productTitle: opportunity.title,
           productDescription: this.generateDescription(opportunity),
-          productImageUrls: opportunity.images || [],
+          productImageUrls: imageUrls,
           supplierPrice: opportunity.buyPrice,
-          supplierUrl: opportunity.buyUrl,
-          supplierPlatform: opportunity.buyPlatform?.toLowerCase() || 'unknown',
+          supplierUrl: opportunity.buySource,
+          supplierPlatform: opportunity.buySource?.toLowerCase() || 'unknown',
           markupPercentage,
         }),
       });
@@ -164,7 +169,7 @@ export class AutonomousListingJob {
   /**
    * Generate product description
    */
-  private generateDescription(opportunity: any): string {
+  private generateDescription(opportunity: Opportunity): string {
     return `
 ${opportunity.title}
 

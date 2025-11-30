@@ -30,7 +30,7 @@ export interface EbaySearchParams {
   limit?: number;
 }
 
-export class EbayScout {
+export class EbayProductScout {
   private readonly appId: string;
   private readonly apiUrl = 'https://svcs.ebay.com/services/search/FindingService/v1';
 

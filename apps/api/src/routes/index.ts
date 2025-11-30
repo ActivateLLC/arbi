@@ -9,6 +9,7 @@ import autonomousRoutes from './autonomous';
 import autonomousControlRoutes from './autonomous-control';
 import payoutRoutes from './payout';
 import marketplaceRoutes from './marketplace';
+import revenueRoutes from './revenue';
 
 const router = Router();
 
@@ -38,5 +39,8 @@ router.use('/autonomous', autonomousRoutes);
 
 // Autonomous control routes (START/STOP autonomous operations)
 router.use('/autonomous-control', autonomousControlRoutes);
+
+// Revenue target tracker routes (track progress toward revenue goals)
+router.use('/revenue', revenueRoutes);
 
 export default router;

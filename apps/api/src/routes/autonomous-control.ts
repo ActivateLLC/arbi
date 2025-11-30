@@ -24,31 +24,46 @@ router.post('/start-listing', async (req: Request, res: Response) => {
     minROI = 15,
     markupPercentage = 30,
     maxListingsPerRun = 10,
+    turboMode = false,
   } = req.body;
 
   try {
-    await autonomousListing.start({
-      scanIntervalMinutes,
-      minScore,
-      minProfit,
-      minROI,
-      markupPercentage,
-      maxListingsPerRun,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: 'Autonomous listing started',
-      config: {
+    // Use turbo mode preset if enabled
+    if (turboMode) {
+      await autonomousListing.start('turbo');
+      
+      res.status(200).json({
+        success: true,
+        message: '⚡ Autonomous listing started in TURBO MODE',
+        mode: 'turbo',
+        status: autonomousListing.getStatus(),
+        description: 'Turbo mode enabled: 5-minute scans, lower thresholds, priority keywords active',
+      });
+    } else {
+      await autonomousListing.start({
         scanIntervalMinutes,
         minScore,
         minProfit,
         minROI,
         markupPercentage,
         maxListingsPerRun,
-      },
-      status: autonomousListing.getStatus(),
-    });
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Autonomous listing started',
+        mode: 'standard',
+        config: {
+          scanIntervalMinutes,
+          minScore,
+          minProfit,
+          minROI,
+          markupPercentage,
+          maxListingsPerRun,
+        },
+        status: autonomousListing.getStatus(),
+      });
+    }
   } catch (error: any) {
     res.status(500).json({
       success: false,
@@ -151,6 +166,46 @@ router.post('/configure', async (req: Request, res: Response) => {
       autoExecution: { running: false, reason: 'Requires supplier API integration' },
     },
   });
+});
+
+/**
+ * POST /api/autonomous-control/turbo-mode
+ * Enable turbo mode for maximum revenue generation
+ * Optimized settings for hitting revenue targets quickly
+ */
+router.post('/turbo-mode', async (req: Request, res: Response) => {
+  try {
+    // Stop existing listing if running
+    autonomousListing.stop();
+    
+    // Start in turbo mode
+    await autonomousListing.start('turbo');
+    
+    res.status(200).json({
+      success: true,
+      message: '⚡ TURBO MODE ACTIVATED!',
+      description: 'System is now optimized for maximum revenue generation',
+      status: autonomousListing.getStatus(),
+      optimizations: [
+        '🚀 Scanning every 5 minutes (12x faster)',
+        '📉 Lower score threshold (60 vs 75) - more opportunities',
+        '💵 Lower profit minimum ($15 vs $20) - higher volume',
+        '📦 50 listings per scan (5x more)',
+        '🎯 Priority keywords targeting high-margin items',
+        '📊 Focus on Electronics, Gaming, Collectibles'
+      ],
+      expectedImpact: {
+        opportunityIncrease: '3-5x more opportunities detected',
+        listingVolume: '50+ listings per hour',
+        revenueProjection: 'Optimized for $10K+ daily targets'
+      }
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
 });
 
 export default router;

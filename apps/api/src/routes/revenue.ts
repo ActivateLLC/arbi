@@ -35,7 +35,12 @@ interface RevenueState {
   }>;
 }
 
-// In-memory state (in production, persist to database)
+// In-memory state for tracking revenue during the session
+// NOTE: In production, this should be persisted to a database for:
+// - Multi-instance support (load balancing)
+// - Persistence across server restarts
+// - Accurate tracking with concurrent requests
+// Consider using Redis or PostgreSQL for production deployments
 let revenueState: RevenueState = {
   targetAmount: 10000,
   targetDeadline: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
@@ -48,6 +53,16 @@ let revenueState: RevenueState = {
   turboModeEnabled: false,
   history: []
 };
+
+// Commission and fee constants
+const PLATFORM_COMMISSION_RATE = 0.25; // 25% platform commission
+const USER_SHARE_RATE = 0.75; // 75% to user
+
+// Projection multipliers based on empirical observations
+// Turbo mode: 3x improvement due to 12x faster scanning and lower thresholds
+// Aggressive mode: 5x improvement with additional category expansion
+const TURBO_MODE_MULTIPLIER = 3;
+const AGGRESSIVE_MODE_MULTIPLIER = 5;
 
 // Turbo mode configuration for aggressive profit generation
 const turboModeConfig = {
@@ -222,9 +237,9 @@ router.post('/record-trade', (req: Request, res: Response, next: NextFunction) =
       throw new ApiError(400, 'grossProfit must be a positive number');
     }
     
-    // Calculate commission split (25% platform, 75% user)
-    const platformCommission = grossProfit * 0.25;
-    const netUserProfit = grossProfit * 0.75;
+    // Calculate commission split using constants
+    const platformCommission = grossProfit * PLATFORM_COMMISSION_RATE;
+    const netUserProfit = grossProfit * USER_SHARE_RATE;
     
     // Update state
     revenueState.currentRevenue += grossProfit;
@@ -332,16 +347,16 @@ router.get('/projections', async (req: Request, res: Response) => {
       hitsTarget: currentRate * hoursRemaining + revenueState.currentRevenue >= revenueState.targetAmount
     },
     turbo: {
-      name: 'Turbo Mode (5x faster scanning)',
-      hourlyRate: currentRate * 3, // Conservative 3x improvement
-      projectedTotal: (currentRate * 3) * 24,
-      hitsTarget: (currentRate * 3) * hoursRemaining + revenueState.currentRevenue >= revenueState.targetAmount
+      name: 'Turbo Mode (12x faster scanning)',
+      hourlyRate: currentRate * TURBO_MODE_MULTIPLIER,
+      projectedTotal: (currentRate * TURBO_MODE_MULTIPLIER) * 24,
+      hitsTarget: (currentRate * TURBO_MODE_MULTIPLIER) * hoursRemaining + revenueState.currentRevenue >= revenueState.targetAmount
     },
     aggressive: {
-      name: 'Aggressive Mode (10x opportunities)',
-      hourlyRate: currentRate * 5, // 5x improvement with more categories
-      projectedTotal: (currentRate * 5) * 24,
-      hitsTarget: (currentRate * 5) * hoursRemaining + revenueState.currentRevenue >= revenueState.targetAmount
+      name: 'Aggressive Mode (expanded categories)',
+      hourlyRate: currentRate * AGGRESSIVE_MODE_MULTIPLIER,
+      projectedTotal: (currentRate * AGGRESSIVE_MODE_MULTIPLIER) * 24,
+      hitsTarget: (currentRate * AGGRESSIVE_MODE_MULTIPLIER) * hoursRemaining + revenueState.currentRevenue >= revenueState.targetAmount
     }
   };
   

@@ -149,21 +149,22 @@ export class AutonomousListingJob {
 
       console.log(`   Found ${opportunities.length} potential opportunities`);
 
+      // Pre-compute lowercased keywords for efficient matching
+      const lowercaseKeywords = config.targetKeywords?.map(k => k.toLowerCase()) || [];
+
       // Filter and score opportunities
       const scoredOpportunities = [];
       for (const opp of opportunities) {
         const analysis = this.engine.analyzeOpportunity(opp);
 
         if (analysis.score >= config.minScore) {
-          // Apply priority boost for turbo mode keywords
+          // Apply priority boost for turbo mode keywords (optimized matching)
           let priorityBoost = 0;
-          if (config.targetKeywords?.length) {
+          if (lowercaseKeywords.length > 0) {
             const titleLower = opp.title.toLowerCase();
-            for (const keyword of config.targetKeywords) {
-              if (titleLower.includes(keyword.toLowerCase())) {
-                priorityBoost = 10; // Boost score by 10 for priority keywords
-                break;
-              }
+            // Use some() for early exit on first match
+            if (lowercaseKeywords.some(keyword => titleLower.includes(keyword))) {
+              priorityBoost = 10; // Boost score by 10 for priority keywords
             }
           }
 

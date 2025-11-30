@@ -12,6 +12,14 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [response, setResponse] = useState<string>('');
   const [error, setError] = useState<string>('');
+  
+  // Check for TikTok connection success
+  const urlParams = new URLSearchParams(window.location.search);
+  const tiktokConnected = urlParams.get('tiktok_connected') === 'true';
+
+  const handleTikTokConnect = () => {
+    window.location.href = '/api/auth/tiktok';
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,6 +93,25 @@ function App() {
             <li>Screenshot capture</li>
           </ul>
           <button className="btn">Get API Key</button>
+        </div>
+
+        <div className="service-card" style={{ border: '2px solid #fe2c55' }}>
+          <h3>TikTok Ads Automation</h3>
+          <p>Automatically create and manage ad campaigns for your listings</p>
+          <div className="price">
+            Free <span className="price-unit">beta</span>
+          </div>
+          <ul className="features">
+            <li>Auto-generate video ads</li>
+            <li>Sync product catalog</li>
+            <li>Optimize ad spend</li>
+            <li>Real-time analytics</li>
+          </ul>
+          {tiktokConnected ? (
+            <button className="btn" style={{ backgroundColor: '#25F4EE', color: 'black' }} disabled>✅ Connected</button>
+          ) : (
+            <button className="btn" onClick={handleTikTokConnect} style={{ backgroundColor: '#fe2c55' }}>Connect TikTok</button>
+          )}
         </div>
       </div>
 

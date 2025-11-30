@@ -9,8 +9,12 @@ import autonomousRoutes from './autonomous';
 import autonomousControlRoutes from './autonomous-control';
 import payoutRoutes from './payout';
 import marketplaceRoutes from './marketplace';
+import authRoutes from './auth';
 
 const router = Router();
+
+// Auth routes
+router.use('/auth', authRoutes);
 
 // AI routes
 router.use('/ai', aiRoutes);

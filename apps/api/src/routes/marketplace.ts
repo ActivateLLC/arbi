@@ -3,6 +3,7 @@ import { ApiError } from '../middleware/errorHandler';
 import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
 import { getDatabase } from '../config/database';
+import { adManager } from '../services/AdManager';
 
 const router = Router();
 
@@ -297,10 +298,24 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
     console.log(`   Estimated profit: $${estimatedProfit.toFixed(2)}`);
     console.log(`   Images hosted: ${cloudinaryUrls.length}`);
 
+    // Automatically create ad campaign
+    let adInfo = null;
+    try {
+      console.log('📢 Triggering automatic ad creation...');
+      const adResult = await adManager.promoteListing(listing);
+      if (adResult.success) {
+        console.log(`✅ Ad campaign active: ${adResult.campaignId}`);
+        adInfo = adResult;
+      }
+    } catch (adError: any) {
+      console.error('⚠️  Ad creation failed (non-blocking):', adError.message);
+    }
+
     res.status(201).json({
       success: true,
       listing,
-      message: 'Product listed on marketplace',
+      adInfo,
+      message: 'Product listed on marketplace and ad campaign started',
       marketingInfo: {
         publicUrl: `https://your-marketplace.com/product/${listingId}`,
         imageUrls: cloudinaryUrls,

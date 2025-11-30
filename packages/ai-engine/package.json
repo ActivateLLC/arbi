@@ -17,7 +17,7 @@
     "build": "tsup src/index.ts --format cjs,esm",
     "dev": "tsup src/index.ts --format cjs,esm --watch",
     "lint": "eslint \"src/**/*.ts\"",
-    "test": "jest",
+    "test": "jest --passWithNoTests",
     "clean": "rm -rf dist node_modules"
   },
   "dependencies": {

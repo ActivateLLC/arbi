@@ -6,6 +6,7 @@ import voiceRoutes from './voice';
 import paymentRoutes from './payment';
 import arbitrageRoutes from './arbitrage';
 import autonomousRoutes from './autonomous';
+import autonomousControlRoutes from './autonomous-control';
 import payoutRoutes from './payout';
 import marketplaceRoutes from './marketplace';
 
@@ -34,5 +35,8 @@ router.use('/arbitrage', arbitrageRoutes);
 
 // Autonomous arbitrage routes (NEW - Multi-category intelligent scanning)
 router.use('/autonomous', autonomousRoutes);
+
+// Autonomous control routes (START/STOP autonomous operations)
+router.use('/autonomous-control', autonomousControlRoutes);
 
 export default router;

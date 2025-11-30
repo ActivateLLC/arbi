@@ -11,4 +11,5 @@ export * from './storage/DatabaseManager';
 export * from './cache/CacheManager';
 
 // Export analysis modules
-export * from './analysis/DataAnalyzer';
+// TEMPORARILY DISABLED: DataAnalyzer requires pandas-js which has dependency issues
+// export * from './analysis/DataAnalyzer';

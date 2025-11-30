@@ -51,6 +51,8 @@
     "packages/*"
   ],
   "dependencies": {
+    "@babel/runtime": "^7.28.4",
+    "babel-runtime": "^6.26.0",
     "cheerio": "^1.1.2"
   }
 }

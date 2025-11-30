@@ -4,9 +4,9 @@ export * from './types';
 // Export scouts
 export * from './scouts/ECommerceScout';
 export * from './scouts/WebScraperScout';
-export * from './scouts/EbayScout';
+export * from './scouts/EbayScout'; // Implements OpportunityScout interface for arbitrage engine
 export * from './scouts/RainforestScout';
-export * from './scouts/EbayProductScout'; // Real eBay product integration
+export * from './scouts/EbayProductScout'; // Standalone eBay product search client
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';

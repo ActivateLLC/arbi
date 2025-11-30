@@ -1,4 +1,4 @@
-import { EbayScout, EbayProduct } from '../scouts/ebayScout';
+import { EbayProductScout, EbayProduct } from '../scouts/EbayProductScout';
 import { ProfitCalculator, ProfitCalculation } from '../calculators/profitCalculator';
 import { OpportunityScorer, OpportunityScore } from '../scorers/opportunityScorer';
 
@@ -25,7 +25,7 @@ export interface AutonomousConfig {
 }
 
 export class AutonomousEngine {
-  private ebayScout: EbayScout;
+  private ebayScout: EbayProductScout;
   private profitCalculator: ProfitCalculator;
   private scorer: OpportunityScorer;
   private opportunities: Map<string, ArbitrageOpportunity> = new Map();
@@ -33,7 +33,7 @@ export class AutonomousEngine {
   private lastScanTime: Date = new Date(0);
 
   constructor() {
-    this.ebayScout = new EbayScout();
+    this.ebayScout = new EbayProductScout();
     this.profitCalculator = new ProfitCalculator();
     this.scorer = new OpportunityScorer();
   }

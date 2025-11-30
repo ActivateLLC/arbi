@@ -136,6 +136,9 @@ export class AutonomousListingJob {
       // Extract image URL from productInfo if available
       const imageUrls = opportunity.productInfo?.imageUrl ? [opportunity.productInfo.imageUrl] : [];
       
+      // Extract platform from buySource URL (e.g., "amazon.com" -> "amazon")
+      const supplierPlatform = this.extractPlatformFromUrl(opportunity.buySource);
+      
       // Call marketplace listing API
       const response = await fetch('http://localhost:3000/api/marketplace/list', {
         method: 'POST',
@@ -149,7 +152,7 @@ export class AutonomousListingJob {
           productImageUrls: imageUrls,
           supplierPrice: opportunity.buyPrice,
           supplierUrl: opportunity.buySource,
-          supplierPlatform: opportunity.buySource?.toLowerCase() || 'unknown',
+          supplierPlatform,
           markupPercentage,
         }),
       });
@@ -184,6 +187,33 @@ ${opportunity.description || 'High-quality product at a great price!'}
 
 Order now and get your item delivered quickly!
     `.trim();
+  }
+
+  /**
+   * Extract platform name from a URL
+   * e.g., "https://www.amazon.com/dp/..." -> "amazon"
+   */
+  private extractPlatformFromUrl(url: string): string {
+    if (!url) return 'unknown';
+    
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      
+      // Extract platform from common e-commerce domains
+      if (hostname.includes('amazon')) return 'amazon';
+      if (hostname.includes('walmart')) return 'walmart';
+      if (hostname.includes('target')) return 'target';
+      if (hostname.includes('ebay')) return 'ebay';
+      if (hostname.includes('bestbuy')) return 'bestbuy';
+      if (hostname.includes('costco')) return 'costco';
+      if (hostname.includes('aliexpress')) return 'aliexpress';
+      
+      // Return hostname without TLD as fallback
+      const parts = hostname.replace('www.', '').split('.');
+      return parts[0] || 'unknown';
+    } catch {
+      return 'unknown';
+    }
   }
 
   /**

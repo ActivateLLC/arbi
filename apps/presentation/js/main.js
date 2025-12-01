@@ -16,7 +16,7 @@ import gsap from 'gsap';
 window.gsap = gsap;
 
 // Import custom animations
-import { initAnimations, setupContinuousAnimations } from './animations.js';
+import { initAnimations, setupContinuousAnimations, setupHoverAnimations } from './animations.js';
 import { initParticles, createFloatingCode } from './particles.js';
 
 // Initialize Reveal.js
@@ -35,6 +35,7 @@ Reveal.initialize({
   initParticles();
   createFloatingCode(gsap);
   setupContinuousAnimations(gsap);
+  setupHoverAnimations(gsap);
   
   console.log('ARBI Presentation initialized');
 });

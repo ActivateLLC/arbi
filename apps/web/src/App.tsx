@@ -1,158 +1,279 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import PaymentModal from './components/PaymentModal';
+import './components/PaymentModal.css';
 
-interface AIResponse {
-  result: {
-    content: string;
+// --- Types ---
+interface MarketplaceListing {
+  listingId: string;
+  productTitle: string;
+  productDescription: string;
+  productImages: string[];
+  marketplacePrice: number;
+  status: string;
+}
+
+type MessageRole = 'user' | 'ai';
+type WidgetType = 'none' | 'product-grid' | 'checkout-success' | 'loading';
+
+interface Message {
+  id: string;
+  role: MessageRole;
+  text: string;
+  widget?: {
+    type: WidgetType;
+    data?: any;
   };
 }
 
-function App() {
-  const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<string>('');
-  const [error, setError] = useState<string>('');
-  
-  // Check for TikTok connection success
-  const urlParams = new URLSearchParams(window.location.search);
-  const tiktokConnected = urlParams.get('tiktok_connected') === 'true';
+// --- Components ---
 
-  const handleTikTokConnect = () => {
-    window.location.href = '/api/auth/tiktok';
+const ProductGrid = ({ listings, onBuy }: { listings: MarketplaceListing[], onBuy: (l: MarketplaceListing) => void }) => (
+  <div className="product-grid">
+    {listings.map(listing => (
+      <div key={listing.listingId} className="product-card">
+        <img 
+          src={listing.productImages[0] || 'https://via.placeholder.com/300'} 
+          alt={listing.productTitle} 
+          className="product-image"
+        />
+        <div className="product-info">
+          <div className="product-title">{listing.productTitle}</div>
+          <div className="product-price">${listing.marketplacePrice.toFixed(2)}</div>
+          <button className="buy-btn" onClick={() => onBuy(listing)}>
+            Buy Now
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const LoadingIndicator = () => (
+  <div className="flex gap-2 p-2">
+    <span className="animate-bounce">●</span>
+    <span className="animate-bounce delay-100">●</span>
+    <span className="animate-bounce delay-200">●</span>
+  </div>
+);
+
+const CheckoutSuccess = ({ order }: { order: any }) => (
+  <div style={{ padding: '1rem', background: '#16a34a20', borderRadius: '0.5rem', marginTop: '1rem' }}>
+    <h4 style={{ color: '#4ade80', fontWeight: 'bold' }}>🎉 Purchase Complete!</h4>
+    <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+      Order ID: {order.orderId} <br />
+      Amount: ${order.amountPaid.toFixed(2)}
+    </p>
+    <p style={{ fontSize: '0.9rem', color: '#94a3b8', marginTop: '0.5rem' }}>
+      Your item is being processed for direct shipment.
+    </p>
+  </div>
+);
+
+
+// --- Main App ---
+
+const INITIAL_MESSAGE = `Welcome to the Arbi Command Center.
+
+Your autonomous scouting missions are running in the background.
+
+You can monitor activity here or issue new commands.`;
+
+// --- Main App ---
+
+function App() {
+  const [messages, setMessages] = useState<Message[]>([
+    { 
+      id: '1', 
+      role: 'ai', 
+      text: INITIAL_MESSAGE,
+      widget: { type: 'none' }
+    }
+  ]);
+  const [input, setInput] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [selectedListing, setSelectedListing] = useState<MarketplaceListing | null>(null);
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Scroll to bottom on new message
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // --- Voice Logic (Web Speech API) ---
+  const startListening = () => {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+      alert('Speech recognition is not supported in this browser.');
+      return;
+    }
+
+    // @ts-ignore
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+    
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-US';
+
+    recognition.onstart = () => setIsListening(true);
+    recognition.onend = () => setIsListening(false);
+    
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInput(transcript);
+      handleSend(transcript);
+    };
+
+    recognition.start();
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    setResponse('');
+  // --- Action Handlers ---
+
+  const handleSend = async (text: string) => {
+    if (!text.trim()) return;
+
+    // 1. Add User Message
+    const userMsg: Message = { id: Date.now().toString(), role: 'user', text };
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+
+    // 2. Add AI Loading State
+    const loadingId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, { id: loadingId, role: 'ai', text: 'Thinking...', widget: { type: 'loading' } }]);
 
     try {
-      const result = await axios.post<AIResponse>('/api/ai/completion', {
-        input,
-        temperature: 0.7,
-        maxTokens: 1000,
-      });
+      // 3. Process Intent (Simple Heuristics for Demo)
+      const lowerText = text.toLowerCase();
+      let aiResponseText = '';
+      let widgetType: WidgetType = 'none';
+      let widgetData = null;
 
-      setResponse(result.data.result.content);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'An error occurred. Please try again.');
-    } finally {
-      setLoading(false);
+      if (lowerText.includes('deal') || lowerText.includes('product') || lowerText.includes('show') || lowerText.includes('find')) {
+        // Fetch listings
+        const res = await axios.get('/api/marketplace/listings');
+        const listings = res.data.listings;
+        
+        aiResponseText = `I found ${listings.length} active opportunities for you. Here are the best ones:`;
+        widgetType = 'product-grid';
+        widgetData = listings;
+      } else if (lowerText.includes('hello') || lowerText.includes('hi')) {
+        aiResponseText = "Hello! Ready to make some money? What are you looking for today?";
+      } else {
+        // Fallback to AI chat (mocked for now, or connect to your /api/ai/completion)
+        aiResponseText = "I can help with that. Currently I'm optimized for finding deals. Try asking 'Show me deals'.";
+      }
+
+      // 4. Update AI Message
+      setMessages(prev => prev.map(msg => 
+        msg.id === loadingId 
+          ? { id: loadingId, role: 'ai', text: aiResponseText, widget: { type: widgetType, data: widgetData } }
+          : msg
+      ));
+
+    } catch (error) {
+      setMessages(prev => prev.map(msg => 
+        msg.id === loadingId 
+          ? { id: loadingId, role: 'ai', text: "Sorry, I had trouble connecting to the marketplace.", widget: { type: 'none' } }
+          : msg
+      ));
     }
   };
 
+  const handleBuy = (listing: MarketplaceListing) => {
+    setSelectedListing(listing);
+    setIsPaymentModalOpen(true);
+  };
+
+  const handleSuccessfulCheckout = (order: any) => {
+    setIsPaymentModalOpen(false);
+    setMessages(prev => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        role: 'ai',
+        text: `Great news! Your purchase for "${selectedListing?.productTitle}" was successful.`,
+        widget: {
+          type: 'checkout-success',
+          data: order,
+        }
+      }
+    ]);
+    setSelectedListing(null);
+  };
+
   return (
-    <div className="container">
-      <header className="header">
-        <h1>🤖 Arbi AI Platform</h1>
-        <p>Advanced AI Orchestration & Automation Services</p>
-      </header>
+    <div className="app-root">
+      {/* Chat Container */}
+      <div className="chat-container">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`message ${msg.role}`}>
+            <div className={`avatar ${msg.role}`}>
+              {msg.role === 'ai' ? '🤖' : '👤'}
+            </div>
+            <div className="content-wrapper" style={{ maxWidth: '100%' }}>
+              <div className="bubble">
+                {msg.text}
+              </div>
+              
+              {/* Generative Widgets */}
+              {msg.widget?.type === 'product-grid' && (
+                <div className="widget-container">
+                  <ProductGrid listings={msg.widget.data} onBuy={handleBuy} />
+                </div>
+              )}
+              
+              {msg.widget?.type === 'loading' && (
+                <div className="widget-container">
+                  <LoadingIndicator />
+                </div>
+              )}
 
-      <div className="services">
-        <div className="service-card">
-          <h3>AI Completion API</h3>
-          <p>Access powerful GPT-4 powered AI completions for your applications</p>
-          <div className="price">
-            $0.10 <span className="price-unit">per request</span>
+              {msg.widget?.type === 'checkout-success' && (
+                <div className="widget-container">
+                  <CheckoutSuccess order={msg.widget.data} />
+                </div>
+              )}
+            </div>
           </div>
-          <ul className="features">
-            <li>GPT-4 powered responses</li>
-            <li>Customizable temperature & tokens</li>
-            <li>JSON API access</li>
-            <li>99.9% uptime SLA</li>
-          </ul>
-          <button className="btn">Get API Key</button>
-        </div>
-
-        <div className="service-card">
-          <h3>Voice AI Interface</h3>
-          <p>Speech recognition and synthesis powered by Whisper & ElevenLabs</p>
-          <div className="price">
-            $0.05 <span className="price-unit">per minute</span>
-          </div>
-          <ul className="features">
-            <li>Whisper speech recognition</li>
-            <li>ElevenLabs voice synthesis</li>
-            <li>Wake word detection</li>
-            <li>Real-time processing</li>
-          </ul>
-          <button className="btn">Get API Key</button>
-        </div>
-
-        <div className="service-card">
-          <h3>Web Automation</h3>
-          <p>Automate web browsing tasks with AI-powered browser control</p>
-          <div className="price">
-            $0.25 <span className="price-unit">per task</span>
-          </div>
-          <ul className="features">
-            <li>AI-controlled browsing</li>
-            <li>Data extraction</li>
-            <li>Form automation</li>
-            <li>Screenshot capture</li>
-          </ul>
-          <button className="btn">Get API Key</button>
-        </div>
-
-        <div className="service-card" style={{ border: '2px solid #fe2c55' }}>
-          <h3>TikTok Ads Automation</h3>
-          <p>Automatically create and manage ad campaigns for your listings</p>
-          <div className="price">
-            Free <span className="price-unit">beta</span>
-          </div>
-          <ul className="features">
-            <li>Auto-generate video ads</li>
-            <li>Sync product catalog</li>
-            <li>Optimize ad spend</li>
-            <li>Real-time analytics</li>
-          </ul>
-          {tiktokConnected ? (
-            <button className="btn" style={{ backgroundColor: '#25F4EE', color: 'black' }} disabled>✅ Connected</button>
-          ) : (
-            <button className="btn" onClick={handleTikTokConnect} style={{ backgroundColor: '#fe2c55' }}>Connect TikTok</button>
-          )}
-        </div>
+        ))}
+        <div ref={messagesEndRef} />
       </div>
 
-      <div className="demo-section">
-        <h2>Try AI Completion (Free Demo)</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="input-group">
-            <label htmlFor="input">Ask me anything:</label>
-            <textarea
-              id="input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="e.g., Write a professional email introducing our AI platform to potential customers..."
-              required
-            />
-          </div>
-          <button type="submit" className="btn" disabled={loading}>
-            {loading ? 'Processing...' : 'Generate Response'}
+      {/* Input Area */}
+      <div className="input-area">
+        <div className="input-wrapper">
+          <button 
+            className={`voice-btn ${isListening ? 'listening' : ''}`}
+            onClick={startListening}
+            title="Speak"
+          >
+            🎤
           </button>
-        </form>
-
-        {loading && <div className="loading">Processing your request...</div>}
-
-        {response && (
-          <div className="response">
-            <h4>AI Response:</h4>
-            <p>{response}</p>
-          </div>
-        )}
-
-        {error && (
-          <div className="response error">
-            <h4>Error:</h4>
-            <p>{error}</p>
-          </div>
-        )}
+          <input 
+            type="text" 
+            className="text-input"
+            placeholder="Type or speak..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSend(input)}
+          />
+          <button 
+            className="voice-btn" 
+            style={{ background: 'var(--accent)' }}
+            onClick={() => handleSend(input)}
+          >
+            ➤
+          </button>
+        </div>
       </div>
 
-      <footer className="footer">
-        <p>&copy; 2025 Arbi AI Platform. Powered by OpenAI, Whisper, ElevenLabs & Hyperswitch.</p>
-      </footer>
+      <PaymentModal 
+        isOpen={isPaymentModalOpen}
+        onClose={() => setIsPaymentModalOpen(false)}
+        listing={selectedListing}
+        onSuccessfulCheckout={handleSuccessfulCheckout}
+      />
     </div>
   );
 }

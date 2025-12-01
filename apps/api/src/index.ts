@@ -7,6 +7,10 @@ import morgan from 'morgan';
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import apiRoutes from './routes';
+import { voiceRouter } from './routes/voice';
+import { webRouter } from './routes/web';
+import { paymentRouter } from './routes/payment';
+import { startAutonomousScout } from './services/AutonomousScout';
 
 // Initialize logger
 const logger = createLogger();
@@ -28,16 +32,19 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api', apiRoutes);
+app.use('/api/voice', voiceRouter);
+app.use('/api/web', webRouter);
+app.use('/api/payment', paymentRouter);
 
 // Error handling middleware
 app.use(errorHandler);
 
 // Start server - bind to 0.0.0.0 for Railway/Docker compatibility
 const server = app.listen(port, '0.0.0.0', () => {
-  logger.info(`✅ Server running on http://0.0.0.0:${port}`);
-  logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
-  logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+  logger.info(`✅ Server is running on http://localhost:${port}`);
+  
+  // Start the autonomous scouting service
+  startAutonomousScout();
 });
 
 // Handle server errors

@@ -8,14 +8,19 @@
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
-      "require": "./dist/index.js",
       "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./scouts": {
+      "import": "./dist/scouts/index.mjs",
+      "require": "./dist/scouts/index.js",
+      "types": "./dist/scouts/index.d.ts"
     }
   },
   "scripts": {
-    "build": "tsup src/index.ts --format cjs,esm",
-    "dev": "tsup src/index.ts --format cjs,esm --watch",
+    "build": "tsup",
+    "dev": "tsup --watch",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest --passWithNoTests",
     "clean": "rm -rf dist node_modules"

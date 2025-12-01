@@ -346,6 +346,23 @@ router.get('/listings', async (req: Request, res: Response) => {
   });
 });
 
+// Route to get a single listing by ID
+router.get('/listings/:listingId', async (req, res) => {
+  const { listingId } = req.params;
+  try {
+    // The getListing function now correctly abstracts db/memory
+    const listing = await getListing(listingId);
+    if (listing) {
+      res.json(listing);
+    } else {
+      res.status(404).json({ message: 'Listing not found' });
+    }
+  } catch (error) {
+    console.error('Error fetching single listing:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
+
 /**
  * POST /api/marketplace/checkout
  * Buyer initiates purchase (pays FIRST)

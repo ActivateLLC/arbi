@@ -7,6 +7,7 @@ import morgan from 'morgan';
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import apiRoutes from './routes';
+import { cronScheduler } from './jobs/cronScheduler';
 
 // Initialize logger
 const logger = createLogger();
@@ -38,6 +39,12 @@ const server = app.listen(port, '0.0.0.0', () => {
   logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
   logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+
+  // Initialize and start cron scheduler for end-to-end product marketing
+  logger.info('🕐 Initializing cron scheduler for product marketing and serving...');
+  cronScheduler.initialize();
+  cronScheduler.start();
+  logger.info('✅ Cron scheduler started - products will be marketed and served automatically');
 });
 
 // Handle server errors
@@ -61,6 +68,25 @@ process.on('unhandledRejection', (reason, promise) => {
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error);
   process.exit(1);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received - shutting down gracefully');
+  cronScheduler.stop();
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
+});
+
+process.on('SIGINT', () => {
+  logger.info('SIGINT received - shutting down gracefully');
+  cronScheduler.stop();
+  server.close(() => {
+    logger.info('Server closed');
+    process.exit(0);
+  });
 });
 
 export default app;

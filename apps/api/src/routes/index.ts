@@ -9,6 +9,7 @@ import autonomousRoutes from './autonomous';
 import autonomousControlRoutes from './autonomous-control';
 import payoutRoutes from './payout';
 import marketplaceRoutes from './marketplace';
+import cronRoutes from './cron';
 
 const router = Router();
 
@@ -38,5 +39,8 @@ router.use('/autonomous', autonomousRoutes);
 
 // Autonomous control routes (START/STOP autonomous operations)
 router.use('/autonomous-control', autonomousControlRoutes);
+
+// Cron job management routes (scheduled jobs for end-to-end product marketing)
+router.use('/cron', cronRoutes);
 
 export default router;

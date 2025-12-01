@@ -1,5 +1,6 @@
-import { chromium } from 'playwright';
 import { randomBytes } from 'crypto';
+
+import { chromium } from 'playwright';
 
 import type { BrowserConfig, BrowserSession } from '../types';
 

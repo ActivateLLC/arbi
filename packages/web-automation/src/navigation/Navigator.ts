@@ -1,5 +1,5 @@
+import type { BrowserManager } from '../browser/BrowserManager';
 import type { NavigationOptions } from '../types';
-import { BrowserManager } from '../browser/BrowserManager';
 
 export class Navigator {
   private browserManager: BrowserManager;

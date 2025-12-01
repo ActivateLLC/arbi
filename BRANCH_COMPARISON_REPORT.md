@@ -155,9 +155,9 @@ To safely integrate these changes into production:
 ## Merge Conflicts Assessment
 
 Based on file analysis:
-- **PR #37 and #34**: Both modify `autonomousListing.ts` - may have minor conflicts
+- **PR #34, #38, and #39**: All modify `autonomousListing.ts` - may have conflicts
 - **PR #38 and #39**: Both modify `routes/index.ts` - simple route registration conflicts
-- **PR #38 and #39**: Both enhance `autonomousListing.ts` - may need resolution
+- **PR #37**: Modifies `marketplace.ts` and `payout.ts` - no overlap with other PRs
 
 **Recommended Approach:**
 1. Merge PRs in the order listed above

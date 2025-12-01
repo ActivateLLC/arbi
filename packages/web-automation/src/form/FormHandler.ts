@@ -204,9 +204,14 @@ export class FormHandler {
     const html = await element.innerHTML();
 
     const attributes: Record<string, string> = {};
-    if (attributeNames) {
-      for (const attr of attributeNames) {
+    if (attributeNames && attributeNames.length > 0) {
+      // Fetch all attributes concurrently for better performance
+      const attrPromises = attributeNames.map(async (attr) => {
         const value = await element.getAttribute(attr);
+        return { attr, value };
+      });
+      const results = await Promise.all(attrPromises);
+      for (const { attr, value } of results) {
         if (value !== null) {
           attributes[attr] = value;
         }

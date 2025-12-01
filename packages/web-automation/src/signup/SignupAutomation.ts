@@ -11,6 +11,9 @@ import type {
 } from '../types';
 import type { Page } from 'playwright';
 
+/** Minimum length for a string to be considered a potential API key */
+const MINIMUM_KEY_LENGTH = 10;
+
 export class SignupAutomation {
   private browserManager: BrowserManager;
   private navigator: Navigator;
@@ -219,7 +222,7 @@ export class SignupAutomation {
                     });
                   }
                 }
-              } else if (trimmedText.length > 10) {
+              } else if (trimmedText.length > MINIMUM_KEY_LENGTH) {
                 // If no patterns, add text as is if it looks like a key
                 extractedKeys.push({
                   key: trimmedText,

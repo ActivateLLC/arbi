@@ -353,7 +353,13 @@ router.post('/signup', async (req: Request, res: Response, next: NextFunction) =
   }
 });
 
-// POST /api/web/login
+/**
+ * POST /api/web/login
+ * Performs automated login to a web service.
+ * 
+ * NOTE: In production environments, consider implementing rate limiting
+ * middleware to protect against credential stuffing attacks.
+ */
 router.post('/login', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { sessionId, url, credentials, selectors } = req.body;

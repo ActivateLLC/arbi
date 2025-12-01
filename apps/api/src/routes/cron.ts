@@ -3,6 +3,13 @@
  *
  * Provides endpoints to view, manage, and trigger cron jobs
  * for the end-to-end product marketing and serving pipeline
+ *
+ * SECURITY NOTE: These endpoints control critical system processes.
+ * In production, ensure proper authentication and authorization middleware
+ * is applied to protect these routes. Consider using:
+ * - API key authentication
+ * - JWT token validation
+ * - Role-based access control (admin only)
  */
 
 import { Router, type Request, type Response } from 'express';
@@ -146,12 +153,76 @@ router.post('/jobs/:jobName/run', async (req: Request, res: Response) => {
   }
 });
 
+// Valid configuration keys for autonomous config
+const VALID_CONFIG_KEYS = [
+  'minScore',
+  'minROI',
+  'minProfit',
+  'maxPrice',
+  'categories',
+  'scanInterval',
+  'autoBuyEnabled',
+  'autoBuyScore',
+  'dailyBudget',
+];
+
 /**
  * PUT /api/cron/config
  * Update autonomous configuration for cron jobs
+ * NOTE: This endpoint should be protected with authentication in production
  */
 router.put('/config', (req: Request, res: Response) => {
   const config = req.body;
+
+  // Validate that config is an object
+  if (!config || typeof config !== 'object' || Array.isArray(config)) {
+    res.status(400).json({
+      success: false,
+      error: 'Configuration must be a valid object',
+    });
+    return;
+  }
+
+  // Validate that all keys are valid
+  const invalidKeys = Object.keys(config).filter(key => !VALID_CONFIG_KEYS.includes(key));
+  if (invalidKeys.length > 0) {
+    res.status(400).json({
+      success: false,
+      error: `Invalid configuration keys: ${invalidKeys.join(', ')}`,
+      validKeys: VALID_CONFIG_KEYS,
+    });
+    return;
+  }
+
+  // Validate numeric values
+  const numericFields = ['minScore', 'minROI', 'minProfit', 'maxPrice', 'scanInterval', 'autoBuyScore', 'dailyBudget'];
+  for (const field of numericFields) {
+    if (field in config && (typeof config[field] !== 'number' || config[field] < 0)) {
+      res.status(400).json({
+        success: false,
+        error: `${field} must be a non-negative number`,
+      });
+      return;
+    }
+  }
+
+  // Validate boolean values
+  if ('autoBuyEnabled' in config && typeof config.autoBuyEnabled !== 'boolean') {
+    res.status(400).json({
+      success: false,
+      error: 'autoBuyEnabled must be a boolean',
+    });
+    return;
+  }
+
+  // Validate categories array
+  if ('categories' in config && !Array.isArray(config.categories)) {
+    res.status(400).json({
+      success: false,
+      error: 'categories must be an array',
+    });
+    return;
+  }
 
   try {
     cronScheduler.updateConfig(config);

@@ -26,6 +26,9 @@ interface CronJobInfo {
   status: 'idle' | 'running' | 'error';
 }
 
+// Type for job execution function
+type JobFunction = () => Promise<unknown>;
+
 interface CronSchedulerConfig {
   enableOpportunityScanning: boolean;
   enableAutonomousListing: boolean;
@@ -66,6 +69,7 @@ const DEFAULT_AUTONOMOUS_CONFIG: AutonomousConfig = {
 
 export class CronScheduler {
   private jobs: Map<string, cron.ScheduledTask> = new Map();
+  private jobFunctions: Map<string, JobFunction> = new Map();
   private jobInfo: Map<string, CronJobInfo> = new Map();
   private engine: AutonomousEngine;
   private config: CronSchedulerConfig;
@@ -127,16 +131,20 @@ export class CronScheduler {
       status: 'idle',
     };
 
+    // Define the job function
+    const jobFn: JobFunction = async () => {
+      console.log('🔍 [CRON] Running opportunity scan...');
+      const opportunities = await this.engine.runScan(this.autonomousConfig);
+      console.log(`   Found ${opportunities.length} opportunities meeting criteria`);
+      return opportunities;
+    };
+
     const task = cron.schedule(schedule, async () => {
-      await this.executeJob(jobName, async () => {
-        console.log('🔍 [CRON] Running opportunity scan...');
-        const opportunities = await this.engine.runScan(this.autonomousConfig);
-        console.log(`   Found ${opportunities.length} opportunities meeting criteria`);
-        return opportunities;
-      });
+      await this.executeJob(jobName, jobFn);
     }, { scheduled: this.config.enableOpportunityScanning });
 
     this.jobs.set(jobName, task);
+    this.jobFunctions.set(jobName, jobFn);
     this.jobInfo.set(jobName, info);
     console.log(`   ✅ ${jobName}: ${schedule} - ${info.description}`);
   }
@@ -158,50 +166,54 @@ export class CronScheduler {
       status: 'idle',
     };
 
-    const task = cron.schedule(schedule, async () => {
-      await this.executeJob(jobName, async () => {
-        console.log('📦 [CRON] Running autonomous listing...');
+    // Define the job function
+    const jobFn: JobFunction = async () => {
+      console.log('📦 [CRON] Running autonomous listing...');
 
-        // Get current opportunities
-        const opportunities = this.engine.getOpportunities({
-          minScore: 75,
-          status: 'alerted',
-          limit: 10,
-        });
-
-        console.log(`   Processing ${opportunities.length} opportunities for listing`);
-
-        // List each opportunity on marketplace
-        for (const opp of opportunities) {
-          try {
-            const response = await fetch('http://localhost:3000/api/marketplace/list', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                opportunityId: opp.id,
-                productTitle: opp.product.title,
-                productDescription: `${opp.product.title} - Great deal! Score: ${opp.score.score}`,
-                productImageUrls: opp.product.imageUrl ? [opp.product.imageUrl] : [],
-                supplierPrice: opp.product.price,
-                supplierUrl: opp.product.itemWebUrl,
-                supplierPlatform: 'ebay',
-                markupPercentage: 30,
-              }),
-            });
-
-            if (response.ok) {
-              console.log(`   ✅ Listed: ${opp.product.title.substring(0, 40)}...`);
-            }
-          } catch (error) {
-            console.error(`   ❌ Failed to list: ${opp.product.title.substring(0, 40)}...`);
-          }
-        }
-
-        return { listed: opportunities.length };
+      // Get current opportunities
+      const opportunities = this.engine.getOpportunities({
+        minScore: 75,
+        status: 'alerted',
+        limit: 10,
       });
+
+      console.log(`   Processing ${opportunities.length} opportunities for listing`);
+
+      // List each opportunity on marketplace
+      for (const opp of opportunities) {
+        try {
+          const response = await fetch('http://localhost:3000/api/marketplace/list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              opportunityId: opp.id,
+              productTitle: opp.product.title,
+              productDescription: `${opp.product.title} - Great deal! Score: ${opp.score.score}`,
+              productImageUrls: opp.product.imageUrl ? [opp.product.imageUrl] : [],
+              supplierPrice: opp.product.price,
+              supplierUrl: opp.product.itemWebUrl,
+              supplierPlatform: 'ebay',
+              markupPercentage: 30,
+            }),
+          });
+
+          if (response.ok) {
+            console.log(`   ✅ Listed: ${opp.product.title.substring(0, 40)}...`);
+          }
+        } catch (error) {
+          console.error(`   ❌ Failed to list: ${opp.product.title.substring(0, 40)}...`);
+        }
+      }
+
+      return { listed: opportunities.length };
+    };
+
+    const task = cron.schedule(schedule, async () => {
+      await this.executeJob(jobName, jobFn);
     }, { scheduled: this.config.enableAutonomousListing });
 
     this.jobs.set(jobName, task);
+    this.jobFunctions.set(jobName, jobFn);
     this.jobInfo.set(jobName, info);
     console.log(`   ✅ ${jobName}: ${schedule} - ${info.description}`);
   }
@@ -223,38 +235,42 @@ export class CronScheduler {
       status: 'idle',
     };
 
-    const task = cron.schedule(schedule, async () => {
-      await this.executeJob(jobName, async () => {
-        console.log('🛒 [CRON] Running order fulfillment...');
+    // Define the job function
+    const jobFn: JobFunction = async () => {
+      console.log('🛒 [CRON] Running order fulfillment...');
 
-        // Get pending orders from marketplace
-        try {
-          const response = await fetch('http://localhost:3000/api/marketplace/orders');
-          if (response.ok) {
-            const data = await response.json() as { orders: Array<{ orderId: string; status: string }> };
-            const pendingOrders = data.orders.filter(
-              (order) => order.status === 'payment_received'
-            );
+      // Get pending orders from marketplace
+      try {
+        const response = await fetch('http://localhost:3000/api/marketplace/orders');
+        if (response.ok) {
+          const data = await response.json() as { orders: Array<{ orderId: string; status: string }> };
+          const pendingOrders = data.orders.filter(
+            (order) => order.status === 'payment_received'
+          );
 
-            console.log(`   Found ${pendingOrders.length} pending orders to fulfill`);
+          console.log(`   Found ${pendingOrders.length} pending orders to fulfill`);
 
-            for (const order of pendingOrders) {
-              console.log(`   📦 Processing order: ${order.orderId}`);
-              // Order fulfillment is handled by marketplace.ts purchaseFromSupplier
-              // This job ensures pending orders are checked periodically
-            }
-
-            return { pending: pendingOrders.length };
+          for (const order of pendingOrders) {
+            console.log(`   📦 Processing order: ${order.orderId}`);
+            // Order fulfillment is handled by marketplace.ts purchaseFromSupplier
+            // This job ensures pending orders are checked periodically
           }
-        } catch (error) {
-          console.log('   ⚠️  Could not fetch orders - marketplace may not be running');
-        }
 
-        return { pending: 0 };
-      });
+          return { pending: pendingOrders.length };
+        }
+      } catch (error) {
+        console.log('   ⚠️  Could not fetch orders - marketplace may not be running');
+      }
+
+      return { pending: 0 };
+    };
+
+    const task = cron.schedule(schedule, async () => {
+      await this.executeJob(jobName, jobFn);
     }, { scheduled: this.config.enableOrderFulfillment });
 
     this.jobs.set(jobName, task);
+    this.jobFunctions.set(jobName, jobFn);
     this.jobInfo.set(jobName, info);
     console.log(`   ✅ ${jobName}: ${schedule} - ${info.description}`);
   }
@@ -276,39 +292,43 @@ export class CronScheduler {
       status: 'idle',
     };
 
-    const task = cron.schedule(schedule, async () => {
-      await this.executeJob(jobName, async () => {
-        console.log('🧹 [CRON] Running cleanup...');
+    // Define the job function
+    const jobFn: JobFunction = async () => {
+      console.log('🧹 [CRON] Running cleanup...');
 
-        // Clean up expired opportunities
-        this.engine.cleanupExpired();
+      // Clean up expired opportunities
+      this.engine.cleanupExpired();
 
-        // Clean up expired marketplace listings
-        try {
-          const response = await fetch('http://localhost:3000/api/marketplace/listings?status=active');
-          if (response.ok) {
-            const data = await response.json();
-            const now = Date.now();
-            let expiredCount = 0;
+      // Clean up expired marketplace listings
+      try {
+        const response = await fetch('http://localhost:3000/api/marketplace/listings?status=active');
+        if (response.ok) {
+          const data = await response.json() as { listings: Array<{ expiresAt: string }> };
+          const now = Date.now();
+          let expiredCount = 0;
 
-            for (const listing of data.listings) {
-              if (new Date(listing.expiresAt).getTime() < now) {
-                expiredCount++;
-              }
+          for (const listing of data.listings) {
+            if (new Date(listing.expiresAt).getTime() < now) {
+              expiredCount++;
             }
-
-            console.log(`   Cleaned up ${expiredCount} expired listings`);
-            return { expiredListings: expiredCount };
           }
-        } catch (error) {
-          console.log('   ⚠️  Could not clean up listings - marketplace may not be running');
-        }
 
-        return { cleaned: true };
-      });
+          console.log(`   Cleaned up ${expiredCount} expired listings`);
+          return { expiredListings: expiredCount };
+        }
+      } catch (error) {
+        console.log('   ⚠️  Could not clean up listings - marketplace may not be running');
+      }
+
+      return { cleaned: true };
+    };
+
+    const task = cron.schedule(schedule, async () => {
+      await this.executeJob(jobName, jobFn);
     }, { scheduled: this.config.enableCleanup });
 
     this.jobs.set(jobName, task);
+    this.jobFunctions.set(jobName, jobFn);
     this.jobInfo.set(jobName, info);
     console.log(`   ✅ ${jobName}: ${schedule} - ${info.description}`);
   }
@@ -330,27 +350,31 @@ export class CronScheduler {
       status: 'idle',
     };
 
+    // Define the job function
+    const jobFn: JobFunction = async () => {
+      console.log('🔄 [CRON] Running daily reset...');
+
+      // Reset engine daily counters
+      this.engine.resetDailyCounters();
+
+      // Log daily summary
+      const stats = this.engine.getStats();
+      console.log('   Daily summary:');
+      console.log(`   - Total opportunities: ${stats.totalOpportunities}`);
+      console.log(`   - Alerted: ${stats.alertedCount}`);
+      console.log(`   - Purchased: ${stats.purchasedCount}`);
+      console.log(`   - Daily spent: $${stats.dailySpent.toFixed(2)}`);
+      console.log(`   - Potential profit: $${stats.totalPotentialProfit.toFixed(2)}`);
+
+      return stats;
+    };
+
     const task = cron.schedule(schedule, async () => {
-      await this.executeJob(jobName, async () => {
-        console.log('🔄 [CRON] Running daily reset...');
-
-        // Reset engine daily counters
-        this.engine.resetDailyCounters();
-
-        // Log daily summary
-        const stats = this.engine.getStats();
-        console.log('   Daily summary:');
-        console.log(`   - Total opportunities: ${stats.totalOpportunities}`);
-        console.log(`   - Alerted: ${stats.alertedCount}`);
-        console.log(`   - Purchased: ${stats.purchasedCount}`);
-        console.log(`   - Daily spent: $${stats.dailySpent.toFixed(2)}`);
-        console.log(`   - Potential profit: $${stats.totalPotentialProfit.toFixed(2)}`);
-
-        return stats;
-      });
+      await this.executeJob(jobName, jobFn);
     }, { scheduled: this.config.enableDailyReset });
 
     this.jobs.set(jobName, task);
+    this.jobFunctions.set(jobName, jobFn);
     this.jobInfo.set(jobName, info);
     console.log(`   ✅ ${jobName}: ${schedule} - ${info.description}`);
   }
@@ -372,29 +396,33 @@ export class CronScheduler {
       status: 'idle',
     };
 
-    const task = cron.schedule(schedule, async () => {
-      await this.executeJob(jobName, async () => {
-        console.log('💰 [CRON] Running payout processing...');
+    // Define the job function
+    const jobFn: JobFunction = async () => {
+      console.log('💰 [CRON] Running payout processing...');
 
-        try {
-          // Get payout history
-          const response = await fetch('http://localhost:3000/api/payout/history');
-          if (response.ok) {
-            const data = await response.json();
-            console.log(`   Total trades: ${data.stats.totalTrades}`);
-            console.log(`   Total gross profit: $${data.stats.totalGrossProfit.toFixed(2)}`);
-            console.log(`   Total user payouts: $${data.stats.totalUserPayouts.toFixed(2)}`);
-            return data.stats;
-          }
-        } catch (error) {
-          console.log('   ⚠️  Could not process payouts - payout service may not be running');
+      try {
+        // Get payout history
+        const response = await fetch('http://localhost:3000/api/payout/history');
+        if (response.ok) {
+          const data = await response.json() as { stats: { totalTrades: number; totalGrossProfit: number; totalUserPayouts: number } };
+          console.log(`   Total trades: ${data.stats.totalTrades}`);
+          console.log(`   Total gross profit: $${data.stats.totalGrossProfit.toFixed(2)}`);
+          console.log(`   Total user payouts: $${data.stats.totalUserPayouts.toFixed(2)}`);
+          return data.stats;
         }
+      } catch (error) {
+        console.log('   ⚠️  Could not process payouts - payout service may not be running');
+      }
 
-        return { processed: 0 };
-      });
+      return { processed: 0 };
+    };
+
+    const task = cron.schedule(schedule, async () => {
+      await this.executeJob(jobName, jobFn);
     }, { scheduled: this.config.enablePayoutProcessing });
 
     this.jobs.set(jobName, task);
+    this.jobFunctions.set(jobName, jobFn);
     this.jobInfo.set(jobName, info);
     console.log(`   ✅ ${jobName}: ${schedule} - ${info.description}`);
   }
@@ -504,15 +532,17 @@ export class CronScheduler {
   /**
    * Run a job immediately (manual trigger)
    */
-  async runJobNow(jobName: string): Promise<{ triggered: string; at: Date }> {
-    const task = this.jobs.get(jobName);
-    if (!task) {
+  async runJobNow(jobName: string): Promise<{ triggered: string; at: Date; result?: unknown }> {
+    const jobFn = this.jobFunctions.get(jobName);
+    if (!jobFn) {
       throw new Error(`Job '${jobName}' not found`);
     }
 
     console.log(`🚀 Manually triggering job: ${jobName}`);
-    // Emit the scheduled task
-    task.emit('task');
+
+    // Execute the job function directly
+    await this.executeJob(jobName, jobFn);
+
     return { triggered: jobName, at: new Date() };
   }
 

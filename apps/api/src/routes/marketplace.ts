@@ -3,6 +3,7 @@ import { ApiError } from '../middleware/errorHandler';
 import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
 import { getDatabase } from '../config/database';
+import { adCampaignManager } from '../services/adCampaigns';
 
 const router = Router();
 
@@ -297,17 +298,42 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
     console.log(`   Estimated profit: $${estimatedProfit.toFixed(2)}`);
     console.log(`   Images hosted: ${cloudinaryUrls.length}`);
 
+    // Auto-create ad campaigns for this product
+    let adCampaigns: any[] = [];
+    try {
+      adCampaigns = await adCampaignManager.createCampaignsForListing({
+        listingId: listing.listingId,
+        productTitle: listing.productTitle,
+        productDescription: listing.productDescription,
+        productImages: cloudinaryUrls,
+        marketplacePrice: listing.marketplacePrice,
+        estimatedProfit: listing.estimatedProfit,
+      });
+      console.log(`   📢 Created ${adCampaigns.length} ad campaign(s)`);
+    } catch (error: any) {
+      console.error(`   ⚠️  Ad campaign creation failed: ${error.message}`);
+    }
+
+    const baseUrl = process.env.PUBLIC_URL || 'https://arbi.creai.dev';
+    const publicUrl = `${baseUrl}/product/${listingId}`;
+
     res.status(201).json({
       success: true,
       listing,
-      message: 'Product listed on marketplace',
+      adInfo: adCampaigns.length > 0 ? {
+        campaigns: adCampaigns,
+        totalCampaigns: adCampaigns.length,
+      } : null,
+      message: adCampaigns.length > 0
+        ? 'Product listed on marketplace and ad campaign started'
+        : 'Product listed on marketplace',
       marketingInfo: {
-        publicUrl: `https://your-marketplace.com/product/${listingId}`,
+        publicUrl,
         imageUrls: cloudinaryUrls,
         shareableLinks: {
-          facebook: `https://facebook.com/sharer/sharer.php?u=https://your-marketplace.com/product/${listingId}`,
-          twitter: `https://twitter.com/intent/tweet?url=https://your-marketplace.com/product/${listingId}&text=${encodeURIComponent(productTitle)}`,
-          pinterest: cloudinaryUrls[0] ? `https://pinterest.com/pin/create/button/?url=https://your-marketplace.com/product/${listingId}&media=${cloudinaryUrls[0]}` : null
+          facebook: `https://facebook.com/sharer/sharer.php?u=${publicUrl}`,
+          twitter: `https://twitter.com/intent/tweet?url=${publicUrl}&text=${encodeURIComponent(productTitle)}`,
+          pinterest: cloudinaryUrls[0] ? `https://pinterest.com/pin/create/button/?url=${publicUrl}&media=${cloudinaryUrls[0]}` : null
         }
       }
     });

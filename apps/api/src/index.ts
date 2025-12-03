@@ -7,6 +7,8 @@ import morgan from 'morgan';
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import apiRoutes from './routes';
+import publicProductRoutes from './routes/public-product';
+import directCheckoutRoutes from './routes/direct-checkout';
 
 // Initialize logger
 const logger = createLogger();
@@ -25,6 +27,12 @@ app.use(morgan('dev'));
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Direct checkout links (shortest path: ad → checkout)
+app.use('/', directCheckoutRoutes);
+
+// Public product landing pages (for ad destinations)
+app.use('/', publicProductRoutes);
 
 // API routes
 app.use('/api', apiRoutes);

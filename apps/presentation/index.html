@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARBI - Autonomous Arbitrage Intelligence</title>
+  
+  <!-- Reveal.js CSS -->
+  <link rel="stylesheet" href="./node_modules/reveal.js/dist/reveal.css">
+  <link rel="stylesheet" href="./node_modules/reveal.js/dist/theme/black.css">
+  
+  <!-- Syntax highlighting -->
+  <link rel="stylesheet" href="./node_modules/reveal.js/plugin/highlight/monokai.css">
+  
+  <!-- Custom Cyberpunk Neon Theme -->
+  <link rel="stylesheet" href="./css/cyberpunk.css">
+  
+  <!-- Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;500;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="reveal">
+    <div class="slides">
+      
+      <!-- TITLE SLIDE -->
+      <section class="title-slide" data-background-color="#0a0a0f">
+        <div class="glitch-container">
+          <h1 class="glitch neon-text" data-text="ARBI">ARBI</h1>
+        </div>
+        <h2 class="subtitle neon-purple">Autonomous Arbitrage Intelligence</h2>
+        <p class="tagline">AI-Powered Profit Extraction Engine</p>
+        <div class="cyber-lines"></div>
+        <div class="particle-container" id="particles"></div>
+      </section>
+
+      <!-- WHAT IS ARBI -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-text">What is ARBI?</h2>
+        <div class="feature-grid">
+          <div class="feature-card animate-slide-up" data-delay="100">
+            <span class="icon neon-green">🤖</span>
+            <h3>AI-Powered</h3>
+            <p>Autonomous opportunity detection using advanced ML models</p>
+          </div>
+          <div class="feature-card animate-slide-up" data-delay="200">
+            <span class="icon neon-purple">📊</span>
+            <h3>Real-Time Analysis</h3>
+            <p>24/7 market scanning across multiple platforms</p>
+          </div>
+          <div class="feature-card animate-slide-up" data-delay="300">
+            <span class="icon neon-green">💰</span>
+            <h3>Profit Automation</h3>
+            <p>Execute trades automatically with risk management</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- SYSTEM ARCHITECTURE -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-text">System Architecture</h2>
+        <div class="architecture-diagram">
+          <div class="arch-layer">
+            <div class="arch-node neon-border pulse-animation">
+              <span class="node-label">Data Scouts</span>
+              <span class="node-desc">eBay • Amazon • Walmart • Target</span>
+            </div>
+          </div>
+          <div class="arch-connector">
+            <div class="data-flow"></div>
+          </div>
+          <div class="arch-layer">
+            <div class="arch-node neon-border-purple pulse-animation" style="animation-delay: 0.3s;">
+              <span class="node-label">AI Engine</span>
+              <span class="node-desc">OpenAI Agents SDK • Custom ML</span>
+            </div>
+          </div>
+          <div class="arch-connector">
+            <div class="data-flow"></div>
+          </div>
+          <div class="arch-layer">
+            <div class="arch-node neon-border pulse-animation" style="animation-delay: 0.6s;">
+              <span class="node-label">Arbitrage Engine</span>
+              <span class="node-desc">Scoring • Risk • Execution</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AI CAPABILITIES -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-purple">AI Capabilities</h2>
+        <div class="capabilities-container">
+          <div class="capability-item">
+            <div class="capability-icon neon-green">🧠</div>
+            <div class="capability-text">
+              <h3>Opportunity Analyzer</h3>
+              <p>Scores each deal 0-100 using multi-factor algorithm</p>
+            </div>
+          </div>
+          <div class="capability-item">
+            <div class="capability-icon neon-purple">🛡️</div>
+            <div class="capability-text">
+              <h3>Risk Manager</h3>
+              <p>Real-time budget enforcement & spending controls</p>
+            </div>
+          </div>
+          <div class="capability-item">
+            <div class="capability-icon neon-green">⚡</div>
+            <div class="capability-text">
+              <h3>Autonomous Engine</h3>
+              <p>Self-operating trade execution with ML optimization</p>
+            </div>
+          </div>
+          <div class="capability-item">
+            <div class="capability-icon neon-purple">🔮</div>
+            <div class="capability-text">
+              <h3>Confidence Scoring</h3>
+              <p>Historical data analysis for prediction accuracy</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SCORING ALGORITHM -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-text">AI Scoring Algorithm</h2>
+        <div class="code-block">
+          <pre><code class="language-typescript">
+// AI Scoring Algorithm (0-100 points)
+const score = {
+  profitPotential:  0-30,  // ROI-based analysis
+  confidence:       0-25,  // Historical data match
+  speedToProfit:    0-20,  // Time to sell estimate
+  riskLevel:        0-15,  // Market volatility
+  volatility:       0-10   // Price stability score
+}
+
+// Auto-execute threshold
+if (score.total >= 70) {
+  await executeOpportunity(deal);
+}
+          </code></pre>
+        </div>
+        <div class="score-meter">
+          <div class="meter-bar">
+            <div class="meter-fill neon-gradient" style="width: 75%;"></div>
+          </div>
+          <span class="meter-label">Recommended Score: 70+</span>
+        </div>
+      </section>
+
+      <!-- DATA FLOW -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-purple">Real-Time Data Flow</h2>
+        <div class="data-flow-visual">
+          <div class="flow-stage">
+            <div class="flow-node">
+              <span class="flow-number">01</span>
+              <h4>Scout</h4>
+              <p>Multi-platform scanning every 60s</p>
+            </div>
+          </div>
+          <div class="flow-arrow neon-green">→</div>
+          <div class="flow-stage">
+            <div class="flow-node">
+              <span class="flow-number">02</span>
+              <h4>Analyze</h4>
+              <p>AI scoring & profit calculation</p>
+            </div>
+          </div>
+          <div class="flow-arrow neon-purple">→</div>
+          <div class="flow-stage">
+            <div class="flow-node">
+              <span class="flow-number">03</span>
+              <h4>Validate</h4>
+              <p>Risk assessment & budget check</p>
+            </div>
+          </div>
+          <div class="flow-arrow neon-green">→</div>
+          <div class="flow-stage">
+            <div class="flow-node">
+              <span class="flow-number">04</span>
+              <h4>Execute</h4>
+              <p>Auto-trade or user approval</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TECH STACK -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-text">Tech Stack</h2>
+        <div class="tech-grid">
+          <div class="tech-category">
+            <h3 class="neon-green">Backend</h3>
+            <ul>
+              <li>Node.js + TypeScript</li>
+              <li>Express API</li>
+              <li>PostgreSQL + Redis</li>
+            </ul>
+          </div>
+          <div class="tech-category">
+            <h3 class="neon-purple">AI/ML</h3>
+            <ul>
+              <li>OpenAI Agents SDK</li>
+              <li>Custom ML Models</li>
+              <li>TensorFlow.js (Roadmap)</li>
+            </ul>
+          </div>
+          <div class="tech-category">
+            <h3 class="neon-green">Automation</h3>
+            <ul>
+              <li>Playwright</li>
+              <li>Web Scrapers</li>
+              <li>API Integrations</li>
+            </ul>
+          </div>
+          <div class="tech-category">
+            <h3 class="neon-purple">Frontend</h3>
+            <ul>
+              <li>React + Vite</li>
+              <li>TailwindCSS</li>
+              <li>Next.js Dashboard</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- MONOREPO STRUCTURE -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-purple">Monorepo Architecture</h2>
+        <div class="tree-view">
+          <pre class="neon-tree">
+arbi/
+├── apps/
+│   ├── <span class="neon-green">api/</span>           # Express REST API
+│   ├── <span class="neon-purple">dashboard/</span>     # Next.js Admin Panel
+│   └── <span class="neon-green">web/</span>           # React Customer App
+├── packages/
+│   ├── <span class="neon-purple">arbitrage-engine/</span>  # 🎯 Core System
+│   │   ├── scouts/          # Data collectors
+│   │   ├── analyzer/        # AI scoring
+│   │   ├── risk-manager/    # Budget controls
+│   │   └── autonomous/      # Self-execution
+│   ├── <span class="neon-green">ai-engine/</span>        # OpenAI Integration
+│   ├── <span class="neon-purple">web-automation/</span>   # Playwright
+│   └── <span class="neon-green">voice-interface/</span>  # Whisper + ElevenLabs
+└── scripts/
+          </pre>
+        </div>
+      </section>
+
+      <!-- RISK MANAGEMENT -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-text">Risk Management</h2>
+        <div class="risk-controls">
+          <div class="risk-card">
+            <div class="risk-icon">💵</div>
+            <h4>Per-Opportunity</h4>
+            <span class="risk-value neon-green">$400 max</span>
+          </div>
+          <div class="risk-card">
+            <div class="risk-icon">📅</div>
+            <h4>Daily Limit</h4>
+            <span class="risk-value neon-purple">$1,000</span>
+          </div>
+          <div class="risk-card">
+            <div class="risk-icon">📆</div>
+            <h4>Monthly Cap</h4>
+            <span class="risk-value neon-green">$10,000</span>
+          </div>
+          <div class="risk-card">
+            <div class="risk-icon">🏦</div>
+            <h4>Reserve Fund</h4>
+            <span class="risk-value neon-purple">$1,000</span>
+          </div>
+        </div>
+        <div class="risk-modes">
+          <span class="mode">Conservative</span>
+          <span class="mode active neon-green">Moderate</span>
+          <span class="mode">Aggressive</span>
+        </div>
+      </section>
+
+      <!-- API ENDPOINTS -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-purple">REST API</h2>
+        <div class="api-endpoints">
+          <div class="endpoint">
+            <span class="method get">GET</span>
+            <code>/api/arbitrage/opportunities</code>
+            <span class="desc">Find current deals</span>
+          </div>
+          <div class="endpoint">
+            <span class="method get">GET</span>
+            <code>/api/arbitrage/health</code>
+            <span class="desc">System status</span>
+          </div>
+          <div class="endpoint">
+            <span class="method post">POST</span>
+            <code>/api/arbitrage/execute</code>
+            <span class="desc">Execute trade</span>
+          </div>
+          <div class="endpoint">
+            <span class="method put">PUT</span>
+            <code>/api/arbitrage/settings</code>
+            <span class="desc">Update config</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- REVENUE MODEL -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-text">Revenue Projection</h2>
+        <div class="revenue-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Scenario</th>
+                <th>Deals/Day</th>
+                <th>Avg Profit</th>
+                <th>Monthly</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Conservative</td>
+                <td>5</td>
+                <td class="neon-green">$30</td>
+                <td class="neon-green">$4,500</td>
+              </tr>
+              <tr>
+                <td>Moderate</td>
+                <td>15</td>
+                <td class="neon-purple">$45</td>
+                <td class="neon-purple">$20,250</td>
+              </tr>
+              <tr>
+                <td>Aggressive</td>
+                <td>30</td>
+                <td class="neon-green">$60</td>
+                <td class="neon-green">$54,000</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="note">*Per user. Scale to 100 users for platform revenue.</p>
+      </section>
+
+      <!-- ROADMAP -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-purple">Development Roadmap</h2>
+        <div class="roadmap">
+          <div class="roadmap-item completed">
+            <span class="phase">Phase 1</span>
+            <h4>Core Engine</h4>
+            <p>✓ Arbitrage scoring, eBay API, Risk management</p>
+          </div>
+          <div class="roadmap-item completed">
+            <span class="phase">Phase 2</span>
+            <h4>AI Integration</h4>
+            <p>✓ OpenAI Agents, Opportunity analyzer, Web automation</p>
+          </div>
+          <div class="roadmap-item active">
+            <span class="phase neon-green">Phase 3</span>
+            <h4>Autonomous Ops</h4>
+            <p>Auto-execution, ML optimization, Multi-user scaling</p>
+          </div>
+          <div class="roadmap-item">
+            <span class="phase">Phase 4</span>
+            <h4>Advanced ML</h4>
+            <p>Price prediction, Reinforcement learning, Mobile app</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- DEMO OUTPUT -->
+      <section data-background-color="#0a0a0f">
+        <h2 class="neon-text">Live Output</h2>
+        <div class="demo-output">
+          <pre class="json-output"><code class="language-json">{
+  "totalFound": 15,
+  "recommended": 8,
+  "opportunities": [{
+    "title": "Apple AirPods Pro (2nd Gen)",
+    "buyPrice": 189.99,
+    "sellPrice": 249.99,
+    "estimatedProfit": 19.50,
+    "roi": 10.26,
+    "analysis": {
+      "score": 72,
+      "shouldExecute": true
+    },
+    "riskAssessment": {
+      "approved": true
+    }
+  }]
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- CLOSING SLIDE -->
+      <section class="title-slide" data-background-color="#0a0a0f">
+        <div class="glitch-container">
+          <h1 class="glitch neon-text" data-text="ARBI">ARBI</h1>
+        </div>
+        <h2 class="subtitle neon-purple">Autonomous Arbitrage Intelligence</h2>
+        <div class="cta-buttons">
+          <a href="https://github.com/ActivateLLC/arbi" class="cta-btn neon-green">GitHub</a>
+          <a href="#" class="cta-btn neon-purple">Live Demo</a>
+        </div>
+        <p class="footer-text">Built with ❤️ by ActivateLLC</p>
+        <div class="cyber-lines"></div>
+      </section>
+
+    </div>
+  </div>
+
+  <!-- Main entry point -->
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

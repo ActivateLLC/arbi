@@ -58,7 +58,7 @@ router.post('/execute', async (req: Request, res: Response, next: NextFunction) 
     const { opportunityId, buyPrice, sellPrice, productTitle, connectedAccountId } = req.body;
 
     if (!opportunityId || !buyPrice || !sellPrice) {
-      throw new ApiError(400, 'Missing required fields: opportunityId, buyPrice, sellPrice');
+      throw new ApiError('Missing required fields: opportunityId, buyPrice, sellPrice', 400);
     }
 
     // Calculate actual profit (in production, this would be real transaction data)
@@ -145,7 +145,7 @@ router.post('/auto-enable', async (req: Request, res: Response, next: NextFuncti
     } = req.body;
 
     if (!bankAccountId) {
-      throw new ApiError(400, 'Bank account ID required');
+      throw new ApiError('Bank account ID required', 400);
     }
 
     // In production, save to database

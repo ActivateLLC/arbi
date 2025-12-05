@@ -244,7 +244,7 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
     } = req.body;
 
     if (!opportunityId || !productTitle || !supplierPrice || !supplierUrl) {
-      throw new ApiError(400, 'Missing required fields');
+      throw new ApiError('Missing required fields', 400);
     }
 
     // Calculate marketplace price with markup
@@ -371,20 +371,20 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
     } = req.body;
 
     if (!listingId || !buyerEmail || !shippingAddress || !paymentMethodId) {
-      throw new ApiError(400, 'Missing required checkout fields');
+      throw new ApiError('Missing required checkout fields', 400);
     }
 
     const listing = await getListing(listingId);
     if (!listing) {
-      throw new ApiError(404, 'Listing not found');
+      throw new ApiError('Listing not found', 404);
     }
 
     if (listing.status !== 'active') {
-      throw new ApiError(400, 'Listing is no longer available');
+      throw new ApiError('Listing is no longer available', 400);
     }
 
     if (!stripe) {
-      throw new ApiError(500, 'Stripe not configured');
+      throw new ApiError('Stripe not configured', 500);
     }
 
     console.log(`💳 Processing buyer payment for: ${listing.productTitle}`);
@@ -411,7 +411,7 @@ router.post('/checkout', async (req: Request, res: Response, next: NextFunction)
     });
 
     if (paymentIntent.status !== 'succeeded') {
-      throw new ApiError(400, `Payment failed: ${paymentIntent.status}`);
+      throw new ApiError(`Payment failed: ${paymentIntent.status}`, 400);
     }
 
     console.log(`✅ Buyer payment received: $${listing.marketplacePrice}`);

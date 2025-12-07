@@ -60,7 +60,7 @@ export class RiskManager {
     return { passed, dailyRemaining, monthlyRemaining };
   }
 
-  private calculateRiskScore(opportunity: Opportunity, settings: UserBudgetSettings, marketConditions: any): number {
+  private calculateRiskScore(opportunity: Opportunity, settings: UserBudgetSettings, marketConditions: import('../market-indicators').MarketConditions): number {
     let riskScore = 0;
 
     // Base risk from opportunity
@@ -100,7 +100,7 @@ export class RiskManager {
     budgetCheck: { passed: boolean; dailyRemaining: number; monthlyRemaining: number },
     riskScore: number,
     settings: UserBudgetSettings,
-    marketConditions: any
+    marketConditions: import('../market-indicators').MarketConditions
   ): string[] {
     const reasons: string[] = [];
 

@@ -52,11 +52,11 @@ export class OpportunityAnalyzer {
     score += volatilityScore;
 
     // Apply market condition penalty for high VIX
-    // Reduce score if market is unstable (VIX > 30)
-    if (marketConditions.vix > 30) {
-      score *= 0.9; // 10% penalty in high volatility markets
-    } else if (marketConditions.vix > 40) {
+    // Reduce score if market is unstable
+    if (marketConditions.vix > 40) {
       score *= 0.8; // 20% penalty in extreme volatility markets
+    } else if (marketConditions.vix > 30) {
+      score *= 0.9; // 10% penalty in high volatility markets
     }
 
     return Math.round(score);

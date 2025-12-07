@@ -29,6 +29,7 @@ out/
 
 # Testing
 coverage/
+test-*.js
 
 # Logs
 logs/

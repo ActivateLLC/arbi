@@ -172,15 +172,25 @@ export class MarketIndicatorService {
 
   /**
    * Calculate VIX trend by comparing recent values
+   * Note: Basic implementation - in production, use historical data for accurate trend
    */
   private async calculateVIXTrend(currentVix: number): Promise<'increasing' | 'decreasing' | 'stable'> {
     // TODO: In production, fetch historical VIX data and calculate trend
-    // For now, use simple threshold logic based on current value
-    
     // This would compare current VIX to moving average or recent history
     // Example: if currentVix > 5-day MA, trend is 'increasing'
     
-    return 'stable'; // Default to stable for now
+    // Basic heuristic until real historical data is integrated:
+    // Compare to typical VIX levels to infer trend direction
+    const typicalVix = 17.5; // Long-term VIX average
+    const volatilityThreshold = 3; // Points of deviation
+    
+    if (currentVix > typicalVix + volatilityThreshold) {
+      return 'increasing'; // VIX significantly above average suggests rising volatility
+    } else if (currentVix < typicalVix - volatilityThreshold) {
+      return 'decreasing'; // VIX significantly below average suggests falling volatility
+    }
+    
+    return 'stable'; // Within normal range
   }
 
   /**

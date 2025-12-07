@@ -128,7 +128,22 @@ export class MarketIndicatorService {
 
   /**
    * Simulate VIX level (for testing/demo purposes)
-   * In production, this would be replaced with real data fetching
+   * 
+   * ⚠️ WARNING: This method generates simulated VIX data and should ONLY be used for:
+   * - Testing and development
+   * - Demo/example applications
+   * - Initial prototyping
+   * 
+   * In production, replace this with real VIX data from:
+   * - Yahoo Finance API (free)
+   * - Alpha Vantage
+   * - IEX Cloud
+   * - Polygon.io
+   * - Bloomberg Terminal
+   * 
+   * Using simulated data in production can lead to incorrect trading decisions.
+   * 
+   * @returns A simulated VIX value between 10-50
    */
   simulateVixLevel(): number {
     // Generate realistic VIX values

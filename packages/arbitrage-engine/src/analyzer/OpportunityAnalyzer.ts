@@ -53,7 +53,7 @@ export class OpportunityAnalyzer {
     let volatilityScore;
     if (isVolatilityStrategy) {
       // Reward high volatility for bearish/volatility strategies
-      volatilityScore = (opp.volatility / 10);
+      volatilityScore = Math.min(opp.volatility / 10, 10);
     } else {
       // Penalize high volatility for standard strategies
       volatilityScore = Math.max(0, 10 - (opp.volatility / 10));

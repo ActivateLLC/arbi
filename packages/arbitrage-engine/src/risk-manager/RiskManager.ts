@@ -1,4 +1,11 @@
-import type { Opportunity, UserBudgetSettings, RiskAssessment, MarketConditions } from '../types';
+import type { Opportunity, UserBudgetSettings, RiskAssessment, MarketConditions, VolatilityStrategyConfig } from '../types';
+
+// Default configuration for volatility strategies
+const DEFAULT_VOLATILITY_CONFIG: VolatilityStrategyConfig = {
+  enabledDuringHighVix: false,
+  vixThreshold: 25,
+  maxVolatilityExposure: 0.2
+};
 
 export class RiskManager {
   private userSpending: Map<string, { daily: number; monthly: number; lastReset: Date }> = new Map();
@@ -182,11 +189,7 @@ export class RiskManager {
     }
 
     // Check if volatility config exists
-    const volatilityConfig = settings.volatilityConfig || {
-      enabledDuringHighVix: false,
-      vixThreshold: 25,
-      maxVolatilityExposure: 0.2
-    };
+    const volatilityConfig = settings.volatilityConfig || DEFAULT_VOLATILITY_CONFIG;
 
     // If volatility strategies are not configured to be enabled during high VIX, reject
     if (!volatilityConfig.enabledDuringHighVix) {

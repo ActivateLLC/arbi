@@ -1,18 +1,29 @@
 import type { Opportunity, UserBudgetSettings, RiskAssessment } from '../types';
+import { MarketIndicatorService } from '../market-indicators';
 
 export class RiskManager {
   private userSpending: Map<string, { daily: number; monthly: number; lastReset: Date }> = new Map();
+  private marketIndicatorService: MarketIndicatorService;
 
-  assessRisk(
+  constructor() {
+    this.marketIndicatorService = new MarketIndicatorService();
+  }
+
+  async assessRisk(
     opportunity: Opportunity,
     userId: string,
     settings: UserBudgetSettings
-  ): RiskAssessment {
+  ): Promise<RiskAssessment> {
+    // Get current market conditions including VIX
+    const marketConditions = await this.marketIndicatorService.getMarketConditions();
+    
     const budgetCheck = this.checkBudget(opportunity, userId, settings);
-    const riskScore = this.calculateRiskScore(opportunity, settings);
-    const reasons = this.getRiskReasons(opportunity, budgetCheck, riskScore, settings);
+    const riskScore = this.calculateRiskScore(opportunity, settings, marketConditions);
+    const reasons = this.getRiskReasons(opportunity, budgetCheck, riskScore, settings, marketConditions);
 
-    const approved = budgetCheck.passed && this.isRiskAcceptable(riskScore, settings.riskTolerance);
+    // Don't approve if market conditions warrant pausing
+    const marketPause = this.marketIndicatorService.shouldPauseArbitrage(marketConditions);
+    const approved = budgetCheck.passed && this.isRiskAcceptable(riskScore, settings.riskTolerance) && !marketPause;
 
     return {
       approved,
@@ -49,7 +60,7 @@ export class RiskManager {
     return { passed, dailyRemaining, monthlyRemaining };
   }
 
-  private calculateRiskScore(opportunity: Opportunity, settings: UserBudgetSettings): number {
+  private calculateRiskScore(opportunity: Opportunity, settings: UserBudgetSettings, marketConditions: any): number {
     let riskScore = 0;
 
     // Base risk from opportunity
@@ -64,6 +75,9 @@ export class RiskManager {
 
     // Add risk for long time to profit
     riskScore += Math.min(opportunity.estimatedTimeToProfit * 2, 20);
+
+    // Apply market condition risk adjustment based on VIX
+    riskScore *= marketConditions.riskAdjustment;
 
     return Math.min(Math.round(riskScore), 100);
   }
@@ -85,7 +99,8 @@ export class RiskManager {
     opportunity: Opportunity,
     budgetCheck: { passed: boolean; dailyRemaining: number; monthlyRemaining: number },
     riskScore: number,
-    settings: UserBudgetSettings
+    settings: UserBudgetSettings,
+    marketConditions: any
   ): string[] {
     const reasons: string[] = [];
 
@@ -107,6 +122,11 @@ export class RiskManager {
 
     if (!settings.enabledStrategies.includes(opportunity.type)) {
       reasons.push(`Strategy ${opportunity.type} is not enabled in user settings`);
+    }
+
+    // Add market condition reasons
+    if (this.marketIndicatorService.shouldPauseArbitrage(marketConditions)) {
+      reasons.push(`Market conditions unfavorable (VIX: ${marketConditions.vix.toFixed(1)}) - arbitrage paused`);
     }
 
     return reasons;

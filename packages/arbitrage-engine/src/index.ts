@@ -14,6 +14,9 @@ export * from './analyzer/OpportunityAnalyzer';
 // Export risk manager
 export * from './risk-manager/RiskManager';
 
+// Export market indicators
+export * from './market-indicators';
+
 // Export autonomous components
 export * from './calculators/profitCalculator';
 export * from './scorers/opportunityScorer';
@@ -97,15 +100,15 @@ export class ArbitrageEngine {
     return `${filters.minProfit || 0}-${filters.minROI || 0}-${filters.maxPrice || 'max'}-${(filters.categories || []).join(',')}`;
   }
 
-  analyzeOpportunity(opportunity: Opportunity): OpportunityAnalysis {
+  async analyzeOpportunity(opportunity: Opportunity): Promise<OpportunityAnalysis> {
     return this.analyzer.analyzeOpportunity(opportunity);
   }
 
-  assessRisk(
+  async assessRisk(
     opportunity: Opportunity,
     userId: string,
     settings: UserBudgetSettings
-  ): RiskAssessment {
+  ): Promise<RiskAssessment> {
     return this.riskManager.assessRisk(opportunity, userId, settings);
   }
 
@@ -118,8 +121,8 @@ export class ArbitrageEngine {
     userId: string,
     settings: UserBudgetSettings
   ): Promise<{ analysis: OpportunityAnalysis; riskAssessment: RiskAssessment; recommended: boolean }> {
-    const analysis = this.analyzeOpportunity(opportunity);
-    const riskAssessment = this.assessRisk(opportunity, userId, settings);
+    const analysis = await this.analyzeOpportunity(opportunity);
+    const riskAssessment = await this.assessRisk(opportunity, userId, settings);
 
     const recommended = analysis.shouldExecute && riskAssessment.approved;
 

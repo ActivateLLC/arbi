@@ -1,31 +1,42 @@
 import type { Opportunity, OpportunityAnalysis } from '../types';
+import { MarketIndicatorService, type MarketConditions } from '../market-indicators';
 
 export class OpportunityAnalyzer {
-  analyzeOpportunity(opportunity: Opportunity): OpportunityAnalysis {
-    const score = this.calculateScore(opportunity);
-    const reasons = this.getReasons(opportunity, score);
-    const warnings = this.getWarnings(opportunity);
-    const estimatedOutcome = this.calculateOutcomes(opportunity);
+  private marketIndicatorService: MarketIndicatorService;
+
+  constructor() {
+    this.marketIndicatorService = new MarketIndicatorService();
+  }
+
+  async analyzeOpportunity(opportunity: Opportunity): Promise<OpportunityAnalysis> {
+    // Get current market conditions including VIX
+    const marketConditions = await this.marketIndicatorService.getMarketConditions();
+
+    const score = this.calculateScore(opportunity, marketConditions);
+    const reasons = this.getReasons(opportunity, score, marketConditions);
+    const warnings = this.getWarnings(opportunity, marketConditions);
+    const estimatedOutcome = this.calculateOutcomes(opportunity, marketConditions);
 
     return {
       opportunity,
       score,
-      shouldExecute: score >= 50 && warnings.length === 0,
+      shouldExecute: score >= 50 && warnings.length === 0 && !this.marketIndicatorService.shouldPauseArbitrage(marketConditions),
       reasons,
       warnings,
       estimatedOutcome
     };
   }
 
-  private calculateScore(opp: Opportunity): number {
+  private calculateScore(opp: Opportunity, marketConditions: MarketConditions): number {
     let score = 0;
 
     // Profit potential (0-30 points)
     const profitScore = Math.min((opp.roi / 100) * 30, 30);
     score += profitScore;
 
-    // Confidence (0-25 points)
-    const confidenceScore = (opp.confidence / 100) * 25;
+    // Confidence (0-25 points) - adjusted by market conditions
+    const baseConfidenceScore = (opp.confidence / 100) * 25;
+    const confidenceScore = baseConfidenceScore * marketConditions.confidenceAdjustment;
     score += confidenceScore;
 
     // Speed to profit (0-20 points)
@@ -36,14 +47,22 @@ export class OpportunityAnalyzer {
     const riskScore = opp.riskLevel === 'low' ? 15 : opp.riskLevel === 'medium' ? 10 : 5;
     score += riskScore;
 
-    // Volatility (0-10 points, inverted)
+    // Volatility (0-10 points, inverted) - product level
     const volatilityScore = Math.max(0, 10 - (opp.volatility / 10));
     score += volatilityScore;
+
+    // Apply market condition penalty for high VIX
+    // Reduce score if market is unstable (VIX > 30)
+    if (marketConditions.vix > 30) {
+      score *= 0.9; // 10% penalty in high volatility markets
+    } else if (marketConditions.vix > 40) {
+      score *= 0.8; // 20% penalty in extreme volatility markets
+    }
 
     return Math.round(score);
   }
 
-  private getReasons(opp: Opportunity, score: number): string[] {
+  private getReasons(opp: Opportunity, score: number, marketConditions: MarketConditions): string[] {
     const reasons: string[] = [];
 
     if (opp.roi > 50) {
@@ -72,10 +91,16 @@ export class OpportunityAnalyzer {
       reasons.push('Exceptional opportunity - highly recommended');
     }
 
+    // Add market condition context
+    const vixLevel = this.marketIndicatorService.interpretVIX(marketConditions.vix);
+    if (vixLevel.marketCondition === 'calm') {
+      reasons.push('Favorable market conditions (low VIX) - stable environment for arbitrage');
+    }
+
     return reasons;
   }
 
-  private getWarnings(opp: Opportunity): string[] {
+  private getWarnings(opp: Opportunity, marketConditions: MarketConditions): string[] {
     const warnings: string[] = [];
 
     if (opp.volatility > 70) {
@@ -99,12 +124,20 @@ export class OpportunityAnalyzer {
       warnings.push('Opportunity expires soon - act quickly');
     }
 
+    // Add VIX-based market warnings
+    const marketWarnings = this.marketIndicatorService.generateMarketWarnings(marketConditions);
+    warnings.push(...marketWarnings);
+
     return warnings;
   }
 
-  private calculateOutcomes(opp: Opportunity): { bestCase: number; worstCase: number; likelyCase: number } {
-    const bestCase = opp.estimatedProfit * 1.2; // 20% better than expected
-    const worstCase = opp.estimatedProfit * 0.5; // Could be half if market changes
+  private calculateOutcomes(opp: Opportunity, marketConditions: MarketConditions): { bestCase: number; worstCase: number; likelyCase: number } {
+    // Adjust outcome ranges based on market volatility (VIX)
+    // Higher VIX = wider range of outcomes (more uncertainty)
+    const volatilityMultiplier = 1 + (marketConditions.vix / 100);
+    
+    const bestCase = opp.estimatedProfit * 1.2 * (1 / volatilityMultiplier); // Lower best case in volatile markets
+    const worstCase = opp.estimatedProfit * 0.5 * volatilityMultiplier; // Worse worst case in volatile markets
     const likelyCase = opp.estimatedProfit * 0.9; // 90% of estimate (accounting for fees, etc)
 
     return {

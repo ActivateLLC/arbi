@@ -1,10 +1,20 @@
 import type { Opportunity, OpportunityAnalysis } from '../types';
+import { VixMonitorService, type MarketCondition } from '../services/VixMonitorService';
 
 export class OpportunityAnalyzer {
-  analyzeOpportunity(opportunity: Opportunity): OpportunityAnalysis {
-    const score = this.calculateScore(opportunity);
+  private vixService: VixMonitorService;
+
+  constructor(vixService?: VixMonitorService) {
+    this.vixService = vixService || new VixMonitorService();
+  }
+
+  async analyzeOpportunity(opportunity: Opportunity): Promise<OpportunityAnalysis> {
+    // Get market condition from VIX
+    const marketCondition = await this.vixService.getMarketCondition();
+    
+    const score = this.calculateScore(opportunity, marketCondition);
     const reasons = this.getReasons(opportunity, score);
-    const warnings = this.getWarnings(opportunity);
+    const warnings = await this.getWarnings(opportunity, marketCondition);
     const estimatedOutcome = this.calculateOutcomes(opportunity);
 
     return {
@@ -13,19 +23,26 @@ export class OpportunityAnalyzer {
       shouldExecute: score >= 50 && warnings.length === 0,
       reasons,
       warnings,
-      estimatedOutcome
+      estimatedOutcome,
+      marketCondition: {
+        vixLevel: marketCondition.vix.level,
+        vixValue: marketCondition.vix.value,
+        description: marketCondition.vix.description,
+        recommendation: marketCondition.recommendation
+      }
     };
   }
 
-  private calculateScore(opp: Opportunity): number {
+  private calculateScore(opp: Opportunity, marketCondition: MarketCondition): number {
     let score = 0;
 
     // Profit potential (0-30 points)
     const profitScore = Math.min((opp.roi / 100) * 30, 30);
     score += profitScore;
 
-    // Confidence (0-25 points)
-    const confidenceScore = (opp.confidence / 100) * 25;
+    // Confidence (0-25 points) - adjusted by market conditions
+    const baseConfidenceScore = (opp.confidence / 100) * 25;
+    const confidenceScore = baseConfidenceScore * marketCondition.confidenceAdjustment;
     score += confidenceScore;
 
     // Speed to profit (0-20 points)
@@ -36,8 +53,10 @@ export class OpportunityAnalyzer {
     const riskScore = opp.riskLevel === 'low' ? 15 : opp.riskLevel === 'medium' ? 10 : 5;
     score += riskScore;
 
-    // Volatility (0-10 points, inverted)
-    const volatilityScore = Math.max(0, 10 - (opp.volatility / 10));
+    // Volatility (0-10 points, inverted) - adjusted by market VIX
+    const baseVolatilityScore = Math.max(0, 10 - (opp.volatility / 10));
+    // Apply market volatility adjustment (higher VIX = lower score)
+    const volatilityScore = baseVolatilityScore / marketCondition.volatilityAdjustment;
     score += volatilityScore;
 
     return Math.round(score);
@@ -75,8 +94,15 @@ export class OpportunityAnalyzer {
     return reasons;
   }
 
-  private getWarnings(opp: Opportunity): string[] {
+  private async getWarnings(opp: Opportunity, marketCondition: MarketCondition): Promise<string[]> {
     const warnings: string[] = [];
+
+    // Market condition warnings based on VIX
+    if (marketCondition.vix.level === 'extreme') {
+      warnings.push(`⚠️ EXTREME market volatility (VIX: ${marketCondition.vix.value}) - High risk environment`);
+    } else if (marketCondition.vix.level === 'high') {
+      warnings.push(`⚠️ Elevated market volatility (VIX: ${marketCondition.vix.value}) - Exercise caution`);
+    }
 
     if (opp.volatility > 70) {
       warnings.push('High price volatility - market may change quickly');

@@ -1,16 +1,25 @@
 import type { Opportunity, UserBudgetSettings, RiskAssessment } from '../types';
+import { VixMonitorService } from '../services/VixMonitorService';
 
 export class RiskManager {
   private userSpending: Map<string, { daily: number; monthly: number; lastReset: Date }> = new Map();
+  private vixService: VixMonitorService;
 
-  assessRisk(
+  constructor(vixService?: VixMonitorService) {
+    this.vixService = vixService || new VixMonitorService();
+  }
+
+  async assessRisk(
     opportunity: Opportunity,
     userId: string,
     settings: UserBudgetSettings
-  ): RiskAssessment {
+  ): Promise<RiskAssessment> {
+    // Get market condition for risk adjustment
+    const marketCondition = await this.vixService.getMarketCondition();
+    
     const budgetCheck = this.checkBudget(opportunity, userId, settings);
-    const riskScore = this.calculateRiskScore(opportunity, settings);
-    const reasons = this.getRiskReasons(opportunity, budgetCheck, riskScore, settings);
+    const riskScore = this.calculateRiskScore(opportunity, settings, marketCondition.volatilityAdjustment);
+    const reasons = this.getRiskReasons(opportunity, budgetCheck, riskScore, settings, marketCondition.volatilityAdjustment);
 
     const approved = budgetCheck.passed && this.isRiskAcceptable(riskScore, settings.riskTolerance);
 
@@ -18,7 +27,8 @@ export class RiskManager {
       approved,
       budgetCheck,
       riskScore,
-      reasons
+      reasons,
+      marketVolatilityFactor: marketCondition.volatilityAdjustment
     };
   }
 
@@ -49,11 +59,11 @@ export class RiskManager {
     return { passed, dailyRemaining, monthlyRemaining };
   }
 
-  private calculateRiskScore(opportunity: Opportunity, settings: UserBudgetSettings): number {
+  private calculateRiskScore(opportunity: Opportunity, settings: UserBudgetSettings, marketVolatilityFactor: number): number {
     let riskScore = 0;
 
-    // Base risk from opportunity
-    riskScore += opportunity.volatility * 0.3;
+    // Base risk from opportunity - adjusted by market volatility (VIX)
+    riskScore += opportunity.volatility * 0.3 * marketVolatilityFactor;
 
     // Add risk based on capital exposure
     const capitalRisk = (opportunity.buyPrice / settings.monthlyLimit) * 30;
@@ -85,7 +95,8 @@ export class RiskManager {
     opportunity: Opportunity,
     budgetCheck: { passed: boolean; dailyRemaining: number; monthlyRemaining: number },
     riskScore: number,
-    settings: UserBudgetSettings
+    settings: UserBudgetSettings,
+    marketVolatilityFactor: number
   ): string[] {
     const reasons: string[] = [];
 
@@ -103,6 +114,11 @@ export class RiskManager {
 
     if (!this.isRiskAcceptable(riskScore, settings.riskTolerance)) {
       reasons.push(`Risk score ${riskScore} exceeds ${settings.riskTolerance} tolerance`);
+    }
+
+    // Add market volatility context
+    if (marketVolatilityFactor > 1.3) {
+      reasons.push(`Risk increased due to elevated market volatility (factor: ${marketVolatilityFactor.toFixed(2)}x)`);
     }
 
     if (!settings.enabledStrategies.includes(opportunity.type)) {

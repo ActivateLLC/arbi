@@ -4,6 +4,7 @@ import {
   WebScraperScout,
   EbayScout,
   RainforestScout,
+  VixMonitorService,
   type UserBudgetSettings,
   type ScoutConfig
 } from '@arbi/arbitrage-engine';
@@ -59,6 +60,10 @@ if (scoutsEnabled === 0) {
   console.log('   Mock data DISABLED - only real opportunities will be returned');
 }
 
+// Initialize VIX Monitor Service
+const vixService = new VixMonitorService(process.env.ALPHA_VANTAGE_API_KEY);
+console.log(process.env.ALPHA_VANTAGE_API_KEY ? '✅ VIX Monitor enabled (Alpha Vantage API)' : '⚠️  VIX Monitor using estimated values (set ALPHA_VANTAGE_API_KEY for real-time data)');
+
 // Default user settings (in production, this would come from database)
 const defaultUserSettings: UserBudgetSettings = {
   dailyLimit: 1000,
@@ -93,9 +98,38 @@ router.get('/health', (req: Request, res: Response) => {
     apiKeysConfigured: {
       rainforest: !!process.env.RAINFOREST_API_KEY,
       ebay: !!process.env.EBAY_APP_ID,
-      webScraper: true // Always enabled
+      webScraper: true, // Always enabled
+      vixMonitor: !!process.env.ALPHA_VANTAGE_API_KEY
+    },
+    vixIntegration: {
+      enabled: true,
+      source: process.env.ALPHA_VANTAGE_API_KEY ? 'Alpha Vantage API' : 'Estimated values'
     }
   });
+});
+
+// GET /api/arbitrage/market-conditions
+router.get('/market-conditions', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const marketCondition = await vixService.getMarketCondition();
+    
+    res.status(200).json({
+      vix: {
+        value: marketCondition.vix.value,
+        level: marketCondition.vix.level,
+        description: marketCondition.vix.description,
+        timestamp: marketCondition.vix.timestamp
+      },
+      adjustments: {
+        volatilityFactor: marketCondition.volatilityAdjustment,
+        confidenceFactor: marketCondition.confidenceAdjustment
+      },
+      recommendation: marketCondition.recommendation,
+      source: process.env.ALPHA_VANTAGE_API_KEY ? 'Alpha Vantage API' : 'Estimated'
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 // GET /api/arbitrage/opportunities
@@ -122,6 +156,9 @@ router.get('/opportunities', async (req: Request, res: Response, next: NextFunct
     // Find opportunities
     const opportunities = await arbitrageEngine.findOpportunities(config);
 
+    // Get current market condition
+    const marketCondition = await vixService.getMarketCondition();
+
     // Analyze each opportunity
     const analyzed = await Promise.all(
       opportunities.map(async (opp) => {
@@ -147,7 +184,13 @@ router.get('/opportunities', async (req: Request, res: Response, next: NextFunct
       totalFound: opportunities.length,
       recommended: recommended.length,
       opportunities: returnAll ? analyzed : recommended,
-      settings: defaultUserSettings
+      settings: defaultUserSettings,
+      marketCondition: {
+        vixLevel: marketCondition.vix.level,
+        vixValue: marketCondition.vix.value,
+        description: marketCondition.vix.description,
+        recommendation: marketCondition.recommendation
+      }
     });
   } catch (error) {
     next(error);

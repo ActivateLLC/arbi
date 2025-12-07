@@ -26,12 +26,19 @@ export * from './utils/cache';
 export * from './market-indicators/MarketIndicatorService';
 
 // Main Arbitrage Engine
-import type { Opportunity, OpportunityScout, ScoutConfig, UserBudgetSettings, OpportunityAnalysis, RiskAssessment, MarketConditions } from './types';
-import { ECommerceScout } from './scouts/ECommerceScout';
 import { OpportunityAnalyzer } from './analyzer/OpportunityAnalyzer';
-import { RiskManager } from './risk-manager/RiskManager';
-import { SimpleCache } from './utils/cache';
 import { MarketIndicatorService } from './market-indicators/MarketIndicatorService';
+import { RiskManager } from './risk-manager/RiskManager';
+import type {
+  MarketConditions,
+  Opportunity,
+  OpportunityAnalysis,
+  OpportunityScout,
+  RiskAssessment,
+  ScoutConfig,
+  UserBudgetSettings
+} from './types';
+import { SimpleCache } from './utils/cache';
 
 export class ArbitrageEngine {
   private scouts: Map<string, OpportunityScout> = new Map();

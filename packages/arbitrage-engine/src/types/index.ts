@@ -29,7 +29,7 @@ export interface Opportunity {
   // Metadata
   category: string;
   productInfo?: ProductInfo;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export type OpportunityType =

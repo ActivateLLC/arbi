@@ -10,7 +10,7 @@ export interface VixData {
 
 export interface MarketCondition {
   vix: VixData;
-  volatilityAdjustment: number; // Multiplier for risk scoring (0.5 - 2.0)
+  volatilityAdjustment: number; // Multiplier for risk scoring (0.8 - 2.0)
   confidenceAdjustment: number; // Multiplier for confidence scoring (0.7 - 1.0)
   recommendation: string;
 }
@@ -118,29 +118,65 @@ export class VixMonitorService {
 
   /**
    * Fetch real VIX data from Alpha Vantage API
+   * 
+   * Note: Alpha Vantage's free tier may have limitations on VIX data.
+   * The GLOBAL_QUOTE function works with most symbols but VIX availability
+   * may vary. If this fails, the system gracefully falls back to estimated values.
+   * 
+   * Alternative APIs for VIX data:
+   * - Yahoo Finance API
+   * - CBOE Direct API
+   * - Market data scraping from financial websites
    */
   private async fetchRealVixData(): Promise<VixData> {
     if (!this.apiKey) {
       throw new Error('Alpha Vantage API key not configured');
     }
 
-    // Alpha Vantage endpoint for VIX (CBOE Volatility Index)
-    const response = await axios.get(this.apiUrl, {
-      params: {
-        function: 'GLOBAL_QUOTE',
-        symbol: 'VIX',
-        apikey: this.apiKey
-      },
-      timeout: 5000
-    });
+    try {
+      // Try Alpha Vantage GLOBAL_QUOTE
+      // Note: VIX availability through this endpoint may be limited
+      const response = await axios.get(this.apiUrl, {
+        params: {
+          function: 'GLOBAL_QUOTE',
+          symbol: 'VIX',
+          apikey: this.apiKey
+        },
+        timeout: 5000
+      });
 
-    const quote = response.data['Global Quote'];
-    if (!quote || !quote['05. price']) {
-      throw new Error('Invalid VIX data received from API');
+      const quote = response.data['Global Quote'];
+      if (!quote || !quote['05. price']) {
+        console.warn('⚠️  VIX not available through GLOBAL_QUOTE, trying alternative...');
+        
+        // Try TIME_SERIES_DAILY as fallback
+        const tsResponse = await axios.get(this.apiUrl, {
+          params: {
+            function: 'TIME_SERIES_DAILY',
+            symbol: '^VIX',
+            apikey: this.apiKey
+          },
+          timeout: 5000
+        });
+        
+        const timeSeries = tsResponse.data['Time Series (Daily)'];
+        if (timeSeries) {
+          const latestDate = Object.keys(timeSeries)[0];
+          const latestData = timeSeries[latestDate];
+          const value = parseFloat(latestData['4. close']);
+          return this.createVixData(value);
+        }
+        
+        throw new Error('VIX data not available from Alpha Vantage');
+      }
+
+      const value = parseFloat(quote['05. price']);
+      return this.createVixData(value);
+    } catch (error) {
+      // Log the error but don't throw - we have a fallback
+      console.warn('⚠️  Failed to fetch VIX from Alpha Vantage:', error instanceof Error ? error.message : 'Unknown error');
+      throw error; // Re-throw so caller can use fallback
     }
-
-    const value = parseFloat(quote['05. price']);
-    return this.createVixData(value);
   }
 
   /**

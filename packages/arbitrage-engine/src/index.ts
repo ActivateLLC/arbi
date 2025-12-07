@@ -22,22 +22,28 @@ export * from './autonomous/autonomousEngine';
 // Export utilities
 export * from './utils/cache';
 
+// Export market indicators
+export * from './market-indicators/MarketIndicatorService';
+
 // Main Arbitrage Engine
-import type { Opportunity, OpportunityScout, ScoutConfig, UserBudgetSettings, OpportunityAnalysis, RiskAssessment } from './types';
+import type { Opportunity, OpportunityScout, ScoutConfig, UserBudgetSettings, OpportunityAnalysis, RiskAssessment, MarketConditions } from './types';
 import { ECommerceScout } from './scouts/ECommerceScout';
 import { OpportunityAnalyzer } from './analyzer/OpportunityAnalyzer';
 import { RiskManager } from './risk-manager/RiskManager';
 import { SimpleCache } from './utils/cache';
+import { MarketIndicatorService } from './market-indicators/MarketIndicatorService';
 
 export class ArbitrageEngine {
   private scouts: Map<string, OpportunityScout> = new Map();
   private analyzer: OpportunityAnalyzer;
   private riskManager: RiskManager;
+  private marketIndicators: MarketIndicatorService;
   private opportunityCache: SimpleCache<Opportunity[]>;
 
   constructor() {
     this.analyzer = new OpportunityAnalyzer();
     this.riskManager = new RiskManager();
+    this.marketIndicators = new MarketIndicatorService();
     this.opportunityCache = new SimpleCache<Opportunity[]>(5 * 60 * 1000); // 5 minute cache
 
     // PRODUCTION MODE: No default scouts
@@ -47,6 +53,34 @@ export class ArbitrageEngine {
 
   registerScout(scout: OpportunityScout): void {
     this.scouts.set(scout.type, scout);
+  }
+
+  /**
+   * Update market conditions (VIX level)
+   * This should be called periodically to keep market data fresh
+   */
+  updateMarketConditions(vixLevel: number): MarketConditions {
+    const conditions = this.marketIndicators.updateMarketConditions(vixLevel);
+    
+    // Update analyzer and risk manager with new conditions
+    this.analyzer.setMarketConditions(conditions);
+    this.riskManager.setMarketConditions(conditions);
+    
+    return conditions;
+  }
+
+  /**
+   * Get current market conditions
+   */
+  getMarketConditions(): MarketConditions | null {
+    return this.marketIndicators.getCurrentConditions();
+  }
+
+  /**
+   * Get VIX statistics
+   */
+  getVixStats() {
+    return this.marketIndicators.getVixStats();
   }
 
   async findOpportunities(config: ScoutConfig): Promise<Opportunity[]> {

@@ -40,7 +40,12 @@ export type OpportunityType =
   | 'liquidation_auction'
   | 'nft_flip'
   | 'sports_betting'
-  | 'options_pricing';
+  | 'options_pricing'
+  | 'short_condor'
+  | 'short_strangle'
+  | 'short_straddle'
+  | 'bearish_spread'
+  | 'volatility_arbitrage';
 
 export interface ProductInfo {
   asin?: string;
@@ -78,6 +83,7 @@ export interface UserBudgetSettings {
   reserveFund: number;
   riskTolerance: 'conservative' | 'moderate' | 'aggressive';
   enabledStrategies: OpportunityType[];
+  volatilityConfig?: VolatilityStrategyConfig;
 }
 
 export interface RiskAssessment {
@@ -131,4 +137,17 @@ export interface OpportunityScout {
   name: string;
   type: OpportunityType;
   scan(config: ScoutConfig): Promise<Opportunity[]>;
+}
+
+export interface MarketConditions {
+  vixLevel: number; // VIX volatility index (0-100+)
+  trend: 'bullish' | 'bearish' | 'neutral';
+  volatilityState: 'low' | 'moderate' | 'high' | 'extreme';
+  timestamp: Date;
+}
+
+export interface VolatilityStrategyConfig {
+  enabledDuringHighVix: boolean; // Enable bearish/volatility strategies when VIX > threshold
+  vixThreshold: number; // VIX level to enable volatility strategies (default: 25)
+  maxVolatilityExposure: number; // Max % of budget for volatility strategies
 }

@@ -7,6 +7,8 @@
 
 import { ArbitrageEngine } from '@arbi/arbitrage-engine';
 
+import type { Opportunity } from '@arbi/arbitrage-engine';
+
 interface AutoListingConfig {
   scanIntervalMinutes: number;
   minScore: number;
@@ -113,7 +115,7 @@ export class AutonomousListingJob {
       console.log(`   Auto-listing top ${toList.length} opportunities...`);
 
       // List each opportunity on marketplace
-      for (const { opportunity, analysis } of toList) {
+      for (const { opportunity } of toList) {
         await this.listOnMarketplace(opportunity, config.markupPercentage);
       }
 
@@ -127,10 +129,16 @@ export class AutonomousListingJob {
    * List a single opportunity on marketplace
    */
   private async listOnMarketplace(
-    opportunity: any,
+    opportunity: Opportunity,
     markupPercentage: number
   ): Promise<void> {
     try {
+      // Extract image URL from productInfo if available
+      const imageUrls = opportunity.productInfo?.imageUrl ? [opportunity.productInfo.imageUrl] : [];
+      
+      // Extract platform from buySource URL (e.g., "amazon.com" -> "amazon")
+      const supplierPlatform = this.extractPlatformFromUrl(opportunity.buySource);
+      
       // Call marketplace listing API
       const response = await fetch('http://localhost:3000/api/marketplace/list', {
         method: 'POST',
@@ -141,10 +149,10 @@ export class AutonomousListingJob {
           opportunityId: opportunity.id,
           productTitle: opportunity.title,
           productDescription: this.generateDescription(opportunity),
-          productImageUrls: opportunity.images || [],
+          productImageUrls: imageUrls,
           supplierPrice: opportunity.buyPrice,
-          supplierUrl: opportunity.buyUrl,
-          supplierPlatform: opportunity.buyPlatform?.toLowerCase() || 'unknown',
+          supplierUrl: opportunity.buySource,
+          supplierPlatform,
           markupPercentage,
         }),
       });
@@ -164,7 +172,7 @@ export class AutonomousListingJob {
   /**
    * Generate product description
    */
-  private generateDescription(opportunity: any): string {
+  private generateDescription(opportunity: Opportunity): string {
     return `
 ${opportunity.title}
 
@@ -179,6 +187,33 @@ ${opportunity.description || 'High-quality product at a great price!'}
 
 Order now and get your item delivered quickly!
     `.trim();
+  }
+
+  /**
+   * Extract platform name from a URL
+   * e.g., "https://www.amazon.com/dp/..." -> "amazon"
+   */
+  private extractPlatformFromUrl(url: string): string {
+    if (!url) return 'unknown';
+    
+    try {
+      const hostname = new URL(url).hostname.toLowerCase();
+      
+      // Extract platform from common e-commerce domains
+      if (hostname.includes('amazon')) return 'amazon';
+      if (hostname.includes('walmart')) return 'walmart';
+      if (hostname.includes('target')) return 'target';
+      if (hostname.includes('ebay')) return 'ebay';
+      if (hostname.includes('bestbuy')) return 'bestbuy';
+      if (hostname.includes('costco')) return 'costco';
+      if (hostname.includes('aliexpress')) return 'aliexpress';
+      
+      // Return hostname without TLD as fallback
+      const parts = hostname.replace('www.', '').split('.');
+      return parts[0] || 'unknown';
+    } catch {
+      return 'unknown';
+    }
   }
 
   /**

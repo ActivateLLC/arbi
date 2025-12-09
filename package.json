@@ -2,7 +2,7 @@
   "name": "arbi",
   "version": "0.1.0",
   "private": true,
-  "description": "AI orchestration platform with agent management, web automation, voice interface, and secure transactions",
+  "description": "ARBI - Autonomous arbitrage backend API and CLI for zero-capital dropshipping across eBay, Amazon, and Walmart",
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"

@@ -1,8 +1,5 @@
-
 # Ignore dependencies and build artifacts
 node_modules
-pnpm-lock.yaml
-*.tgz
 dist
 .cache
 .next
@@ -34,4 +31,4 @@ coverage
 *.local
 *.secret
 client_secret.json
-Arbi/google-cloud-sdk
+Arbi/

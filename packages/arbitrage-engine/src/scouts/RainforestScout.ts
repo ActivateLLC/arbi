@@ -125,7 +125,7 @@ export class RainforestScout implements OpportunityScout {
       const params = {
         'OPERATION-NAME': 'findCompletedItems',
         'SERVICE-VERSION': '1.0.0',
-        'SECURITY-APPNAME': process.env.EBAY_APP_ID || 'DEMO-APP-ID', // Free to get
+        // 'SECURITY-APPNAME': process.env.EBAY_APP_ID || 'DEMO-APP-ID', // eBay API/App ID logic removed
         'RESPONSE-DATA-FORMAT': 'JSON',
         'keywords': productTitle.substring(0, 50), // Limit search query length
         'itemFilter(0).name': 'SoldItemsOnly',

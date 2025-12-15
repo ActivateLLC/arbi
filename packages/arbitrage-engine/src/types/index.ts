@@ -11,6 +11,8 @@ export interface Opportunity {
   sellPrice: number;
   estimatedProfit: number;
   roi: number; // Return on Investment (percentage)
+  buyCurrency?: string; // e.g. 'USD', 'CNY', 'EUR'
+  sellCurrency?: string;
 
   // Risk
   confidence: number; // 0-100 score
@@ -25,6 +27,13 @@ export interface Opportunity {
   // Sources
   buySource: string;
   sellSource: string;
+  sourceCountry?: string; // e.g. 'CN', 'US', 'DE'
+  destinationCountry?: string;
+
+  // Logistics
+  shippingCost?: number;
+  customsDuty?: number;
+  customsInfo?: string;
 
   // Metadata
   category: string;

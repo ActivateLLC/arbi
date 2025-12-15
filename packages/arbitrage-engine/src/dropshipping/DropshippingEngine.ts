@@ -19,12 +19,16 @@ export interface DropshippingOpportunity {
   sourceShipping: number;
   sourceInStock: boolean;
   sourceLastChecked: Date;
+  sourceCountry?: string;
+  sourceCurrency?: string;
 
   // Destination platform (where we sell)
   destinationPlatform: 'ebay' | 'amazon' | 'walmart';
   destinationListingId?: string; // Created after listing
   destinationPrice: number;
   destinationShipping: number;
+  destinationCountry?: string;
+  destinationCurrency?: string;
 
   // Product details (extracted from source)
   title: string;
@@ -40,6 +44,8 @@ export interface DropshippingOpportunity {
   sellPrice: number; // destination - fees
   netProfit: number;
   roi: number;
+  customsDuty?: number;
+  customsInfo?: string;
 
   // Status tracking
   status: 'ready_to_list' | 'listed' | 'sold' | 'fulfilled' | 'out_of_stock' | 'error';

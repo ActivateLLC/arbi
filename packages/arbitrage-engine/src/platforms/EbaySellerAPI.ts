@@ -1,42 +1,4 @@
-import axios from 'axios';
-import { ExtractedProductData } from '../services/PhotoExtractionService';
-
-/**
- * eBay Seller API Integration
- *
- * Automates listing creation on eBay for dropshipping arbitrage.
- *
- * REQUIREMENTS:
- * - eBay Developer Account with Production API access
- * - OAuth 2.0 User Token (requires user consent flow)
- * - Seller API permissions (Sell.Inventory.Write, Sell.Marketing, etc.)
- *
- * API Docs: https://developer.ebay.com/api-docs/sell/inventory/overview.html
- */
-
-export interface EbayListingRequest {
-  productData: ExtractedProductData;
-  price: number;
-  quantity: number;
-  shippingCost?: number;
-  returnsAccepted?: boolean;
-  returnPeriodDays?: number;
-  listingDuration?: 'GTC' | 'DAYS_3' | 'DAYS_5' | 'DAYS_7' | 'DAYS_10';
-  categoryId?: string;
-}
-
-export interface EbayListingResponse {
-  success: boolean;
-  listingId?: string;
-  sku?: string;
-  listingUrl?: string;
-  error?: string;
-}
-
-export class EbaySellerAPI {
-  private accessToken: string;
-  private apiUrl: string;
-  private isProduction: boolean;
+// eBay Seller API removed for compliance with web-scraper-only policy
 
   constructor(accessToken?: string, production: boolean = false) {
     this.accessToken = accessToken || process.env.EBAY_SELLER_ACCESS_TOKEN || '';

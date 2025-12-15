@@ -4,10 +4,10 @@ export * from './types';
 // Export scouts
 export * from './scouts/ECommerceScout';
 export * from './scouts/WebScraperScout';
-export * from './scouts/EbayScout'; // Implements OpportunityScout interface for arbitrage engine
+// Removed eBayScout export
 export * from './scouts/RainforestScout';
 <<<<<<< HEAD
-export * from './scouts/EbayProductScout'; // Standalone eBay product search client
+// Removed EbayProductScout export
 =======
 export * from './scouts/FacebookMarketplaceScout';
 >>>>>>> ea2bb28f (feat: add initial configuration and tests for API and AI engine)

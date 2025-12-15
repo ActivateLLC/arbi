@@ -1,19 +1,17 @@
-
-# Ignore node_modules and build artifacts
-node_modules
-
-.next
-.turbo
-coverage
-logs
+node_modules/
+dist/
+.next/
+.turbo/
+coverage/
+logs/
 .env
 .env.*
 .DS_Store
 *.log
 *.sqlite
 *.sqlite3
-.idea
-.vscode
+.idea/
+.vscode/
 *.swp
 *.swo
 *.bak
@@ -24,4 +22,3 @@ logs
 *.test.js
 *.spec.ts
 *.spec.js
-*.db

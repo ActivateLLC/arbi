@@ -56,8 +56,6 @@ router.post('/start-listing', async (req: Request, res: Response) => {
       error: errorMessage,
     });
   }
-    });
-  }
 });
 
 /**

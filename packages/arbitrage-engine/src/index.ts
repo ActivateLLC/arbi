@@ -4,13 +4,8 @@ export * from './types';
 // Export scouts
 export * from './scouts/ECommerceScout';
 export * from './scouts/WebScraperScout';
-// Removed eBayScout export
 export * from './scouts/RainforestScout';
-<<<<<<< HEAD
-// Removed EbayProductScout export
-=======
 export * from './scouts/FacebookMarketplaceScout';
->>>>>>> ea2bb28f (feat: add initial configuration and tests for API and AI engine)
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';

@@ -6,7 +6,11 @@ export * from './scouts/ECommerceScout';
 export * from './scouts/WebScraperScout';
 export * from './scouts/EbayScout'; // Implements OpportunityScout interface for arbitrage engine
 export * from './scouts/RainforestScout';
+<<<<<<< HEAD
 export * from './scouts/EbayProductScout'; // Standalone eBay product search client
+=======
+export * from './scouts/FacebookMarketplaceScout';
+>>>>>>> ea2bb28f (feat: add initial configuration and tests for API and AI engine)
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';
@@ -14,6 +18,7 @@ export * from './analyzer/OpportunityAnalyzer';
 // Export risk manager
 export * from './risk-manager/RiskManager';
 
+<<<<<<< HEAD
 // Export autonomous components
 export * from './calculators/profitCalculator';
 export * from './scorers/opportunityScorer';
@@ -21,13 +26,22 @@ export * from './autonomous/autonomousEngine';
 
 // Export utilities
 export * from './utils/cache';
+=======
+// Export new engines
+export * from './autonomous/autonomousEngine';
+export * from './dropshipping/DropshippingEngine';
+>>>>>>> ea2bb28f (feat: add initial configuration and tests for API and AI engine)
 
 // Main Arbitrage Engine
 import type { Opportunity, OpportunityScout, ScoutConfig, UserBudgetSettings, OpportunityAnalysis, RiskAssessment } from './types';
 import { ECommerceScout } from './scouts/ECommerceScout';
 import { OpportunityAnalyzer } from './analyzer/OpportunityAnalyzer';
 import { RiskManager } from './risk-manager/RiskManager';
+<<<<<<< HEAD
 import { SimpleCache } from './utils/cache';
+=======
+import { FacebookMarketplaceScout } from './scouts/FacebookMarketplaceScout';
+>>>>>>> ea2bb28f (feat: add initial configuration and tests for API and AI engine)
 
 export class ArbitrageEngine {
   private scouts: Map<string, OpportunityScout> = new Map();
@@ -40,9 +54,15 @@ export class ArbitrageEngine {
     this.riskManager = new RiskManager();
     this.opportunityCache = new SimpleCache<Opportunity[]>(5 * 60 * 1000); // 5 minute cache
 
+<<<<<<< HEAD
     // PRODUCTION MODE: No default scouts
     // Scouts must be explicitly registered with real data sources
     // (RainforestScout, EbayScout, WebScraperScout)
+=======
+    // Register default scouts
+    this.registerScout(new ECommerceScout());
+    this.registerScout(new FacebookMarketplaceScout());
+>>>>>>> ea2bb28f (feat: add initial configuration and tests for API and AI engine)
   }
 
   registerScout(scout: OpportunityScout): void {

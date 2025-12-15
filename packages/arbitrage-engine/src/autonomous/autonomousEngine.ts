@@ -1,4 +1,5 @@
-import { EbayScout, EbayProduct } from '../scouts/ebayScout';
+import type { EbayProduct } from '../scouts/EbayProductScout';
+import { EbayProductScout } from '../scouts/EbayProductScout';
 import { RainforestScout } from '../scouts/RainforestScout';
 import { ECommerceScout } from '../scouts/ECommerceScout';
 import { WebScraperScout } from '../scouts/WebScraperScout';
@@ -33,7 +34,7 @@ export interface AutonomousConfig {
 
 export class AutonomousEngine {
   private scouts: Map<string, OpportunityScout> = new Map();
-  private ebayScout: EbayScout;
+  private ebayScout: EbayProductScout;
   private profitCalculator: ProfitCalculator;
   private scorer: OpportunityScorer;
   private opportunities: Map<string, ArbitrageOpportunity> = new Map();
@@ -41,12 +42,13 @@ export class AutonomousEngine {
   private lastScanTime: Date = new Date(0);
 
   constructor() {
-    this.ebayScout = new EbayScout();
+    this.ebayScout = new EbayProductScout();
     this.profitCalculator = new ProfitCalculator();
     this.scorer = new OpportunityScorer();
 
     // Register remote-only scouts (no physical pickup required)
-    this.registerScout('ebay', this.ebayScout);
+    // Ensure EbayProductScout implements OpportunityScout interface
+    this.registerScout('ebay', this.ebayScout as unknown as OpportunityScout);
     this.registerScout('amazon', new RainforestScout());
     this.registerScout('retail', new ECommerceScout());
     this.registerScout('webscraper', new WebScraperScout());
@@ -61,8 +63,8 @@ export class AutonomousEngine {
   /**
    * Register a new platform scout
    */
-  registerScout(name: string, scout: OpportunityScout | EbayScout): void {
-    this.scouts.set(name, scout as any);
+  registerScout(name: string, scout: OpportunityScout): void {
+    this.scouts.set(name, scout);
     console.log(`✅ Registered scout: ${name}`);
   }
 
@@ -107,6 +109,9 @@ export class AutonomousEngine {
           } else {
             // Other scouts use the OpportunityScout interface
             const scoutConfig = {
+              enabled: true,
+              scanInterval: config.scanInterval,
+              sources: [platformName],
               filters: {
                 minProfit: config.minProfit,
                 minROI: config.minROI,
@@ -183,32 +188,49 @@ export class AutonomousEngine {
       id: opp.id || String(Date.now()),
       title: opp.title,
       price: opp.buyPrice,
+      currency: opp.currency || 'USD',
       condition: opp.productInfo?.condition || 'new',
       itemWebUrl: opp.metadata?.buyUrl || '',
       imageUrl: opp.productInfo?.imageUrl || '',
       seller: {
         username: opp.buySource || source,
         feedbackScore: 1000,
-        positivePercentage: 99
+        feedbackPercentage: 99
       },
       shippingCost: 0,
-      location: 'USA'
+      location: 'USA',
+      categoryId: '',
     };
 
     // Create profit calculation
     const profit: ProfitCalculation = {
       sourcePrice: opp.buyPrice,
       targetPrice: opp.sellPrice,
+      sourceFees: {
+        platform: 'eBay',
+        listingFee: 0,
+        finalValueFee: 0,
+        paymentProcessingFee: 0,
+        totalFees: 0,
+      },
+      targetFees: {
+        platform: 'Amazon FBA',
+        listingFee: 0,
+        finalValueFee: 0,
+        paymentProcessingFee: 0,
+        totalFees: 0,
+      },
+      shippingCosts: {
+        inbound: 0,
+        outbound: 0,
+        packaging: 0,
+        total: 0,
+      },
+      totalCost: opp.buyPrice,
+      totalRevenue: opp.sellPrice,
       netProfit: opp.estimatedProfit,
       profitMargin: (opp.estimatedProfit / opp.sellPrice) * 100,
       roi: opp.roi,
-      fees: {
-        ebayFee: opp.sellPrice * 0.13,
-        paypalFee: opp.sellPrice * 0.03,
-        shippingCost: opp.metadata?.fees?.shipping || 8
-      },
-      totalCost: opp.buyPrice + (opp.metadata?.fees?.shipping || 8),
-      totalRevenue: opp.sellPrice
     };
 
     // Create score
@@ -216,7 +238,7 @@ export class AutonomousEngine {
       score: Math.min(opp.confidence || 75, 100),
       tier: opp.confidence > 85 ? 'excellent' : opp.confidence > 70 ? 'high' : 'medium',
       confidence: opp.confidence || 75,
-      reasoning: `Found on ${source}. ${opp.description}`,
+      reasoning: [`Found on ${source}. ${opp.description}`],
       greenFlags: opp.metadata?.greenFlags || [],
       redFlags: opp.metadata?.redFlags || []
     };
@@ -302,6 +324,7 @@ export class AutonomousEngine {
         foundAt: new Date(),
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
         status: 'pending',
+        source: 'ebay',
       };
 
       return opportunity;

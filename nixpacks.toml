@@ -3,7 +3,8 @@ nixPkgs = ["nodejs_18", "pnpm"]
 
 [phases.install]
 cmds = [
-  "pnpm install"
+  "pnpm install",
+  "npx playwright install --with-deps"
 ]
 
 [phases.build]

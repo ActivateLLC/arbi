@@ -49,7 +49,7 @@ if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && proce
  * Timeline: 2-3 days
  */
 
-interface MarketplaceListing {
+export interface MarketplaceListing {
   listingId: string;
   opportunityId: string;
   productTitle: string;
@@ -99,8 +99,9 @@ const orders: Map<string, BuyerOrder> = new Map();
 
 /**
  * Helper functions for database/memory abstraction
+ * EXPORTED for use by autonomousListing job
  */
-async function saveListing(listing: MarketplaceListing): Promise<void> {
+export async function saveListing(listing: MarketplaceListing): Promise<void> {
   if (db) {
     try {
       await db.create('MarketplaceListing', listing);
@@ -113,7 +114,7 @@ async function saveListing(listing: MarketplaceListing): Promise<void> {
   }
 }
 
-async function getListing(listingId: string): Promise<MarketplaceListing | null> {
+export async function getListing(listingId: string): Promise<MarketplaceListing | null> {
   if (db) {
     try {
       const result = await db.findOne('MarketplaceListing', { where: { listingId } });
@@ -126,7 +127,7 @@ async function getListing(listingId: string): Promise<MarketplaceListing | null>
   return listings.get(listingId) || null;
 }
 
-async function getListings(status?: string): Promise<MarketplaceListing[]> {
+export async function getListings(status?: string): Promise<MarketplaceListing[]> {
   if (db) {
     try {
       const where = status ? { status } : {};
@@ -147,7 +148,7 @@ async function getListings(status?: string): Promise<MarketplaceListing[]> {
   return filtered.sort((a, b) => b.listedAt.getTime() - a.listedAt.getTime());
 }
 
-async function updateListing(listingId: string, data: Partial<MarketplaceListing>): Promise<void> {
+export async function updateListing(listingId: string, data: Partial<MarketplaceListing>): Promise<void> {
   if (db) {
     try {
       await db.update('MarketplaceListing', data, { where: { listingId } });

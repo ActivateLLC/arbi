@@ -654,4 +654,4 @@ export class WebScraperScout implements OpportunityScout {
       await page.close();
       return products;
     } catch { return []; }
-  }
+  }}

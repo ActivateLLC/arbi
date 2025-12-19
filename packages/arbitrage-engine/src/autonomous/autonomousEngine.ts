@@ -53,7 +53,8 @@ export class AutonomousEngine {
     // eBay API/App ID logic removed. Only use web-scraper/automation for eBay if needed.
     this.registerScout('amazon', new RainforestScout());
     this.registerScout('retail', new ECommerceScout());
-    this.registerScout('webscraper', new WebScraperScout());
+    // WebScraperScout DISABLED - too slow and resource intensive
+    // this.registerScout('webscraper', new WebScraperScout());
     // Global import/export and dropshipping scouts
     this.registerScout('alibaba', new AlibabaScout());
     this.registerScout('taobao', new TaobaoScout());
@@ -67,6 +68,7 @@ export class AutonomousEngine {
 
     console.log('🤖 Autonomous Engine initialized with remote-only arbitrage');
     console.log(`   Platforms: ${Array.from(this.scouts.keys()).join(', ')}`);
+    console.log(`   ⚠️  WebScraper DISABLED to conserve resources`);
   }
 
   /**

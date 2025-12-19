@@ -9,14 +9,14 @@ const router = Router();
 // Global instance (in production, use Redis/database for state management)
 const engine = new AutonomousEngine();
 
-// Default configuration - AGGRESSIVE MODE (10k in 10 hours strategy)
+// Default configuration - CONSERVATION MODE (minimize API costs)
 const defaultConfig: AutonomousConfig = {
-  minScore: 75,
-  minROI: 25,
-  minProfit: 150,
+  minScore: 70,
+  minROI: 20,
+  minProfit: 100, // Lowered from 150 so opportunities actually get found
   maxPrice: 3000,
   categories: [],
-  scanInterval: 5,
+  scanInterval: 60, // Changed from 5 to 60 minutes - save API calls
   autoBuyEnabled: false,
   autoBuyScore: 90,
   dailyBudget: 0, // Zero Capital Mode (List first)

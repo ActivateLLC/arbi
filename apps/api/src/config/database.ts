@@ -13,20 +13,23 @@ export function getDatabase(): DatabaseManager {
   }
 
   // Check if database configuration is available
+  // IMPORTANT: Use private network (postgres.railway.internal) to avoid egress fees!
+  // Falls back to public endpoint for local development
   const dbConfig = {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
-    database: process.env.DB_NAME || 'arbi',
-    username: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
+    host: process.env.PGHOST || process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.PGPORT || process.env.DB_PORT || '5432'),
+    database: process.env.PGDATABASE || process.env.DB_NAME || 'arbi',
+    username: process.env.PGUSER || process.env.DB_USER || 'postgres',
+    password: process.env.PGPASSWORD || process.env.DB_PASSWORD || 'postgres',
     dialect: 'postgres' as const,
     logging: process.env.NODE_ENV === 'development',
-    ssl: process.env.DB_SSL === 'true'
+    ssl: false // Private network doesn't need SSL
   };
 
   console.log('🗄️  Initializing database connection...');
   console.log(`   Host: ${dbConfig.host}:${dbConfig.port}`);
   console.log(`   Database: ${dbConfig.database}`);
+  console.log(`   Network: ${dbConfig.host.includes('railway.internal') ? 'PRIVATE (free)' : 'PUBLIC (egress fees)'}`);
   console.log(`   SSL: ${dbConfig.ssl ? 'enabled' : 'disabled'}`);
 
   dbInstance = new DatabaseManager(dbConfig);

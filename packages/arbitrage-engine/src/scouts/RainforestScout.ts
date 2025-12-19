@@ -27,62 +27,116 @@ export class RainforestScout implements OpportunityScout {
     const opportunities: Opportunity[] = [];
 
     try {
-      console.log('🔍 Scanning Amazon via Rainforest API (CONSERVATION MODE)...');
+      console.log('🔍 Scanning Amazon Bestsellers - HIGH TICKET ITEMS ONLY...');
 
-      // REDUCED LIST - Only check high-ROI products to save API costs
-      // Each scan = 10 API calls instead of 60+
-      const asinsToCheck = [
-        // High-value Electronics ($500-$2000) - Best profit margins
-        'B09V3TGD7H', // MacBook Air M2 - $1199
-        'B0BTJDK29Z', // DJI Air 3 - $1099
-        'B0CHX7QBZP', // Canon EOS R50 - $679
-        'B0C1SLD8VK', // Sony A7 IV - $2498
-        'B0B7VL7PCM', // Samsung 65" OLED TV - $1997
+      // Use Rainforest API's BESTSELLERS endpoint - discovers what's actually selling
+      // Filter by Amazon category IDs that contain high-value items
+      const highTicketCategories = [
+        // Electronics & Computers (high-ticket)
+        { url: 'zgbs/electronics', name: 'Electronics' },
+        { url: 'zgbs/pc', name: 'Computers' },
+        { url: 'zgbs/photo', name: 'Camera & Photo' },
         
-        // Premium Home Appliances ($500+)
-        'B08P4CLL87', // iRobot Roomba j7+ - $799
-        'B0B4NBH3CF', // Breville Barista Express - $749
+        // Home & Appliances (high-ticket)
+        { url: 'zgbs/kitchen', name: 'Kitchen' },
+        { url: 'zgbs/home-garden', name: 'Home & Garden' },
+        { url: 'zgbs/furniture', name: 'Furniture' },
         
-        // Sports/Outdoor Premium ($500+)
-        'B0C5XTZLY6', // Garmin Fenix 7X - $899
-        'B09RMBK8G8', // Theragun Elite - $399
+        // Sports & Outdoors (high-ticket)
+        { url: 'zgbs/sporting-goods', name: 'Sports' },
+        { url: 'zgbs/outdoor-recreation', name: 'Outdoor' },
         
-        // Musical Instruments ($500+)
-        'B0C8XJQV8K', // Roland TD-17KV Drum Kit - $1699
+        // Luxury & High-Value
+        { url: 'zgbs/watches', name: 'Watches' },
+        { url: 'zgbs/jewelry', name: 'Jewelry' },
+        { url: 'zgbs/musical-instruments', name: 'Musical Instruments' },
+        
+        // Business & Industrial
+        { url: 'zgbs/industrial', name: 'Industrial & Scientific' },
+        { url: 'zgbs/office-products', name: 'Office' },
       ];
 
-      console.log(`   📊 Checking ${asinsToCheck.length} high-value ASINs (was 60+)`);
-```
+      // Minimum price thresholds - we only want HIGH TICKET items
+      const MIN_PRICE = 100; // Ignore anything under $100
+      const PREFERRED_MIN = 500; // Prefer items $500+
 
-      for (const asin of asinsToCheck) {
-        const amazonData = await this.getAmazonProductData(asin);
-
-        if (amazonData && amazonData.inStock) {
-          // Use retail markup model: assume can sell for 1.4-2.0x Amazon price on other platforms
-          // This is realistic for high-demand electronics/consumer goods
-          const estimatedMarketplacePrice = amazonData.price * 1.5; // Conservative 50% markup
-          const minProfitThreshold = amazonData.price * 0.25; // Need at least 25% profit margin
+      for (const category of highTicketCategories) {
+        try {
+          console.log(`   📊 Bestsellers: ${category.name}...`);
           
-          const opportunity = this.createOpportunity(amazonData, estimatedMarketplacePrice);
+          const products = await this.getBestsellers(category.url);
           
-          // Only include if profitable after fees
-          if (opportunity.estimatedProfit >= minProfitThreshold) {
-
-            if (this.meetsFilters(opportunity, config.filters)) {
-              opportunities.push(opportunity);
-              console.log(`✅ Found: ${opportunity.title} - $${opportunity.estimatedProfit.toFixed(2)} profit`);
+          // Filter for HIGH TICKET ONLY
+          const highTicketProducts = products.filter(p => p.price >= MIN_PRICE);
+          
+          for (const product of highTicketProducts.slice(0, 3)) {
+            // Higher markup for higher ticket items
+            const markupMultiplier = product.price >= 1000 ? 1.3 : 1.4; // 30-40% markup
+            const sellPrice = product.price * markupMultiplier;
+            const opportunity = this.createOpportunity(product, sellPrice);
+            
+            if (opportunity.estimatedProfit > 20) { // Min $20 profit
+              if (this.meetsFilters(opportunity, config.filters)) {
+                opportunities.push(opportunity);
+                console.log(`   ✅ $${product.price.toFixed(0)} ${category.name} → $${opportunity.estimatedProfit.toFixed(0)} profit`);
+              }
             }
           }
+        } catch (error) {
+          console.log(`   ⚠️  ${category.name} failed, continuing...`);
         }
-
-        // Rate limiting
-        await this.sleep(1000);
+        
+        await this.sleep(300);
       }
+
+      // Sort by profit - highest first
+      console.log(`   💰 Found ${opportunities.length} high-ticket opportunities`);
+      
     } catch (error) {
       console.error('Rainforest API scout error:', error);
     }
 
     return opportunities.sort((a, b) => b.estimatedProfit - a.estimatedProfit);
+  }
+
+  /**
+   * Get Amazon Bestsellers for a category - LIVE DATA
+   */
+  private async getBestsellers(categoryUrl: string): Promise<Array<{
+    asin: string;
+    title: string;
+    price: number;
+    category: string;
+    imageUrl: string;
+    rank: number;
+  }>> {
+    try {
+      const response = await axios.get('https://api.rainforestapi.com/request', {
+        params: {
+          api_key: this.apiKey,
+          type: 'bestsellers',
+          url: `https://www.amazon.com/${categoryUrl}`,
+          amazon_domain: 'amazon.com'
+        }
+      });
+
+      const results = response.data.bestsellers || [];
+      
+      return results
+        .filter((item: any) => item.price?.value && item.price.value > 0)
+        .slice(0, 20) // Top 20 bestsellers
+        .map((item: any, index: number) => ({
+          asin: item.asin || '',
+          title: item.title || '',
+          price: parseFloat(item.price?.value || '0'),
+          category: categoryUrl.replace('zgbs/', ''),
+          imageUrl: item.image || '',
+          rank: index + 1
+        }));
+    } catch (error: any) {
+      console.error(`Bestsellers error for "${categoryUrl}":`, error.message);
+      return [];
+    }
   }
 
   /**

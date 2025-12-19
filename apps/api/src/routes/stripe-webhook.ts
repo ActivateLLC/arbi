@@ -106,6 +106,37 @@ async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
     return;
   }
 
+  // STEP 1: Instant payout to bank (get cash NOW!)
+  const useInstantPayout = process.env.STRIPE_INSTANT_PAYOUT === 'true';
+
+  if (useInstantPayout && stripe) {
+    console.log('💸 Triggering instant payout to bank...');
+
+    try {
+      const payoutAmount = session.amount_total! - (session.amount_total! * 0.029 + 30); // Subtract Stripe fee
+
+      const payout = await stripe.payouts.create({
+        amount: Math.floor(payoutAmount),
+        currency: 'usd',
+        method: 'instant', // Instant payout (arrives in ~30 min)
+        description: `Auto-payout for order ${listingId}`
+      });
+
+      console.log('✅ Instant payout initiated!');
+      console.log(`   Amount: $${(payout.amount / 100).toFixed(2)}`);
+      console.log(`   Fee: ~$${(payout.amount * 0.01 / 100).toFixed(2)} (1%)`);
+      console.log(`   Arriving: ~30 minutes`);
+
+      // Wait a moment for payout to process
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+    } catch (error: any) {
+      console.error('⚠️  Instant payout failed:', error.message);
+      console.log('   Continuing with standard payout (2-7 days)');
+    }
+  }
+
+  // STEP 2: Trigger automatic Amazon purchase
   console.log('🤖 Triggering automatic Amazon purchase...');
   console.log(`   Product: ${listing.productTitle}`);
   console.log(`   Supplier: ${supplierUrl}`);

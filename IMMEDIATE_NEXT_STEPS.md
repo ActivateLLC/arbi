@@ -24,7 +24,7 @@ PGHOST: postgres.railway.internal (or external hostname)
 PGPORT: 5432
 PGDATABASE: railway
 PGUSER: postgres
-PGPASSWORD: kONropGSKnqUgBRMyoTAdbHLCiGNPOTG
+PGPASSWORD: <YOUR_DB_PASSWORD>
 ```
 
 ### Step 2: Add to Railway Environment Variables
@@ -36,13 +36,13 @@ DB_HOST=<your-postgres-host>
 DB_PORT=5432
 DB_NAME=railway
 DB_USER=postgres
-DB_PASSWORD=kONropGSKnqUgBRMyoTAdbHLCiGNPOTG
+DB_PASSWORD=<YOUR_DB_PASSWORD>
 DB_SSL=true
 ```
 
 **OR** if Railway provides `DATABASE_URL`:
 ```
-DATABASE_URL=postgresql://postgres:kONropGSKnqUgBRMyoTAdbHLCiGNPOTG@host:5432/railway?sslmode=require
+DATABASE_URL=postgresql://postgres:<YOUR_DB_PASSWORD>@host:5432/railway?sslmode=require
 ```
 
 ### Step 3: Redeploy API

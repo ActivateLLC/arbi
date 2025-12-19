@@ -38,3 +38,7 @@ logs/
 .cache/
 .eslintcache
 .npm
+
+# Secrets
+client_secret.json
+oauth2l

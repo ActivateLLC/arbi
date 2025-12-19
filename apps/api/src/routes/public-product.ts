@@ -146,7 +146,10 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
  * Generate beautiful product landing page HTML
  */
 function generateProductLandingPage(listing: any): string {
-  const imageUrl = listing.productImages[0] || 'https://via.placeholder.com/600x600?text=Product+Image';
+  // Use placeholder image if product images aren't available
+  const imageUrl = (listing.productImages && listing.productImages[0])
+    ? listing.productImages[0]
+    : `https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(listing.productTitle.substring(0, 30))}`;
 
   return `
 <!DOCTYPE html>
@@ -297,6 +300,31 @@ function generateProductLandingPage(listing: any): string {
             font-weight: 600;
             margin-bottom: 16px;
         }
+
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 16px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .footer p {
+            margin: 4px 0;
+            font-size: 13px;
+            color: #4a5568;
+        }
+
+        .footer p:first-child {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -330,10 +358,20 @@ function generateProductLandingPage(listing: any): string {
         </div>
     </div>
 
+    <footer class="footer">
+        <p>Digital Vending Machines</p>
+        <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
+    </footer>
+
     <script>
         // Use addEventListener instead of inline onclick for CSP compatibility
         document.addEventListener('DOMContentLoaded', function() {
             const button = document.getElementById('checkout-button');
+
+            if (!button) {
+                console.error('Checkout button not found');
+                return;
+            }
 
             button.addEventListener('click', async function() {
                 button.textContent = 'Processing...';
@@ -345,9 +383,19 @@ function generateProductLandingPage(listing: any): string {
                         headers: { 'Content-Type': 'application/json' }
                     });
 
-                    const { checkoutUrl } = await response.json();
-                    window.location.href = checkoutUrl;
+                    if (!response.ok) {
+                        throw new Error('Checkout failed');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.checkoutUrl) {
+                        window.location.href = data.checkoutUrl;
+                    } else {
+                        throw new Error('No checkout URL received');
+                    }
                 } catch (error) {
+                    console.error('Checkout error:', error);
                     alert('Error processing checkout. Please try again.');
                     button.textContent = '🛒 Buy Now - Secure Checkout';
                     button.disabled = false;

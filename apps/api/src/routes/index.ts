@@ -11,6 +11,7 @@ import payoutRoutes from './payout';
 import revenueRoutes from './revenue';
 import dropshippingWebhooks from './dropshipping-webhooks';
 import marketplaceRoutes from './marketplace';
+import stripeWebhook from './stripe-webhook';
 
 const router = Router();
 
@@ -43,4 +44,6 @@ router.use('/autonomous-control', autonomousControlRoutes);
 router.use('/revenue', revenueRoutes);
 // Dropshipping webhooks
 router.use('/webhooks/dropshipping', dropshippingWebhooks);
+// Stripe webhooks (auto-purchase automation)
+router.use('/stripe', stripeWebhook);
 export default router;

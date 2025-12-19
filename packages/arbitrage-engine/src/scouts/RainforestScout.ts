@@ -29,13 +29,64 @@ export class RainforestScout implements OpportunityScout {
     try {
       console.log('🔍 Scanning Amazon via Rainforest API...');
 
-      // Popular ASINs to monitor (these are examples - you'd have a larger list)
+      // Popular ASINs to monitor - expanded list for better coverage
       const asinsToCheck = [
-        'B0CHWRXH8B', // AirPods Pro
-        'B098RKWHHZ', // Nintendo Switch OLED
-        'B098FKXT8L', // Bose QC45
-        'B0B4D5L6KX', // Dyson V8
-        'B075SDMMMV'  // LEGO Millennium Falcon
+        // Electronics ($100-$500)
+        'B0CHWRXH8B', // AirPods Pro - $249
+        'B098RKWHHZ', // Nintendo Switch OLED - $349
+        'B098FKXT8L', // Bose QC45 - $329
+        'B0BSHF7WHW', // iPad 10th Gen - $349
+        'B0D1XD1ZV3', // Meta Quest 3 - $499
+        'B0BJKRR8YJ', // Kindle Scribe - $339
+        'B09V3KXJPB', // Samsung Galaxy Buds2 Pro - $229
+        'B0B3PSW2M2', // DJI Mini 3 Pro - $469
+        'B09JQMJHXY', // Ring Video Doorbell Pro 2 - $249
+        'B0BCQ54JJQ', // Fitbit Charge 6 - $159
+
+        // High-value Electronics ($500-$2000)
+        'B0B4D5L6KX', // Dyson V8 - $399
+        'B0BJKRR8YJ', // Sony WH-1000XM5 - $399
+        'B09V3TGD7H', // MacBook Air M2 - $1199
+        'B0BTJDK29Z', // DJI Air 3 - $1099
+        'B0CHX7QBZP', // Canon EOS R50 - $679
+        'B0BKVLG37Y', // GoPro HERO12 - $349
+        'B0C1SLD8VK', // Sony A7 IV - $2498
+        'B09SG5CQSL', // Nikon Z9 - $5496
+        'B0B7VL7PCM', // Samsung 65" OLED TV - $1997
+        'B0BXWVLVP4', // LG C3 77" OLED - $3796
+
+        // Home Appliances ($200-$1000)
+        'B08P4CLL87', // iRobot Roomba j7+ - $799
+        'B0C1NXGV14', // Ninja CREAMi - $199
+        'B07VK45ZGK', // Instant Pot Duo Crisp - $129
+        'B09QT7WSFJ', // Shark AV2501S AI Robot - $449
+        'B0B4NBH3CF', // Breville Barista Express - $749
+        'B09RV29M4N', // Vitamix E310 - $349
+        'B0CSK3D3DZ', // Ninja Foodie - $229
+
+        // Toys ($50-$200)
+        'B075SDMMMV', // LEGO Millennium Falcon - $849
+        'B0CTJPVHVV', // Hot Wheels Ultimate Garage - $149
+        'B0C1BTCBYT', // Barbie Dreamhouse - $199
+        'B0B4D5L6KX', // LEGO Technic Bugatti - $449
+        'B09SL65SB1', // Nerf Ultra Speed - $59
+        'B0B77TW861', // Play-Doh Kitchen - $79
+        'B0BXWVLVP5', // Fisher-Price Little People - $49
+
+        // Outdoor/Sports ($100-$500)
+        'B08MQKF5YY', // YETI Tundra 65 - $374
+        'B0851F915G', // Peloton Bike Basics - $1445
+        'B09P4CQD5Y', // Hydro Flask 40oz - $49
+        'B09RMJXX2K', // Coleman Tent 6-Person - $149
+        'B0C5XTZLY6', // Garmin Fenix 7X - $899
+        'B09RMBK8G8', // Theragun Elite - $399
+        'B0BTJDK29Y', // Ray-Ban Meta Smart Glasses - $299
+
+        // Musical Instruments ($300-$2000)
+        'B07W7VSQH6', // Fender Player Stratocaster - $849
+        'B07Z6Z3Z3Z', // Yamaha P-125 Digital Piano - $649
+        'B08X6JY7MJ', // Audio-Technica AT2020 - $99
+        'B0C8XJQV8K', // Roland TD-17KV Drum Kit - $1699
       ];
 
       for (const asin of asinsToCheck) {

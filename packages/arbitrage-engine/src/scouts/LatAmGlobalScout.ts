@@ -10,46 +10,10 @@ export class LatAmGlobalScout implements OpportunityScout {
   type = 'ecommerce_arbitrage' as const;
 
   async scan(config: ScoutConfig): Promise<Opportunity[]> {
+    // DEMO MODE DISABLED - Real LatAm marketplace API integration required
     // TODO: Integrate LatAm marketplace APIs or scraping logic
-    // For now, return a stubbed opportunity
-    return [
-      {
-        id: `latam-demo-${Date.now()}`,
-        type: 'ecommerce_arbitrage',
-        title: 'Smartphone (Unlocked)',
-        description: 'Buy from Mercado Libre (Argentina), sell in Mexico. High demand for unlocked smartphones.',
-        buyPrice: 180,
-        sellPrice: 320,
-        estimatedProfit: 110,
-        roi: 61.1,
-        buyCurrency: 'ARS',
-        sellCurrency: 'MXN',
-        confidence: 70,
-        riskLevel: 'medium',
-        volatility: 30,
-        discoveredAt: new Date(),
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        estimatedTimeToProfit: 9,
-        buySource: 'Mercado Libre AR',
-        sellSource: 'Mercado Libre MX',
-        sourceCountry: 'AR',
-        destinationCountry: 'MX',
-        shippingCost: 20,
-        customsDuty: 15,
-        customsInfo: 'Phones must be compatible with local networks and may require import permits.',
-        category: 'electronics',
-        productInfo: {
-          title: 'Unlocked Smartphone',
-          category: 'electronics',
-          condition: 'new',
-          imageUrl: '',
-        },
-        metadata: {
-          buyUrl: 'https://www.mercadolibre.com.ar/unlocked-smartphone',
-          sellUrl: 'https://www.mercadolibre.com.mx/unlocked-smartphone',
-          scanTime: new Date().toISOString(),
-        }
-      }
-    ];
+    // Configure LATAM_MARKETPLACE_API_KEYS in environment variables to enable
+    console.log('⚠️  LatAm scout disabled - no API keys configured');
+    return [];
   }
 }

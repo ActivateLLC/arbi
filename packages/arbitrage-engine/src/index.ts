@@ -47,7 +47,8 @@ export class ArbitrageEngine {
   }
 
   registerScout(scout: OpportunityScout): void {
-    this.scouts.set(scout.type, scout);
+    // Use scout name as key to allow multiple scouts of same type
+    this.scouts.set(scout.name, scout);
   }
 
   async findOpportunities(config: ScoutConfig): Promise<Opportunity[]> {

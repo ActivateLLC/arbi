@@ -13,6 +13,7 @@
 
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
+import { getListings } from './marketplace';
 
 const router = Router();
 
@@ -28,14 +29,8 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
 
   try {
-    // Fetch listing from marketplace API (use Railway internal URL or fallback to localhost for dev)
-    const apiUrl = process.env.RAILWAY_ENVIRONMENT
-      ? `http://localhost:${process.env.PORT || 3000}` // Same container in Railway
-      : 'http://localhost:3000';
-
-    const listingResponse = await fetch(`${apiUrl}/api/marketplace/listings`);
-    const { listings } = await listingResponse.json();
-
+    // Get listing directly from database (no HTTP fetch needed!)
+    const listings = await getListings('active');
     const listing = listings.find((l: any) => l.listingId === listingId);
 
     if (!listing || listing.status !== 'active') {
@@ -61,13 +56,8 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
   const { listingId } = req.params;
 
   try {
-    // Fetch listing (use Railway internal URL or fallback to localhost for dev)
-    const apiUrl = process.env.RAILWAY_ENVIRONMENT
-      ? `http://localhost:${process.env.PORT || 3000}` // Same container in Railway
-      : 'http://localhost:3000';
-
-    const listingResponse = await fetch(`${apiUrl}/api/marketplace/listings`);
-    const { listings } = await listingResponse.json();
+    // Get listing directly from database (no HTTP fetch needed!)
+    const listings = await getListings('active');
     const listing = listings.find((l: any) => l.listingId === listingId);
 
     if (!listing || listing.status !== 'active') {

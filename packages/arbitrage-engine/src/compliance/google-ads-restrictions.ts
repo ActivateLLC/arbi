@@ -5,7 +5,8 @@
  * This config ensures we only run automated ads in compliant regions
  */
 
-export interface AdComplianceRegion {
+] // ...existing code...
+];
   country: string;
   countryCode: string;
   allowAutomatedAds: boolean;

@@ -4,7 +4,7 @@
   "private": true,
   "description": "ARBI - Autonomous arbitrage backend API and CLI for zero-capital dropshipping across eBay, Amazon, and Walmart",
   "engines": {
-    "node": ">=18.0.0",
+    "node": ">=20.0.0",
     "pnpm": ">=8.0.0"
   },
   "scripts": {

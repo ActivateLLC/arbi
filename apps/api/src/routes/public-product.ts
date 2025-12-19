@@ -28,8 +28,12 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
 
   try {
-    // Fetch listing from marketplace API
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
+    // Fetch listing from marketplace API (use Railway internal URL or fallback to localhost for dev)
+    const apiUrl = process.env.RAILWAY_ENVIRONMENT
+      ? `http://localhost:${process.env.PORT || 3000}` // Same container in Railway
+      : 'http://localhost:3000';
+
+    const listingResponse = await fetch(`${apiUrl}/api/marketplace/listings`);
     const { listings } = await listingResponse.json();
 
     const listing = listings.find((l: any) => l.listingId === listingId);
@@ -57,8 +61,12 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
   const { listingId } = req.params;
 
   try {
-    // Fetch listing
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
+    // Fetch listing (use Railway internal URL or fallback to localhost for dev)
+    const apiUrl = process.env.RAILWAY_ENVIRONMENT
+      ? `http://localhost:${process.env.PORT || 3000}` // Same container in Railway
+      : 'http://localhost:3000';
+
+    const listingResponse = await fetch(`${apiUrl}/api/marketplace/listings`);
     const { listings } = await listingResponse.json();
     const listing = listings.find((l: any) => l.listingId === listingId);
 

@@ -20,7 +20,7 @@
     "@arbi/transaction": "workspace:*",
     "@arbi/voice-interface": "workspace:*",
     "@arbi/web-automation": "workspace:*",
-  "axios": "^1.6.5",
+    "axios": "^1.6.5",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
@@ -29,7 +29,8 @@
     "googleapis": "^167.0.0",
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
-  "stripe": "^20.0.0",
+    "playwright": "^1.40.1",
+    "stripe": "^20.0.0",
     "winston": "^3.11.0"
   },
   "devDependencies": {

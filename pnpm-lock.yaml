@@ -120,6 +120,9 @@ importers:
       morgan:
         specifier: ^1.10.0
         version: 1.10.1
+      playwright:
+        specifier: ^1.40.1
+        version: 1.57.0
       stripe:
         specifier: ^20.0.0
         version: 20.0.0(@types/node@20.19.27)

@@ -1,5 +1,6 @@
 import { AutonomousEngine, AutonomousConfig } from '@arbi/arbitrage-engine';
 import { AdCampaignManager } from '../services/adCampaigns';
+import { saveListing, MarketplaceListing } from '../routes/marketplace';
 
 class AutonomousListingJob {
   private running = false;
@@ -72,20 +73,33 @@ class AutonomousListingJob {
       // 2. Process each opportunity
       for (const opp of opportunities) {
         // TODO: Check if already listed
-        
-        // 3. Create Listing (Mock for now, should save to DB)
+
+        // 3. Create Listing and save to marketplace storage
         const listingId = `auto-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        const listing = {
+        const listing: MarketplaceListing = {
           listingId,
+          opportunityId: opp.id,
           productTitle: opp.product.title,
           productDescription: opp.product.description || opp.product.title,
           productImages: opp.product.images || [],
+          supplierPrice: opp.product.price,
+          supplierUrl: opp.metadata?.buyUrl || '',
+          supplierPlatform: opp.metadata?.dataSource || 'unknown',
           marketplacePrice: opp.profit.targetPrice,
-          estimatedProfit: opp.profit.netProfit
+          estimatedProfit: opp.profit.netProfit,
+          status: 'active',
+          listedAt: new Date(),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
         };
 
         console.log(`   📝 Creating listing for: ${listing.productTitle}`);
-        
+        console.log(`      Supplier: ${listing.supplierPlatform} - $${listing.supplierPrice}`);
+        console.log(`      Marketplace: $${listing.marketplacePrice} (profit: $${listing.estimatedProfit})`);
+
+        // Save to shared marketplace storage
+        await saveListing(listing);
+        console.log(`      ✅ Saved to marketplace storage`);
+
         // 4. Create Ad Campaigns
         await this.adManager.createCampaignsForListing(listing);
       }

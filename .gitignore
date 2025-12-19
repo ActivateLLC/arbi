@@ -19,6 +19,10 @@ out/
 .env.*
 !.env.example
 
+# Google OAuth credentials (NEVER commit these!)
+client_secret.json
+generate-refresh-token.js
+
 # IDE
 .idea/
 .vscode/*

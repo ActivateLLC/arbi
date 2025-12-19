@@ -54,12 +54,12 @@ Just removed ECommerceScout and FacebookMarketplaceScout - **ONLY REAL SCOUTS NO
 DB_HOST=<your-railway-postgres-host>
 DB_PORT=5432
 DB_USER=postgres
-DB_PASSWORD=kONropGSKnqUgBRMyoTAdbHLCiGNPOTG
+DB_PASSWORD=<YOUR_DB_PASSWORD>
 DB_NAME=arbi
 DB_SSL=true
 
 # Railway might auto-provide these - map them:
-DATABASE_URL=postgresql://postgres:kONropGSKnqUgBRMyoTAdbHLCiGNPOTG@host:5432/arbi
+DATABASE_URL=postgresql://postgres:<YOUR_DB_PASSWORD>@host:5432/arbi
 ```
 
 **2. Enable Turbo Mode:**

@@ -28,6 +28,20 @@ app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Debug endpoint - check configured keys (without exposing values)
+app.get('/debug/config', (req, res) => {
+  res.json({
+    environment: process.env.NODE_ENV,
+    port: process.env.PORT,
+    keys: {
+      stripe: !!process.env.STRIPE_SECRET_KEY,
+      rainforest: !!process.env.RAINFOREST_API_KEY,
+      googleAds: !!process.env.GOOGLE_ADS_CLIENT_ID,
+      database: !!process.env.DATABASE_URL,
+    }
+  });
+});
+
 // Direct checkout links (shortest path: ad → checkout)
 app.use('/', directCheckoutRoutes);
 

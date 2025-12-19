@@ -166,46 +166,14 @@ export class RainforestScout implements OpportunityScout {
   }
 
   /**
-   * Get eBay comparison price (uses free eBay API)
+   * Get eBay comparison price
+   * Note: eBay pricing handled by WebScraperScout (Playwright) - not via API
    */
   private async getEbayComparisonPrice(productTitle: string): Promise<number | null> {
-    try {
-      // Use eBay Finding API (no auth required for basic searches)
-      const url = 'https://svcs.ebay.com/services/search/FindingService/v1';
-
-      const params = {
-        'OPERATION-NAME': 'findCompletedItems',
-        'SERVICE-VERSION': '1.0.0',
-        // 'SECURITY-APPNAME': process.env.EBAY_APP_ID || 'DEMO-APP-ID', // eBay API/App ID logic removed
-        'RESPONSE-DATA-FORMAT': 'JSON',
-        'keywords': productTitle.substring(0, 50), // Limit search query length
-        'itemFilter(0).name': 'SoldItemsOnly',
-        'itemFilter(0).value': 'true',
-        'paginationInput.entriesPerPage': '10'
-      };
-
-      const response = await axios.get(url, { params });
-
-      const items = response.data?.findCompletedItemsResponse?.[0]?.searchResult?.[0]?.item || [];
-
-      if (items.length === 0) return null;
-
-      const soldPrices = items
-        .map((item: any) => parseFloat(item.sellingStatus?.[0]?.currentPrice?.[0]?.__value__ || '0'))
-        .filter((price: number) => price > 0);
-
-      if (soldPrices.length === 0) return null;
-
-      // Return median price
-      soldPrices.sort((a: number, b: number) => a - b);
-      const mid = Math.floor(soldPrices.length / 2);
-      return soldPrices.length % 2 === 0
-        ? (soldPrices[mid - 1] + soldPrices[mid]) / 2
-        : soldPrices[mid];
-    } catch (error) {
-      console.error('Error getting eBay comparison:', error);
-      return null;
-    }
+    // eBay scraping is handled separately by WebScraperScout with Playwright
+    // This scout focuses only on Amazon data via Rainforest API
+    // Return null to skip eBay comparison in this scout
+    return null;
   }
 
   private createOpportunity(

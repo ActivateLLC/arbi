@@ -1,9 +1,9 @@
 [build]
 builder = "nixpacks"
-buildCommand = "pnpm install --no-frozen-lockfile && npx playwright install --with-deps && pnpm build"
+buildCommand = "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright pnpm install --no-frozen-lockfile && PLAYWRIGHT_BROWSERS_PATH=/app/.playwright npx playwright install --with-deps && pnpm build"
 
 [deploy]
-startCommand = "pnpm --filter @arbi/api start"
+startCommand = "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright PLAYWRIGHT_BROWSERS_PATH=/app/.playwright pnpm --filter @arbi/api start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 healthcheckPath = "/health"

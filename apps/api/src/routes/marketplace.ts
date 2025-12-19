@@ -268,6 +268,8 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
           console.log(`   ✅ Uploaded: ${result.secure_url}`);
         } catch (error: any) {
           console.error(`   ❌ Failed to upload ${imageUrl}:`, error.message);
+          console.log(`   📋 Falling back to original URL: ${imageUrl}`);
+          cloudinaryUrls.push(imageUrl); // Fallback to Amazon URL if Cloudinary fails
         }
       }
     }

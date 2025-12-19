@@ -2,7 +2,6 @@ import { Router, Request, Response, NextFunction } from 'express';
 import {
   ArbitrageEngine,
   WebScraperScout,
-  EbayScout,
   RainforestScout,
   type UserBudgetSettings,
   type ScoutConfig
@@ -31,15 +30,7 @@ if (process.env.RAINFOREST_API_KEY) {
   console.log('⚠️  RAINFOREST_API_KEY not set - Amazon data unavailable');
 }
 
-// eBay Scout
-if (process.env.EBAY_APP_ID) {
-  const ebayScout = new EbayScout(process.env.EBAY_APP_ID);
-  arbitrageEngine.registerScout(ebayScout);
-  console.log('✅ eBay Scout enabled (eBay API)');
-  scoutsEnabled++;
-} else {
-  console.log('⚠️  EBAY_APP_ID not set - eBay data unavailable');
-}
+// eBay API/App ID logic removed. Use only web-scraper/automation for eBay if needed.
 
 // Web Scraper Scout (Playwright/Puppeteer - always enabled for production)
 // Scrapes Target, Walmart, Best Buy, and other retailers
@@ -52,11 +43,11 @@ if (scoutsEnabled === 0) {
   console.error('❌ NO DATA SOURCES ENABLED! System will return empty results.');
   console.error('   Configure at least one:');
   console.error('   - RAINFOREST_API_KEY (Amazon data)');
-  console.error('   - EBAY_APP_ID (eBay data)');
+  // console.error('   - EBAY_APP_ID (eBay data)');
   console.error('   - Web Scraper is always enabled');
 } else {
   console.log(`✅ PRODUCTION MODE: ${scoutsEnabled} real data scout(s) enabled`);
-  console.log('   Mock data DISABLED - only real opportunities will be returned');
+  // console.log('   Mock data DISABLED - only real opportunities will be returned');
 }
 
 // Default user settings (in production, this would come from database)

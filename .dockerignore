@@ -1,2 +1,37 @@
-# Force Railway to use Nixpacks by not having Dockerfile in root
-# Original Dockerfile moved to Dockerfile.backup
+
+
+# Ignore node_modules and build artifacts
+node_modules
+**/node_modules
+pnpm-lock.yaml
+npm-debug.log
+
+dist
+.next
+.turbo
+coverage
+logs
+.env
+.env.*
+.DS_Store
+*.log
+*.sqlite
+*.sqlite3
+.idea
+.vscode
+*.swp
+*.swo
+*.bak
+*.tmp
+*.cache
+*.local
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+Arbi/
+Arbi/google-cloud-sdk
+apps/dashboard
+apps/web
+node_modules
+.idea

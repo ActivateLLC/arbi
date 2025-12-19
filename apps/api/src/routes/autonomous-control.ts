@@ -7,9 +7,9 @@
  * - Automatic execution (when configured)
  */
 
-import { Router, Request, Response } from 'express';
+import { Router } from 'express';
 import { autonomousListing } from '../jobs/autonomousListing';
-
+import type { Request, Response } from 'express';
 const router = Router();
 
 /**
@@ -49,10 +49,11 @@ router.post('/start-listing', async (req: Request, res: Response) => {
       },
       status: autonomousListing.getStatus(),
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     res.status(500).json({
       success: false,
-      error: error.message,
+      error: errorMessage,
     });
   }
 });

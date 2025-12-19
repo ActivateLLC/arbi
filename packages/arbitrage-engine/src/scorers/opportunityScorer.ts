@@ -1,5 +1,5 @@
 import { ProfitCalculation } from '../calculators/profitCalculator';
-import { EbayProduct } from '../scouts/ebayScout';
+// import { EbayProduct } from '../scouts/ebayScout'; // eBay API removed
 
 export interface OpportunityScore {
   score: number; // 0-100

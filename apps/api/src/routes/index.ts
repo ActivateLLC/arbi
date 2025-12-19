@@ -8,6 +8,8 @@ import arbitrageRoutes from './arbitrage';
 import autonomousRoutes from './autonomous';
 import autonomousControlRoutes from './autonomous-control';
 import payoutRoutes from './payout';
+import revenueRoutes from './revenue';
+import dropshippingWebhooks from './dropshipping-webhooks';
 import marketplaceRoutes from './marketplace';
 
 const router = Router();
@@ -33,10 +35,12 @@ router.use('/marketplace', marketplaceRoutes);
 // Arbitrage routes
 router.use('/arbitrage', arbitrageRoutes);
 
-// Autonomous arbitrage routes (NEW - Multi-category intelligent scanning)
+// Autonomous arbitrage routes
 router.use('/autonomous', autonomousRoutes);
-
-// Autonomous control routes (START/STOP autonomous operations)
+// Autonomous control routes
 router.use('/autonomous-control', autonomousControlRoutes);
-
+// Revenue tracking routes
+router.use('/revenue', revenueRoutes);
+// Dropshipping webhooks
+router.use('/webhooks/dropshipping', dropshippingWebhooks);
 export default router;

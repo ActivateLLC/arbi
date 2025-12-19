@@ -1,15 +1,25 @@
-import { EbayProductScout, EbayProduct } from '../scouts/EbayProductScout';
+import { RainforestScout } from '../scouts/RainforestScout';
+import { ECommerceScout } from '../scouts/ECommerceScout';
+import { WebScraperScout } from '../scouts/WebScraperScout';
+import { AlibabaScout } from '../scouts/AlibabaScout';
+import { TaobaoScout } from '../scouts/TaobaoScout';
+import { DHGateScout } from '../scouts/DHGateScout';
+import { EUGlobalScout } from '../scouts/EUGlobalScout';
+import { USGlobalScout } from '../scouts/USGlobalScout';
+import { LatAmGlobalScout } from '../scouts/LatAmGlobalScout';
 import { ProfitCalculator, ProfitCalculation } from '../calculators/profitCalculator';
 import { OpportunityScorer, OpportunityScore } from '../scorers/opportunityScorer';
+import type { OpportunityScout, GenericProduct } from '../types';
 
 export interface ArbitrageOpportunity {
   id: string;
-  product: EbayProduct;
+  product: GenericProduct;
   profit: ProfitCalculation;
   score: OpportunityScore;
   foundAt: Date;
   expiresAt: Date;
   status: 'pending' | 'alerted' | 'purchased' | 'expired';
+  source: string; // Track which platform found this
 }
 
 export interface AutonomousConfig {
@@ -22,10 +32,13 @@ export interface AutonomousConfig {
   autoBuyEnabled: boolean; // Enable autonomous purchases (default: false)
   autoBuyScore: number; // Score threshold for auto-buy (default: 90)
   dailyBudget: number; // Maximum daily spending (default: 500)
+  enabledPlatforms: string[]; // Which platforms to scan (default: all)
+  remoteOnly: boolean; // Only scan platforms that ship (no local pickup) (default: true)
 }
 
 export class AutonomousEngine {
-  private ebayScout: EbayProductScout;
+  private scouts: Map<string, OpportunityScout> = new Map();
+  // eBay API/App ID logic removed. Use only web-scraper/automation for eBay if needed.
   private profitCalculator: ProfitCalculator;
   private scorer: OpportunityScorer;
   private opportunities: Map<string, ArbitrageOpportunity> = new Map();
@@ -33,134 +46,127 @@ export class AutonomousEngine {
   private lastScanTime: Date = new Date(0);
 
   constructor() {
-    this.ebayScout = new EbayProductScout();
     this.profitCalculator = new ProfitCalculator();
     this.scorer = new OpportunityScorer();
+
+    // Register remote-only scouts (no physical pickup required)
+    // eBay API/App ID logic removed. Only use web-scraper/automation for eBay if needed.
+    this.registerScout('amazon', new RainforestScout());
+    this.registerScout('retail', new ECommerceScout());
+    this.registerScout('webscraper', new WebScraperScout());
+    // Global import/export and dropshipping scouts
+    this.registerScout('alibaba', new AlibabaScout());
+    this.registerScout('taobao', new TaobaoScout());
+    this.registerScout('dhgate', new DHGateScout());
+    this.registerScout('eu', new EUGlobalScout());
+    this.registerScout('us', new USGlobalScout());
+    this.registerScout('latam', new LatAmGlobalScout());
+
+    // Note: Facebook Marketplace NOT registered - requires local pickup/physical handling
+    // If you want local arbitrage, you'd need to add FacebookMarketplaceScout here
+
+    console.log('🤖 Autonomous Engine initialized with remote-only arbitrage');
+    console.log(`   Platforms: ${Array.from(this.scouts.keys()).join(', ')}`);
   }
 
   /**
-   * Run autonomous scan for opportunities
+   * Register a new platform scout
+   */
+  registerScout(name: string, scout: OpportunityScout): void {
+    this.scouts.set(name, scout);
+    console.log(`✅ Registered scout: ${name}`);
+  }
+
+  /**
+   * Get list of enabled platforms
+   */
+  getEnabledPlatforms(): string[] {
+    return Array.from(this.scouts.keys());
+  }
+
+  /**
+   * Run autonomous scan for opportunities across ALL platforms
    * This should be called by a cron job / background worker
+    import { GoogleTrendsService } from '../services/GoogleTrendsService';
    */
   async runScan(config: AutonomousConfig): Promise<ArbitrageOpportunity[]> {
-    console.log('🤖 Starting autonomous arbitrage scan...');
+    console.log('🤖 Starting multi-platform autonomous arbitrage scan...');
+    console.log(`   Platforms: ${this.getEnabledPlatforms().join(', ')}`);
 
     const startTime = Date.now();
     const foundOpportunities: ArbitrageOpportunity[] = [];
 
-    try {
-      // 1. Scan eBay for products
-      const products = await this.scanEbayForDeals(config);
-      console.log(`📦 Found ${products.length} potential products on eBay`);
+    const platformScans = Array.from(this.scouts.entries()).map(async ([platformName, scout]) => {
+      try {
+        const scoutConfig = {
+          enabled: true,
+          scanInterval: config.scanInterval,
+          sources: [platformName],
+          filters: {
+            minProfit: config.minProfit,
+            minROI: config.minROI,
+            maxPrice: config.maxPrice,
+            categories: config.categories
+          }
+        };
 
-      // 2. Analyze each product
-      for (const product of products) {
-        const opportunity = await this.analyzeProduct(product, config);
+        const scoutOpportunities = await scout.scan(scoutConfig);
+        console.log(`📦 ${platformName}: Found ${scoutOpportunities.length} opportunities`);
 
-        if (opportunity && opportunity.score.score >= config.minScore) {
-          foundOpportunities.push(opportunity);
-          this.opportunities.set(opportunity.id, opportunity);
-
-          console.log(
-            `✅ Found opportunity: ${product.title.substring(0, 50)}... Score: ${opportunity.score.score}`
-          );
-
-          // 3. Take autonomous action based on score
-          await this.handleOpportunity(opportunity, config);
-        }
+        // Convert scout opportunities to ArbitrageOpportunity format
+        return scoutOpportunities.map(opp => this.convertToArbitrageOpportunity(opp, platformName));
+      } catch (error) {
+        console.error(`❌ ${platformName} scan failed:`, error);
+        return [];
       }
+    });
 
-      const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    // Wait for all platform scans to complete
+    const allPlatformResults = await Promise.all(platformScans);
+
+    // Flatten results from all platforms
+    const allOpportunities = allPlatformResults.flat();
+
+    // Process each opportunity
+    for (const opportunity of allOpportunities) {
+      foundOpportunities.push(opportunity);
+      this.opportunities.set(opportunity.id, opportunity);
+
       console.log(
-        `🎯 Scan complete! Found ${foundOpportunities.length} opportunities in ${duration}s`
+        `✅ [${opportunity.source.toUpperCase()}] ${opportunity.product.title?.substring(0, 40) ?? ''}... Score: ${opportunity.score.score} | Profit: $${opportunity.profit.netProfit.toFixed(2)}`
       );
-
-      this.lastScanTime = new Date();
-
-      return foundOpportunities;
-    } catch (error) {
-      console.error('❌ Error during autonomous scan:', error);
-      return foundOpportunities;
+      await this.handleOpportunity(opportunity, config);
     }
+
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log('\n' + '='.repeat(60));
+    console.log(`🎯 Multi-platform scan complete in ${duration}s`);
+    console.log(`   Total opportunities found: ${foundOpportunities.length}`);
+
+    // Show breakdown by platform
+    const byPlatform = foundOpportunities.reduce((acc, opp) => {
+      acc[opp.source] = (acc[opp.source] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    Object.entries(byPlatform).forEach(([platform, count]) => {
+      console.log(`   ${platform}: ${count} opportunities`);
+    });
+    console.log('='.repeat(60) + '\n');
+
+    this.lastScanTime = new Date();
+    return foundOpportunities;
   }
 
   /**
    * Scan eBay for potential deals
    */
-  private async scanEbayForDeals(config: AutonomousConfig): Promise<EbayProduct[]> {
-    const allProducts: EbayProduct[] = [];
-
-    // Scan trending deals
-    const trendingDeals = await this.ebayScout.getTrendingDeals();
-    allProducts.push(...trendingDeals);
-
-    // Scan specific categories if configured
-    if (config.categories && config.categories.length > 0) {
-      for (const categoryId of config.categories) {
-        const categoryProducts = await this.ebayScout.searchProducts({
-          categoryId,
-          maxPrice: config.maxPrice,
-          limit: 50,
-        });
-        allProducts.push(...categoryProducts);
-      }
-    }
-
-    // Filter by price range
-    return allProducts.filter((p) => p.price > 5 && p.price <= config.maxPrice);
-  }
+  // Removed scanEbayForDeals
 
   /**
    * Analyze a product for arbitrage potential
    */
-  private async analyzeProduct(
-    product: EbayProduct,
-    config: AutonomousConfig
-  ): Promise<ArbitrageOpportunity | null> {
-    try {
-      // For now, estimate Amazon price (in real version, we'd scrape/API)
-      // Mock: Assume Amazon price is 1.5x eBay price (conservative estimate)
-      const estimatedAmazonPrice = product.price * 1.5;
-
-      // Calculate profit
-      const profit = this.profitCalculator.calculateEbayToAmazon(
-        product.price,
-        estimatedAmazonPrice,
-        {
-          ebayShipping: product.shippingCost || 0,
-          itemWeight: 1, // Estimate
-          itemSize: 'small',
-        }
-      );
-
-      // Check if meets minimum thresholds
-      if (profit.roi < config.minROI || profit.netProfit < config.minProfit) {
-        return null;
-      }
-
-      // Score the opportunity
-      const score = this.scorer.scoreOpportunity(product, profit, {
-        amazonCompetitors: 5, // Estimate
-        amazonRank: 50000, // Estimate
-      });
-
-      // Create opportunity record
-      const opportunity: ArbitrageOpportunity = {
-        id: `opp_${Date.now()}_${product.id}`,
-        product,
-        profit,
-        score,
-        foundAt: new Date(),
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
-        status: 'pending',
-      };
-
-      return opportunity;
-    } catch (error) {
-      console.error('Error analyzing product:', error);
-      return null;
-    }
-  }
+  // Removed analyzeProduct
 
   /**
    * Handle opportunity based on score and configuration

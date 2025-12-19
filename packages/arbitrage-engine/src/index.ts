@@ -41,9 +41,9 @@ export class ArbitrageEngine {
     this.riskManager = new RiskManager();
     this.opportunityCache = new SimpleCache<Opportunity[]>(5 * 60 * 1000); // 5 minute cache
 
-  // Register default scouts
-  this.registerScout(new ECommerceScout());
-  this.registerScout(new FacebookMarketplaceScout());
+  // NO DEFAULT SCOUTS - Only real scouts registered via API routes
+  // ECommerceScout and FacebookMarketplaceScout generate MOCK DATA
+  // Real scouts: RainforestScout, WebScraperScout, SlickdealsScout
   }
 
   registerScout(scout: OpportunityScout): void {

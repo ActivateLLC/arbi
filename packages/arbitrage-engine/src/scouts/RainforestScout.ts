@@ -155,7 +155,7 @@ export class RainforestScout implements OpportunityScout {
           rank: index + 1
         }));
     } catch (error: any) {
-      console.error(`Search error for "${categoryUrl}":`, error.message);
+      console.error(`Amazon search error for "${categoryUrl}":`, error.message);
       return [];
     }
   }

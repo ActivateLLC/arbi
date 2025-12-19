@@ -113,7 +113,6 @@ export class WebScraperScout implements OpportunityScout {
 
     try {
       const page = await this.context!.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       
       await page.goto('https://www.walmart.com/browse/home/clearance/4044_1072864_1230526', {
         waitUntil: 'domcontentloaded',
@@ -154,7 +153,6 @@ export class WebScraperScout implements OpportunityScout {
 
     try {
       const page = await this.context!.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       
       await page.goto('https://www.bestbuy.com/site/searchpage.jsp?st=open+box', {
         waitUntil: 'domcontentloaded',
@@ -194,7 +192,6 @@ export class WebScraperScout implements OpportunityScout {
 
     try {
       const page = await this.context!.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       
       await page.goto('https://www.homedepot.com/b/Clearance/N-5yc1vZ1z1b7pk', {
         waitUntil: 'domcontentloaded',
@@ -235,7 +232,6 @@ export class WebScraperScout implements OpportunityScout {
 
     try {
       const page = await this.context!.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       
       await page.goto('https://www.kohls.com/catalog/clearance.jsp', {
         waitUntil: 'domcontentloaded',
@@ -277,9 +273,6 @@ export class WebScraperScout implements OpportunityScout {
 
     try {
       const page = await this.context!.newPage();
-
-      // Set user agent to avoid bot detection
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
       // Example: Target clearance electronics
       await page.goto('https://www.target.com/c/clearance/-/N-5q0f4', {
@@ -327,7 +320,6 @@ export class WebScraperScout implements OpportunityScout {
 
     try {
       const page = await this.context!.newPage();
-      await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
       // eBay completed listings search (shows sold prices)
       const searchUrl = `https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(productName)}&LH_Complete=1&LH_Sold=1`;

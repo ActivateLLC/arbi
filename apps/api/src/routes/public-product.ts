@@ -319,7 +319,7 @@ function generateProductLandingPage(listing: any): string {
                 <li>Ships Within 1-2 Business Days</li>
             </ul>
 
-            <button class="buy-button" onclick="checkout()">
+            <button class="buy-button" id="checkout-button">
                 🛒 Buy Now - Secure Checkout
             </button>
 
@@ -331,25 +331,29 @@ function generateProductLandingPage(listing: any): string {
     </div>
 
     <script>
-        async function checkout() {
-            const button = document.querySelector('.buy-button');
-            button.textContent = 'Processing...';
-            button.disabled = true;
+        // Use addEventListener instead of inline onclick for CSP compatibility
+        document.addEventListener('DOMContentLoaded', function() {
+            const button = document.getElementById('checkout-button');
 
-            try {
-                const response = await fetch('/product/${listing.listingId}/checkout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
+            button.addEventListener('click', async function() {
+                button.textContent = 'Processing...';
+                button.disabled = true;
 
-                const { checkoutUrl } = await response.json();
-                window.location.href = checkoutUrl;
-            } catch (error) {
-                alert('Error processing checkout. Please try again.');
-                button.textContent = '🛒 Buy Now - Secure Checkout';
-                button.disabled = false;
-            }
-        }
+                try {
+                    const response = await fetch('/product/${listing.listingId}/checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    });
+
+                    const { checkoutUrl } = await response.json();
+                    window.location.href = checkoutUrl;
+                } catch (error) {
+                    alert('Error processing checkout. Please try again.');
+                    button.textContent = '🛒 Buy Now - Secure Checkout';
+                    button.disabled = false;
+                }
+            });
+        });
     </script>
 </body>
 </html>

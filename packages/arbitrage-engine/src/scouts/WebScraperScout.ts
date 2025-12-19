@@ -1,4 +1,4 @@
-import { chromium, Browser } from 'playwright';
+import { chromium, Browser, BrowserContext } from 'playwright';
 import type { Opportunity, OpportunityScout, ScoutConfig } from '../types';
 
 /**
@@ -11,6 +11,9 @@ export class WebScraperScout implements OpportunityScout {
   name = 'Web Scraper Scout';
   type = 'ecommerce_arbitrage' as const;
   private browser: Browser | null = null;
+  private context: BrowserContext | null = null;
+  
+  private readonly USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
   async scan(config: ScoutConfig): Promise<Opportunity[]> {
     const opportunities: Opportunity[] = [];
@@ -18,8 +21,11 @@ export class WebScraperScout implements OpportunityScout {
     try {
       console.log('🌍 Starting GLOBAL multi-retailer web scraping...');
 
-      // Initialize browser (headless mode for speed)
+      // Initialize browser with user agent set at context level
       this.browser = await chromium.launch({ headless: true });
+      this.context = await this.browser.newContext({
+        userAgent: this.USER_AGENT
+      });
 
       // VERIFIED GLOBAL RETAILERS - Only trusted, reputable sites enabled
       const retailers = [
@@ -87,9 +93,11 @@ export class WebScraperScout implements OpportunityScout {
         await this.sleep(2000);
       }
 
-      await this.browser.close();
+      if (this.context) await this.context.close();
+      if (this.browser) await this.browser.close();
     } catch (error) {
       console.error('Global scraping error:', error);
+      if (this.context) await this.context.close();
       if (this.browser) await this.browser.close();
     }
 
@@ -104,7 +112,7 @@ export class WebScraperScout implements OpportunityScout {
     const deals: Array<{ title: string; price: number; url: string }> = [];
 
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       
       await page.goto('https://www.walmart.com/browse/home/clearance/4044_1072864_1230526', {
@@ -145,7 +153,7 @@ export class WebScraperScout implements OpportunityScout {
     const deals: Array<{ title: string; price: number; url: string }> = [];
 
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       
       await page.goto('https://www.bestbuy.com/site/searchpage.jsp?st=open+box', {
@@ -185,7 +193,7 @@ export class WebScraperScout implements OpportunityScout {
     const deals: Array<{ title: string; price: number; url: string }> = [];
 
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       
       await page.goto('https://www.homedepot.com/b/Clearance/N-5yc1vZ1z1b7pk', {
@@ -226,7 +234,7 @@ export class WebScraperScout implements OpportunityScout {
     const deals: Array<{ title: string; price: number; url: string }> = [];
 
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
       
       await page.goto('https://www.kohls.com/catalog/clearance.jsp', {
@@ -268,7 +276,7 @@ export class WebScraperScout implements OpportunityScout {
     const deals: Array<{ title: string; price: number; url: string }> = [];
 
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
 
       // Set user agent to avoid bot detection
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
@@ -318,7 +326,7 @@ export class WebScraperScout implements OpportunityScout {
     if (!this.browser) return null;
 
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36');
 
       // eBay completed listings search (shows sold prices)
@@ -403,7 +411,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeMediaMarkt(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.mediamarkt.de/de/campaign/angebote', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('article', (els) => 
@@ -421,7 +429,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeArgos(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.argos.co.uk/browse/technology/clearance/c:30134/', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('[data-test="component-product-card"]', (els) =>
@@ -439,7 +447,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeZalando(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.zalando.com/sale/', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('article', (els) =>
@@ -457,7 +465,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeSaturn(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.saturn.de/de/campaign/angebote', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('article', (els) =>
@@ -476,7 +484,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeRakuten(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.rakuten.co.jp/category/sale/', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('.search-result-item', (els) =>
@@ -494,7 +502,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeLazada(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.lazada.sg/shop-flash-deals/', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('[data-item-id]', (els) =>
@@ -512,7 +520,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeShopee(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://shopee.sg/flash_deals', { timeout: 15000 });
       await page.waitForTimeout(3000);
       const products = await page.$$eval('[data-sqe="item"]', (els) =>
@@ -530,7 +538,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeJD(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.jd.com/', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('.gl-item', (els) =>
@@ -549,7 +557,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeMercadoLibre(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://ofertas.mercadolibre.com.mx/', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('.promotion-item', (els) =>
@@ -567,7 +575,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeB2W(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.americanas.com.br/hotsite/ofertas-do-dia', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('[data-testid="product-card"]', (els) =>
@@ -586,7 +594,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeJBHiFi(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.jbhifi.com.au/collections/deals', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('.product-tile', (els) =>
@@ -604,7 +612,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeHarveyNorman(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.harveynorman.com.au/clearance', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('.product-item', (els) =>
@@ -623,7 +631,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeNoon(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.noon.com/uae-en/deals/', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('[data-qa="product-card"]', (els) =>
@@ -641,7 +649,7 @@ export class WebScraperScout implements OpportunityScout {
   private async scrapeJumbo(): Promise<Array<{ title: string; price: number; url: string }>> {
     if (!this.browser) return [];
     try {
-      const page = await this.browser.newPage();
+      const page = await this.context!.newPage();
       await page.goto('https://www.jumbo.ae/offers/', { timeout: 15000 });
       await page.waitForTimeout(2000);
       const products = await page.$$eval('.product-item', (els) =>

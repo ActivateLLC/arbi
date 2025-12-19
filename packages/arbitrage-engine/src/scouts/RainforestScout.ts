@@ -100,7 +100,7 @@ export class RainforestScout implements OpportunityScout {
   }
 
   /**
-   * Get Amazon Bestsellers for a category - LIVE DATA
+   * Get Amazon products via search - more reliable than bestsellers endpoint
    */
   private async getBestsellers(categoryUrl: string): Promise<Array<{
     asin: string;
@@ -111,20 +111,41 @@ export class RainforestScout implements OpportunityScout {
     rank: number;
   }>> {
     try {
+      // Use search endpoint instead of bestsellers - more reliable
+      // Map category to search terms
+      const categorySearchTerms: Record<string, string> = {
+        'zgbs/electronics': 'electronics bestseller',
+        'zgbs/pc': 'laptop computer',
+        'zgbs/photo': 'camera photography',
+        'zgbs/kitchen': 'kitchen appliances',
+        'zgbs/home-garden': 'home garden furniture',
+        'zgbs/furniture': 'furniture living room',
+        'zgbs/sporting-goods': 'sports equipment',
+        'zgbs/outdoor-recreation': 'outdoor camping gear',
+        'zgbs/watches': 'luxury watches',
+        'zgbs/jewelry': 'jewelry gold silver',
+        'zgbs/musical-instruments': 'musical instruments',
+        'zgbs/industrial': 'industrial tools equipment',
+        'zgbs/office-products': 'office supplies'
+      };
+
+      const searchTerm = categorySearchTerms[categoryUrl] || categoryUrl.replace('zgbs/', '');
+
       const response = await axios.get('https://api.rainforestapi.com/request', {
         params: {
           api_key: this.apiKey,
-          type: 'bestsellers',
-          url: `https://www.amazon.com/${categoryUrl}`,
-          amazon_domain: 'amazon.com'
+          type: 'search',
+          amazon_domain: 'amazon.com',
+          search_term: searchTerm,
+          sort_by: 'featured' // Gets popular/bestselling items
         }
       });
 
-      const results = response.data.bestsellers || [];
+      const results = response.data.search_results || [];
       
       return results
         .filter((item: any) => item.price?.value && item.price.value > 0)
-        .slice(0, 20) // Top 20 bestsellers
+        .slice(0, 20)
         .map((item: any, index: number) => ({
           asin: item.asin || '',
           title: item.title || '',
@@ -134,7 +155,7 @@ export class RainforestScout implements OpportunityScout {
           rank: index + 1
         }));
     } catch (error: any) {
-      console.error(`Bestsellers error for "${categoryUrl}":`, error.message);
+      console.error(`Search error for "${categoryUrl}":`, error.message);
       return [];
     }
   }

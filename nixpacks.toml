@@ -17,3 +17,4 @@ cmd = "pnpm --filter @arbi/api start"
 
 [variables]
 NODE_ENV = "production"
+PLAYWRIGHT_BROWSERS_PATH = "/app/.playwright"

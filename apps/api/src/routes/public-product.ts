@@ -68,9 +68,16 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
       return res.status(500).json({ error: 'Payment processing not configured' });
     }
 
-    // Create Stripe Checkout Session
+    // Create Stripe Checkout Session with multiple payment options
+    // Including Klarna, Afterpay, Affirm for "Buy Now, Pay Later"
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: [
+        'card',              // Credit/debit cards
+        'klarna',            // Klarna - Pay in 4 installments
+        'afterpay_clearpay', // Afterpay - Pay in 4
+        'affirm',            // Affirm - Monthly financing
+        'cashapp',           // Cash App Pay
+      ],
       line_items: [
         {
           price_data: {

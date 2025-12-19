@@ -1,13 +1,14 @@
 [build]
-builder = "railpack"
-buildCommand = "pnpm install && pnpm build"
+builder = "nixpacks"
+buildCommand = "pnpm install --no-frozen-lockfile && npx playwright install --with-deps && pnpm build"
 
 [deploy]
-startCommand = "pnpm start"
+startCommand = "pnpm --filter @arbi/api start"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 healthcheckPath = "/health"
 healthcheckTimeout = 100
 
 [environments.production]
-rootDirectory = "apps/api"
+# rootDirectory must be root (.) to access workspace packages
+# rootDirectory = "apps/api"

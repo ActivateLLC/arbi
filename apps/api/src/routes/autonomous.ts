@@ -9,14 +9,15 @@ const router = Router();
 // Global instance (in production, use Redis/database for state management)
 const engine = new AutonomousEngine();
 
-// Default configuration - CONSERVATION MODE (minimize API costs)
+// Default configuration - NO ARTIFICIAL LIMITS
+// Any product, any price range - let the profit margin decide
 const defaultConfig: AutonomousConfig = {
-  minScore: 70,
-  minROI: 20,
-  minProfit: 100, // Lowered from 150 so opportunities actually get found
-  maxPrice: 3000,
+  minScore: 50, // Low threshold - any decent opportunity
+  minROI: 10, // 10% ROI is still profitable
+  minProfit: 5, // Even $5 profit counts - volume matters
+  maxPrice: 100000, // No ceiling - yachts included
   categories: [],
-  scanInterval: 60, // Changed from 5 to 60 minutes - save API calls
+  scanInterval: 30, // Every 30 mins - balanced
   autoBuyEnabled: false,
   autoBuyScore: 90,
   dailyBudget: 0, // Zero Capital Mode (List first)

@@ -6,12 +6,24 @@ import morgan from 'morgan';
 
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { initializeDatabase } from './config/database';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
 
 // Initialize logger
 const logger = createLogger();
+
+// Initialize database connection
+(async () => {
+  try {
+    await initializeDatabase();
+    logger.info('✅ Database initialized - listings will persist across restarts');
+  } catch (error: any) {
+    logger.warn('⚠️  Database initialization failed - using in-memory storage');
+    logger.warn(`   Error: ${error.message}`);
+  }
+})();
 
 // Create Express app
 const app = express();

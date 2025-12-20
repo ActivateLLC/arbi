@@ -14,17 +14,6 @@ import directCheckoutRoutes from './routes/direct-checkout';
 // Initialize logger
 const logger = createLogger();
 
-// Initialize database connection
-(async () => {
-  try {
-    await initializeDatabase();
-    logger.info('✅ Database initialized - listings will persist across restarts');
-  } catch (error: any) {
-    logger.warn('⚠️  Database initialization failed - using in-memory storage');
-    logger.warn(`   Error: ${error.message}`);
-  }
-})();
-
 // Create Express app
 const app = express();
 const port = process.env.PORT || 3000;
@@ -66,23 +55,41 @@ app.use('/api', apiRoutes);
 // Error handling middleware
 app.use(errorHandler);
 
-// Start server - bind to 0.0.0.0 for Railway/Docker compatibility
-const server = app.listen(port, '0.0.0.0', () => {
-  logger.info(`✅ Server running on http://0.0.0.0:${port}`);
-  logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
-  logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
-});
-
-// Handle server errors
-server.on('error', (error: NodeJS.ErrnoException) => {
-  if (error.code === 'EADDRINUSE') {
-    logger.error(`❌ Port ${port} is already in use`);
-  } else if (error.code === 'EACCES') {
-    logger.error(`❌ Port ${port} requires elevated privileges`);
-  } else {
-    logger.error(`❌ Server error:`, error);
+// Initialize database BEFORE starting server
+async function startServer() {
+  // Initialize database connection first
+  try {
+    await initializeDatabase();
+    logger.info('✅ Database initialized - listings will persist across restarts');
+  } catch (error: any) {
+    logger.warn('⚠️  Database initialization failed - using in-memory storage');
+    logger.warn(`   Error: ${error.message}`);
   }
+
+  // Start server - bind to 0.0.0.0 for Railway/Docker compatibility
+  const server = app.listen(port, '0.0.0.0', () => {
+    logger.info(`✅ Server running on http://0.0.0.0:${port}`);
+    logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
+    logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+  });
+
+  // Handle server errors
+  server.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      logger.error(`❌ Port ${port} is already in use`);
+    } else if (error.code === 'EACCES') {
+      logger.error(`❌ Port ${port} requires elevated privileges`);
+    } else {
+      logger.error(`❌ Server error:`, error);
+    }
+    process.exit(1);
+  });
+}
+
+// Start the server
+startServer().catch((error) => {
+  logger.error('❌ Failed to start server:', error);
   process.exit(1);
 });
 

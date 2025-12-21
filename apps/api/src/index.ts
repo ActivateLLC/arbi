@@ -14,6 +14,8 @@ import directCheckoutRoutes from './routes/direct-checkout';
 // Initialize logger
 const logger = createLogger();
 
+// Database persistence test: Products should survive this deployment
+
 // Create Express app
 const app = express();
 const port = process.env.PORT || 3000;

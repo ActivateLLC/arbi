@@ -146,10 +146,18 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
  * Generate beautiful product landing page HTML
  */
 function generateProductLandingPage(listing: any): string {
-  // Use placeholder image if product images aren't available
-  const imageUrl = (listing.productImages && listing.productImages[0])
-    ? listing.productImages[0]
-    : `https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(listing.productTitle.substring(0, 30))}`;
+  // Use Cloudinary images if available, otherwise use professional placeholder
+  // Amazon images get blocked by browsers, so we avoid them
+  let imageUrl = `https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(listing.productTitle.substring(0, 30))}`;
+
+  if (listing.productImages && listing.productImages[0]) {
+    const img = listing.productImages[0];
+    // Only use Cloudinary images - they work reliably
+    if (img.includes('cloudinary.com') || img.includes('placehold.co')) {
+      imageUrl = img;
+    }
+    // Skip Amazon images - they get blocked by tracking prevention
+  }
 
   return `
 <!DOCTYPE html>

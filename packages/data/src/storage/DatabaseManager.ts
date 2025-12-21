@@ -107,13 +107,21 @@ export class DatabaseManager {
           type = DataTypes.STRING;
       }
 
+      // Handle special default values
+      let defaultValue = def.defaultValue;
+      if (defaultValue === 'uuid_generate_v4()' || defaultValue === 'UUIDV4') {
+        defaultValue = DataTypes.UUIDV4;
+      } else if (defaultValue === 'NOW()' || defaultValue === 'CURRENT_TIMESTAMP') {
+        defaultValue = DataTypes.NOW;
+      }
+
       attributes[name] = {
         type,
         primaryKey: def.primaryKey || false,
         autoIncrement: def.autoIncrement || false,
         allowNull: def.allowNull !== undefined ? def.allowNull : true,
         unique: def.unique || false,
-        defaultValue: def.defaultValue,
+        defaultValue: defaultValue,
         references: def.references,
       };
     }

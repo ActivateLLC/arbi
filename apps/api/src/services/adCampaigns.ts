@@ -153,16 +153,17 @@ export class AdCampaignManager {
       // Step 1: Create Campaign Budget
       const budgetResourceName = `customers/${process.env.GOOGLE_ADS_CUSTOMER_ID}/campaignBudgets/${Date.now()}`;
 
-      const budget = await customer.campaignBudgets.create({
+      const budgetResults = await customer.campaignBudgets.create([{
         name: `Budget - ${campaignData.name}`,
         amount_micros: campaignData.budget.dailyBudget * 1000000, // $10 = 10,000,000 micros
         delivery_method: enums.BudgetDeliveryMethod.STANDARD,
-      });
+      }]);
+      const budget = budgetResults[0];
 
       console.log(`   ✅ Budget created: ${budget.resource_name}`);
 
       // Step 2: Create Campaign
-      const campaign = await customer.campaigns.create({
+      const campaignResults = await customer.campaigns.create([{
         name: campaignData.name,
         campaign_budget: budget.resource_name,
         status: enums.CampaignStatus.ENABLED,
@@ -174,23 +175,25 @@ export class AdCampaignManager {
           target_search_network: true,
           target_content_network: false,
         },
-      });
+      }]);
+      const campaign = campaignResults[0];
 
       console.log(`   ✅ Campaign created: ${campaign.resource_name}`);
 
       // Step 3: Create Ad Group
-      const adGroup = await customer.adGroups.create({
+      const adGroupResults = await customer.adGroups.create([{
         name: `AdGroup - ${listing.productTitle.substring(0, 30)}`,
         campaign: campaign.resource_name,
         status: enums.AdGroupStatus.ENABLED,
         type: enums.AdGroupType.SEARCH_STANDARD,
         cpc_bid_micros: campaignData.bidding.maxCpc * 1000000, // $0.50 = 500,000 micros
-      });
+      }]);
+      const adGroup = adGroupResults[0];
 
       console.log(`   ✅ Ad Group created: ${adGroup.resource_name}`);
 
       // Step 4: Create Responsive Search Ad
-      const ad = await customer.adGroupAds.create({
+      const adResults = await customer.adGroupAds.create([{
         ad_group: adGroup.resource_name,
         status: enums.AdGroupAdStatus.ENABLED,
         ad: {
@@ -209,7 +212,8 @@ export class AdCampaignManager {
             path2: 'deals',
           },
         },
-      });
+      }]);
+      const ad = adResults[0];
 
       console.log(`   ✅ Ad created: ${ad.resource_name}`);
       console.log(`   🎯 Campaign LIVE: ${campaignData.name}`);

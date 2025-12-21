@@ -18,8 +18,26 @@ const logger = createLogger();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Apply middleware
-app.use(helmet());
+// Apply middleware with relaxed CSP for product pages
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for product pages
+      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https://m.media-amazon.com",
+        "https://res.cloudinary.com",
+        "https://placehold.co"
+      ],
+      connectSrc: ["'self'", "https://checkout.stripe.com"],
+      frameSrc: ["'self'", "https://checkout.stripe.com", "https://js.stripe.com"],
+      formAction: ["'self'", "https://checkout.stripe.com"]
+    }
+  }
+}));
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));

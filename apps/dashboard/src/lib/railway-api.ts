@@ -3,7 +3,7 @@
  * Connects the dashboard to the backend running on Railway
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3000';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.arbi.creai.dev';
 
 export interface OpportunityFilter {
   minScore?: number;
@@ -295,3 +295,102 @@ export function getTierBadgeColor(tier: string): string {
       return 'bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200';
   }
 }
+
+/**
+ * Marketplace API for managing product listings
+ */
+export interface MarketplaceListing {
+  listingId: string;
+  opportunityId: string;
+  productTitle: string;
+  productDescription: string;
+  productImages: string[];
+  supplierPrice: number;
+  supplierUrl: string;
+  supplierPlatform: string;
+  marketplacePrice: number;
+  estimatedProfit: number;
+  status: 'active' | 'sold' | 'expired';
+  listedAt: string;
+  expiresAt: string;
+}
+
+export interface MarketplaceListingsResponse {
+  total: number;
+  listings: MarketplaceListing[];
+}
+
+export const marketplaceApi = {
+  /**
+   * Get all marketplace listings
+   */
+  async getListings(): Promise<MarketplaceListingsResponse> {
+    const response = await fetch(`${API_URL}/api/marketplace/listings`);
+    if (!response.ok) {
+      throw new Error(`Failed to get listings: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Create a new marketplace listing
+   */
+  async createListing(data: {
+    opportunityId: string;
+    productTitle: string;
+    productDescription?: string;
+    productImageUrls?: string[];
+    supplierPrice: number;
+    supplierUrl: string;
+    supplierPlatform: string;
+    markupPercentage?: number;
+  }): Promise<{
+    success: boolean;
+    listing: MarketplaceListing;
+    message: string;
+    marketingInfo: {
+      publicUrl: string;
+      imageUrls: string[];
+    };
+  }> {
+    const response = await fetch(`${API_URL}/api/marketplace/list`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!response.ok) {
+      throw new Error(`Failed to create listing: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Get buyer orders
+   */
+  async getOrders(): Promise<{
+    total: number;
+    orders: any[];
+  }> {
+    const response = await fetch(`${API_URL}/api/marketplace/orders`);
+    if (!response.ok) {
+      throw new Error(`Failed to get orders: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  /**
+   * Get analytics
+   */
+  async getAnalytics(): Promise<{
+    totalRevenue: number;
+    totalOrders: number;
+    totalProfit: number;
+    activeListings: number;
+  }> {
+    const response = await fetch(`${API_URL}/api/marketplace/analytics`);
+    if (!response.ok) {
+      throw new Error(`Failed to get analytics: ${response.statusText}`);
+    }
+    return response.json();
+  },
+};

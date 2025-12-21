@@ -38,7 +38,20 @@ app.use(helmet({
     }
   }
 }));
-app.use(cors());
+// Configure CORS to allow frontend domains
+app.use(cors({
+  origin: [
+    'https://www.arbi.creai.dev',
+    'https://arbi.creai.dev',
+    'https://dashboard.arbi.creai.dev',
+    'http://localhost:3000',
+    'http://localhost:5173', // Vite dev server
+    'http://localhost:5174',  // Dashboard dev server
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use(morgan('dev'));
 

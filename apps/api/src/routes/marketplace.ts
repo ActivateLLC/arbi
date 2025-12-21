@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
 import { getDatabase } from '../config/database';
 import { adCampaignManager } from '../services/adCampaigns';
+import { imageScraper } from '../services/imageScraper';
 
 const router = Router();
 
@@ -252,12 +253,29 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
     const marketplacePrice = supplierPrice * (1 + markupPercentage / 100);
     const estimatedProfit = marketplacePrice - supplierPrice;
 
-    // Upload product images to Cloudinary for hosting
-    const cloudinaryUrls: string[] = [];
-    if (productImageUrls && productImageUrls.length > 0) {
-      console.log(`📸 Uploading ${productImageUrls.length} product images to Cloudinary...`);
+    // Step 1: Try to scrape real product images from multiple sources
+    let sourceImageUrls = productImageUrls || [];
 
-      for (const imageUrl of productImageUrls) {
+    // If no images provided or Cloudinary upload fails, scrape from web
+    if (!sourceImageUrls || sourceImageUrls.length === 0) {
+      console.log(`🔍 No images provided - scraping from web sources...`);
+      try {
+        const scraped = await imageScraper.scrapeProductImages(productTitle);
+        if (scraped.images.length > 0) {
+          sourceImageUrls = scraped.images.map(img => img.url);
+          console.log(`   ✅ Scraped ${scraped.images.length} images from ${scraped.sources.join(', ')}`);
+        }
+      } catch (error: any) {
+        console.error(`   ⚠️  Image scraping failed: ${error.message}`);
+      }
+    }
+
+    // Step 2: Upload product images to Cloudinary for hosting
+    const cloudinaryUrls: string[] = [];
+    if (sourceImageUrls && sourceImageUrls.length > 0) {
+      console.log(`📸 Uploading ${sourceImageUrls.length} product images to Cloudinary...`);
+
+      for (const imageUrl of sourceImageUrls) {
         try {
           const result = await cloudinary.uploader.upload(imageUrl, {
             folder: 'arbi-marketplace',
@@ -268,10 +286,38 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
           console.log(`   ✅ Uploaded: ${result.secure_url}`);
         } catch (error: any) {
           console.error(`   ❌ Failed to upload ${imageUrl}:`, error.message);
-          console.log(`   📋 Falling back to original URL: ${imageUrl}`);
-          cloudinaryUrls.push(imageUrl); // Fallback to Amazon URL if Cloudinary fails
+          // Don't use Amazon URLs - they get blocked by tracking prevention
+          // Instead, try to scrape alternative images if this was the only source
+          if (sourceImageUrls.length === 1 && !imageUrl.includes('cloudinary.com')) {
+            console.log(`   🔍 Attempting to find alternative images...`);
+            try {
+              const scraped = await imageScraper.scrapeProductImages(productTitle, undefined, 3);
+              for (const scrapedImg of scraped.images) {
+                try {
+                  const altResult = await cloudinary.uploader.upload(scrapedImg.url, {
+                    folder: 'arbi-marketplace',
+                    public_id: `${opportunityId}-${Date.now()}`,
+                    resource_type: 'image'
+                  });
+                  cloudinaryUrls.push(altResult.secure_url);
+                  console.log(`   ✅ Uploaded alternative: ${altResult.secure_url}`);
+                  break; // Stop after first successful upload
+                } catch (altError) {
+                  continue; // Try next image
+                }
+              }
+            } catch (scrapeError) {
+              console.error(`   ⚠️  Alternative image search failed`);
+            }
+          }
         }
       }
+    }
+
+    // Step 3: If still no images, use placeholder
+    if (cloudinaryUrls.length === 0) {
+      console.log(`   📋 No images available - using professional placeholder`);
+      cloudinaryUrls.push(`https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(productTitle.substring(0, 30))}`);
     }
 
     // Create marketplace listing
@@ -317,7 +363,7 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       console.error(`   ⚠️  Ad campaign creation failed: ${error.message}`);
     }
 
-    const baseUrl = process.env.PUBLIC_URL || 'https://arbi.creai.dev';
+    const baseUrl = process.env.PUBLIC_URL || 'https://www.arbi.creai.dev';
     const publicUrl = `${baseUrl}/product/${listingId}`;
 
     res.status(201).json({

@@ -11,27 +11,49 @@ export class DatabaseManager {
   private models: Map<string, ModelCtor<Model>>;
 
   constructor(config: DatabaseConfig) {
-    this.sequelize = new Sequelize({
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      username: config.username,
-      password: config.password,
-      dialect: config.dialect || 'postgres',
-      logging: config.logging ? console.log : false,
-      dialectOptions: {
-        ssl: config.ssl ? {
-          require: true,
-          rejectUnauthorized: false,
-        } : undefined,
-      },
-      pool: {
-        max: config.pool?.max || 5,
-        min: config.pool?.min || 0,
-        idle: config.pool?.idle || 10000,
-        acquire: config.pool?.acquire || 30000,
-      },
-    });
+    // Support both URL-based and config-based initialization
+    if ((config as any).url) {
+      // URL-based connection (e.g., from Railway's DATABASE_URL)
+      this.sequelize = new Sequelize((config as any).url, {
+        dialect: config.dialect || 'postgres',
+        logging: config.logging ? console.log : false,
+        dialectOptions: (config as any).dialectOptions || {
+          ssl: config.ssl ? {
+            require: true,
+            rejectUnauthorized: false,
+          } : undefined,
+        },
+        pool: {
+          max: config.pool?.max || 5,
+          min: config.pool?.min || 0,
+          idle: config.pool?.idle || 10000,
+          acquire: config.pool?.acquire || 30000,
+        },
+      });
+    } else {
+      // Individual config parameters
+      this.sequelize = new Sequelize({
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        username: config.username,
+        password: config.password,
+        dialect: config.dialect || 'postgres',
+        logging: config.logging ? console.log : false,
+        dialectOptions: {
+          ssl: config.ssl ? {
+            require: true,
+            rejectUnauthorized: false,
+          } : undefined,
+        },
+        pool: {
+          max: config.pool?.max || 5,
+          min: config.pool?.min || 0,
+          idle: config.pool?.idle || 10000,
+          acquire: config.pool?.acquire || 30000,
+        },
+      });
+    }
 
     this.models = new Map();
   }

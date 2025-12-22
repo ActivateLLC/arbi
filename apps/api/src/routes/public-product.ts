@@ -86,6 +86,16 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
     console.error('❌ Error loading product page:', error);
     console.error('   Message:', error.message);
     console.error('   Stack:', error.stack);
+
+    // If debug query param is present, return error details
+    if (req.query.debug === 'true') {
+      return res.status(500).json({
+        error: error.message,
+        stack: error.stack,
+        listingId: req.params.listingId
+      });
+    }
+
     res.status(500).send(generate404Page());
   }
 });

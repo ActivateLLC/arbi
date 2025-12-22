@@ -374,16 +374,42 @@ function generateProductLandingPage(listing: any): string {
             box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
         }
 
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: #667eea;
+            font-size: 13px;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
         .footer p {
             margin: 4px 0;
             font-size: 13px;
             color: #4a5568;
         }
 
-        .footer p:first-child {
+        .footer-company {
             font-weight: 600;
             color: #667eea;
             font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .footer-links {
+                gap: 10px;
+                font-size: 12px;
+            }
         }
     </style>
 </head>
@@ -419,7 +445,14 @@ function generateProductLandingPage(listing: any): string {
     </div>
 
     <footer class="footer">
-        <p>Digital Vending Machines</p>
+        <div class="footer-links">
+            <a href="/contact">Contact</a>
+            <a href="/returns">Returns & Refunds</a>
+            <a href="/shipping">Shipping</a>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+        </div>
+        <p class="footer-company">Arbi Inc. - support@arbi.creai.dev</p>
         <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
     </footer>
 
@@ -533,6 +566,44 @@ function generateSuccessPage(session: any): string {
             margin-bottom: 8px;
             color: #2c5282;
         }
+
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 16px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: #48bb78;
+            font-size: 13px;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
+        .footer p {
+            margin: 4px 0;
+            font-size: 13px;
+            color: #4a5568;
+        }
     </style>
 </head>
 <body>
@@ -560,6 +631,17 @@ function generateSuccessPage(session: any): string {
             Charged: $${(session.amount_total! / 100).toFixed(2)}
         </div>
     </div>
+
+    <footer class="footer">
+        <div class="footer-links">
+            <a href="/contact">Contact</a>
+            <a href="/returns">Returns & Refunds</a>
+            <a href="/shipping">Shipping</a>
+            <a href="/privacy">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+        </div>
+        <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
+    </footer>
 </body>
 </html>
   `;

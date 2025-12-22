@@ -129,7 +129,7 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
               description: listing.productDescription,
               images: listing.productImages.length > 0 ? listing.productImages : undefined,
             },
-            unit_amount: Math.round(listing.marketplacePrice * 100), // Convert to cents
+            unit_amount: Math.round(Number(listing.marketplacePrice) * 100), // Convert to cents
           },
           quantity: 1,
         },

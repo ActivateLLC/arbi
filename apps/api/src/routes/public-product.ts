@@ -386,7 +386,7 @@ function generateProductLandingPage(listing: any): string {
         <div class="info-section">
             <span class="badge">⚡ Limited Offer</span>
             <h1>${listing.productTitle}</h1>
-            <div class="price">$${listing.marketplacePrice.toFixed(2)}</div>
+            <div class="price">$${Number(listing.marketplacePrice).toFixed(2)}</div>
 
             <p class="description">${listing.productDescription}</p>
 

@@ -10,6 +10,7 @@ import { initializeDatabase } from './config/database';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
+import complianceRoutes from './routes/compliance';
 
 // Initialize logger
 const logger = createLogger();
@@ -75,6 +76,9 @@ app.get('/debug/config', (req, res) => {
     }
   });
 });
+
+// Compliance pages (required for Google Ads)
+app.use('/', complianceRoutes);
 
 // Direct checkout links (shortest path: ad → checkout)
 app.use('/', directCheckoutRoutes);

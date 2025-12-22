@@ -22,6 +22,27 @@ const stripe = process.env.STRIPE_SECRET_KEY
   : null;
 
 /**
+ * DEBUG: Test endpoint to see what's in the database
+ */
+router.get('/product-debug/:listingId', async (req: Request, res: Response) => {
+  const { listingId } = req.params;
+  try {
+    const listings = await getListings('active');
+    const listing = listings.find((l: any) => l.listingId === listingId);
+
+    res.json({
+      requested: listingId,
+      totalListings: listings.length,
+      found: !!listing,
+      allListingIds: listings.map((l: any) => l.listingId),
+      listing: listing || null
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
+/**
  * GET /product/:listingId
  * Public product landing page (HTML)
  */

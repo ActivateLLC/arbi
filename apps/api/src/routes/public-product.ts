@@ -30,26 +30,40 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
   console.log(`\n🌐 Product page requested: ${listingId}`);
 
   try {
+    console.log(`   Step 1: Calling getListings('active')...`);
     // Get listing directly from database (no HTTP fetch needed!)
     const listings = await getListings('active');
-    console.log(`   Retrieved ${listings.length} active listings`);
+    console.log(`   Step 2: Retrieved ${listings.length} active listings`);
 
+    if (listings.length > 0) {
+      console.log(`   First listing ID: ${listings[0].listingId}`);
+    }
+
+    console.log(`   Step 3: Searching for listingId: ${listingId}`);
     const listing = listings.find((l: any) => l.listingId === listingId);
-    console.log(`   Found listing: ${listing ? 'YES' : 'NO'}`);
+    console.log(`   Step 4: Found listing: ${listing ? 'YES' : 'NO'}`);
+
+    if (listing) {
+      console.log(`   Listing details: ${JSON.stringify({ listingId: listing.listingId, title: listing.productTitle, status: listing.status })}`);
+    }
 
     if (!listing || listing.status !== 'active') {
       console.log(`   ❌ Listing not found or inactive - returning 404`);
       return res.status(404).send(generate404Page());
     }
 
-    console.log(`   ✅ Generating page for: ${listing.productTitle}`);
+    console.log(`   Step 5: Generating page for: ${listing.productTitle}`);
     // Generate beautiful landing page HTML
     const html = generateProductLandingPage(listing);
+    console.log(`   Step 6: HTML generated successfully (${html.length} chars)`);
 
     res.setHeader('Content-Type', 'text/html');
+    console.log(`   Step 7: Sending response...`);
     res.send(html);
+    console.log(`   ✅ Page sent successfully`);
   } catch (error: any) {
     console.error('❌ Error loading product page:', error);
+    console.error('   Message:', error.message);
     console.error('   Stack:', error.stack);
     res.status(500).send(generate404Page());
   }

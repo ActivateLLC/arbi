@@ -286,7 +286,7 @@ router.get('/terms', (req: Request, res: Response) => {
 });
 
 /**
- * Generate page template
+ * Generate page template with cyber theme
  */
 function generatePage(title: string, content: string): string {
   return `
@@ -296,64 +296,98 @@ function generatePage(title: string, content: string): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${title} - ${BUSINESS_INFO.name}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@100..900&family=Syne:wght@400..800&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f7fafc;
-            color: #2d3748;
+            font-family: 'Exo 2', sans-serif;
+            background: linear-gradient(135deg, #050505 0%, #0a0a0a 100%);
+            color: #e2e8f0;
             line-height: 1.6;
-            padding-bottom: 100px;
+            padding-bottom: 120px;
+            min-height: 100vh;
+            position: relative;
+        }
+
+        /* Noise overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 1;
+            opacity: 0.03;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
         }
 
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #00f0ff 0%, #7000ff 100%);
             color: white;
-            padding: 30px 20px;
+            padding: 40px 20px;
             text-align: center;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 20px rgba(0, 240, 255, 0.3);
+            position: relative;
+            z-index: 2;
+            clip-path: polygon(
+                0 0, 100% 0,
+                100% calc(100% - 20px), calc(100% - 20px) 100%,
+                0 100%
+            );
         }
 
         .header h1 {
-            font-size: 24px;
-            font-weight: 700;
+            font-family: 'Syne', sans-serif;
+            font-size: 32px;
+            font-weight: 800;
+            text-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
         }
 
         .container {
             max-width: 900px;
             margin: 40px auto;
-            background: white;
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(10px);
             padding: 40px;
             border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            position: relative;
+            z-index: 2;
         }
 
         h1 {
-            font-size: 32px;
-            color: #1a202c;
+            font-family: 'Syne', sans-serif;
+            font-size: 36px;
+            color: #00f0ff;
             margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #00f0ff;
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
         }
 
         h2 {
+            font-family: 'Syne', sans-serif;
             font-size: 24px;
-            color: #2d3748;
+            color: #00f0ff;
             margin-top: 30px;
             margin-bottom: 15px;
         }
 
         h3 {
+            font-family: 'Syne', sans-serif;
             font-size: 18px;
-            color: #4a5568;
+            color: #7000ff;
             margin-top: 20px;
             margin-bottom: 10px;
         }
 
         p {
             margin-bottom: 15px;
-            color: #4a5568;
+            color: #cbd5e0;
         }
 
         ul, ol {
@@ -363,39 +397,38 @@ function generatePage(title: string, content: string): string {
 
         li {
             margin-bottom: 8px;
-            color: #4a5568;
+            color: #cbd5e0;
         }
 
         a {
-            color: #667eea;
+            color: #00f0ff;
             text-decoration: none;
+            transition: all 0.3s ease;
         }
 
         a:hover {
+            text-shadow: 0 0 10px rgba(0, 240, 255, 0.8);
             text-decoration: underline;
         }
 
         .info-box {
-            background: #ebf8ff;
-            border-left: 4px solid #4299e1;
+            background: rgba(0, 240, 255, 0.05);
+            border-left: 4px solid #00f0ff;
             padding: 20px;
             margin: 20px 0;
             border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.1);
         }
 
         .info-box.highlight {
-            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
-            border-left: 4px solid #667eea;
+            background: linear-gradient(135deg, rgba(0, 240, 255, 0.1), rgba(112, 0, 255, 0.1));
+            border-left: 4px solid #7000ff;
+            box-shadow: 0 0 20px rgba(112, 0, 255, 0.2);
         }
 
-        .info-box h2 {
-            margin-top: 0;
-            color: #2c5282;
-        }
-
+        .info-box h2,
         .info-box h3 {
             margin-top: 0;
-            color: #2c5282;
         }
 
         .contact-grid {
@@ -406,10 +439,17 @@ function generatePage(title: string, content: string): string {
         }
 
         .contact-method {
-            background: #f7fafc;
+            background: rgba(0, 240, 255, 0.05);
             padding: 20px;
             border-radius: 8px;
-            border: 1px solid #e2e8f0;
+            border: 1px solid rgba(0, 240, 255, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .contact-method:hover {
+            border-color: #00f0ff;
+            box-shadow: 0 0 20px rgba(0, 240, 255, 0.2);
+            transform: translateY(-2px);
         }
 
         .contact-method h3 {
@@ -431,7 +471,12 @@ function generatePage(title: string, content: string): string {
 
         td {
             padding: 12px;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid rgba(0, 240, 255, 0.1);
+            color: #cbd5e0;
+        }
+
+        td strong {
+            color: #00f0ff;
         }
 
         .last-updated {
@@ -453,12 +498,13 @@ function generatePage(title: string, content: string): string {
             bottom: 0;
             left: 0;
             right: 0;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(10, 10, 10, 0.95);
             backdrop-filter: blur(10px);
-            padding: 16px 20px;
+            padding: 20px;
             text-align: center;
-            border-top: 1px solid rgba(0, 0, 0, 0.1);
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+            border-top: 1px solid rgba(0, 240, 255, 0.2);
+            box-shadow: 0 -2px 20px rgba(0, 240, 255, 0.1);
+            z-index: 10;
         }
 
         .footer-links {
@@ -470,7 +516,7 @@ function generatePage(title: string, content: string): string {
         }
 
         .footer-links a {
-            color: #667eea;
+            color: #00f0ff;
             font-size: 14px;
             font-weight: 500;
         }
@@ -478,7 +524,7 @@ function generatePage(title: string, content: string): string {
         .footer p {
             margin: 4px 0;
             font-size: 13px;
-            color: #4a5568;
+            color: #718096;
         }
 
         @media (max-width: 768px) {
@@ -488,6 +534,10 @@ function generatePage(title: string, content: string): string {
             }
 
             h1 {
+                font-size: 28px;
+            }
+
+            .header h1 {
                 font-size: 24px;
             }
 

@@ -12,7 +12,10 @@ const router = Router();
 let db: ReturnType<typeof getDatabase> | null = null;
 try {
   db = getDatabase();
-} catch (error) {
+  console.log('✅ Database initialized for marketplace routes');
+} catch (error: any) {
+  console.error('❌ Database initialization failed for marketplace:', error.message);
+  console.error('   Stack:', error.stack);
   console.log('⚠️  Database not available for marketplace - using in-memory storage');
 }
 
@@ -129,23 +132,33 @@ export async function getListing(listingId: string): Promise<MarketplaceListing 
 }
 
 export async function getListings(status?: string): Promise<MarketplaceListing[]> {
+  console.log(`🔍 getListings called with status: ${status || 'all'}`);
+  console.log(`   Database available: ${db ? 'YES' : 'NO'}`);
+  console.log(`   In-memory listings count: ${listings.size}`);
+
   if (db) {
     try {
       const where = status ? { status } : {};
+      console.log(`   Querying database with where:`, where);
       const results = await db.find('MarketplaceListing', {
         where,
         order: [['listedAt', 'DESC']]
       });
+      console.log(`   ✅ Database returned ${results.length} listings`);
       return results as MarketplaceListing[];
     } catch (error: any) {
       console.error('❌ Database query failed, using memory:', error.message);
+      console.error('   Error stack:', error.stack);
       const allListings = Array.from(listings.values());
-      return status ? allListings.filter(l => l.status === status) : allListings;
+      const filtered = status ? allListings.filter(l => l.status === status) : allListings;
+      console.log(`   Falling back to memory: ${filtered.length} listings`);
+      return filtered;
     }
   }
 
   const allListings = Array.from(listings.values());
   const filtered = status ? allListings.filter(l => l.status === status) : allListings;
+  console.log(`   ⚠️  No database, using memory: ${filtered.length} listings`);
   return filtered.sort((a, b) => b.listedAt.getTime() - a.listedAt.getTime());
 }
 

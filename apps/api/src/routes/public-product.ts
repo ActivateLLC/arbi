@@ -27,23 +27,30 @@ const stripe = process.env.STRIPE_SECRET_KEY
  */
 router.get('/product/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
+  console.log(`\n🌐 Product page requested: ${listingId}`);
 
   try {
     // Get listing directly from database (no HTTP fetch needed!)
     const listings = await getListings('active');
+    console.log(`   Retrieved ${listings.length} active listings`);
+
     const listing = listings.find((l: any) => l.listingId === listingId);
+    console.log(`   Found listing: ${listing ? 'YES' : 'NO'}`);
 
     if (!listing || listing.status !== 'active') {
+      console.log(`   ❌ Listing not found or inactive - returning 404`);
       return res.status(404).send(generate404Page());
     }
 
+    console.log(`   ✅ Generating page for: ${listing.productTitle}`);
     // Generate beautiful landing page HTML
     const html = generateProductLandingPage(listing);
 
     res.setHeader('Content-Type', 'text/html');
     res.send(html);
   } catch (error: any) {
-    console.error('Error loading product page:', error);
+    console.error('❌ Error loading product page:', error);
+    console.error('   Stack:', error.stack);
     res.status(500).send(generate404Page());
   }
 });

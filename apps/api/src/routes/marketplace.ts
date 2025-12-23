@@ -420,6 +420,41 @@ router.get('/listings', async (req: Request, res: Response) => {
 });
 
 /**
+ * DELETE /api/marketplace/listings/:listingId
+ * Delete a marketplace listing
+ */
+router.delete('/listings/:listingId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { listingId } = req.params;
+
+    const listing = await getListing(listingId);
+    if (!listing) {
+      throw new ApiError(404, 'Listing not found');
+    }
+
+    if (db) {
+      try {
+        await db.destroy('MarketplaceListing', { where: { listingId } });
+        console.log(`✅ Deleted listing from database: ${listingId}`);
+      } catch (error: any) {
+        console.error('❌ Database delete failed, using memory:', error.message);
+        listings.delete(listingId);
+      }
+    } else {
+      listings.delete(listingId);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Listing ${listingId} deleted`,
+      deletedListing: listing
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /api/marketplace/checkout
  * Buyer initiates purchase (pays FIRST)
  */

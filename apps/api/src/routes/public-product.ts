@@ -446,11 +446,11 @@ function generateProductLandingPage(listing: any): string {
 
     <footer class="footer">
         <div class="footer-links">
-            <a href="/contact">Contact</a>
-            <a href="/returns">Returns & Refunds</a>
-            <a href="/shipping">Shipping</a>
-            <a href="/privacy">Privacy Policy</a>
-            <a href="/terms">Terms of Service</a>
+            <a href="https://api.arbi.creai.dev/contact">Contact</a>
+            <a href="https://api.arbi.creai.dev/returns">Returns & Refunds</a>
+            <a href="https://api.arbi.creai.dev/shipping">Shipping</a>
+            <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
+            <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
         </div>
         <p class="footer-company">Arbi Inc. - support@arbi.creai.dev</p>
         <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
@@ -634,11 +634,11 @@ function generateSuccessPage(session: any): string {
 
     <footer class="footer">
         <div class="footer-links">
-            <a href="/contact">Contact</a>
-            <a href="/returns">Returns & Refunds</a>
-            <a href="/shipping">Shipping</a>
-            <a href="/privacy">Privacy Policy</a>
-            <a href="/terms">Terms of Service</a>
+            <a href="https://api.arbi.creai.dev/contact">Contact</a>
+            <a href="https://api.arbi.creai.dev/returns">Returns & Refunds</a>
+            <a href="https://api.arbi.creai.dev/shipping">Shipping</a>
+            <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
+            <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
         </div>
         <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
     </footer>

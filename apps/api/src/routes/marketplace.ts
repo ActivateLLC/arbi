@@ -432,17 +432,19 @@ router.delete('/listings/:listingId', async (req: Request, res: Response, next: 
       throw new ApiError(404, 'Listing not found');
     }
 
+    // Delete from both database AND in-memory cache
     if (db) {
       try {
         await db.destroy('MarketplaceListing', { where: { listingId } });
         console.log(`✅ Deleted listing from database: ${listingId}`);
       } catch (error: any) {
-        console.error('❌ Database delete failed, using memory:', error.message);
-        listings.delete(listingId);
+        console.error('❌ Database delete failed:', error.message);
       }
-    } else {
-      listings.delete(listingId);
     }
+
+    // Always delete from in-memory cache to keep them in sync
+    listings.delete(listingId);
+    console.log(`✅ Deleted listing from in-memory cache: ${listingId}`);
 
     res.status(200).json({
       success: true,

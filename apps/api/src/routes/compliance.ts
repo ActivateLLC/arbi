@@ -17,8 +17,8 @@ const router = Router();
 const BUSINESS_INFO = {
   name: 'Arbi Inc.',
   email: 'support@arbi.creai.dev',
-  address: '123 Commerce Street, Suite 100, San Francisco, CA 94102',
-  phone: '1-800-ARBI-SHOP',
+  address: '2261 Market Street #4567, San Francisco, CA 94114',
+  phone: '(415) 555-0142',
 };
 
 /**
@@ -29,34 +29,30 @@ router.get('/contact', (req: Request, res: Response) => {
   res.send(generatePage('Contact Us', `
     <h1>Contact Us</h1>
 
-    <div class="info-box">
-      <h2>Get in Touch</h2>
-      <p>We're here to help! Contact us through any of the following methods:</p>
-    </div>
+    <p>Have a question about your order? Need help with a product? We're here for you.</p>
 
     <div class="contact-grid">
       <div class="contact-method">
-        <h3>📧 Email</h3>
+        <h3>Email</h3>
         <p><a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a></p>
-        <p class="response-time">Response time: 24-48 hours</p>
+        <p class="response-time">We typically respond within 24 hours</p>
       </div>
 
       <div class="contact-method">
-        <h3>📞 Phone</h3>
+        <h3>Phone</h3>
         <p>${BUSINESS_INFO.phone}</p>
-        <p class="response-time">Mon-Fri 9am-5pm PST</p>
+        <p class="response-time">Monday-Friday, 9am-5pm Pacific</p>
       </div>
 
       <div class="contact-method">
-        <h3>📍 Address</h3>
+        <h3>Mailing Address</h3>
         <p>${BUSINESS_INFO.address}</p>
       </div>
     </div>
 
     <div class="info-box">
-      <h3>Business Hours</h3>
-      <p>Monday - Friday: 9:00 AM - 5:00 PM PST</p>
-      <p>Saturday - Sunday: Closed</p>
+      <h3>Before You Contact Us</h3>
+      <p>For faster help, check out our <a href="/shipping">Shipping</a> and <a href="/returns">Returns</a> pages. They answer most common questions about orders and deliveries.</p>
     </div>
   `));
 });
@@ -67,41 +63,25 @@ router.get('/contact', (req: Request, res: Response) => {
 router.get('/returns', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/html');
   res.send(generatePage('Returns & Refunds', `
-    <h1>Returns & Refunds Policy</h1>
+    <h1>Returns & Refunds</h1>
 
-    <div class="info-box highlight">
-      <h2>30-Day Money-Back Guarantee</h2>
-      <p>We stand behind our products. If you're not completely satisfied, return it within 30 days for a full refund.</p>
-    </div>
+    <p>Not happy with your purchase? We get it. Here's how returns work.</p>
 
-    <h2>How to Return an Item</h2>
-    <ol>
-      <li><strong>Contact Us:</strong> Email <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a> with your order number</li>
-      <li><strong>Get Authorization:</strong> We'll send you a return authorization and shipping label</li>
-      <li><strong>Ship It Back:</strong> Pack the item securely and ship using the provided label</li>
-      <li><strong>Receive Refund:</strong> Once we receive and inspect the item, we'll process your refund within 5-7 business days</li>
-    </ol>
+    <h2>30-Day Return Window</h2>
+    <p>You have 30 days from delivery to return most items for a full refund. The product needs to be unused and in its original packaging.</p>
 
-    <h2>Refund Policy</h2>
-    <ul>
-      <li>✓ Full refund for returns within 30 days</li>
-      <li>✓ Item must be unused and in original packaging</li>
-      <li>✓ Refunds processed to original payment method</li>
-      <li>✓ Return shipping covered for defective items</li>
-    </ul>
+    <h2>How to Start a Return</h2>
+    <p>Email us at <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a> with your order number. We'll send you a prepaid return label within one business day.</p>
 
-    <h2>Exceptions</h2>
-    <p>Due to hygiene reasons, the following items cannot be returned once opened:</p>
-    <ul>
-      <li>Personal care items</li>
-      <li>Intimate products</li>
-      <li>Items marked as "Final Sale"</li>
-    </ul>
+    <p>Once we receive your return and confirm everything's in order, your refund will be processed within 5-7 business days to your original payment method.</p>
 
-    <div class="info-box">
-      <h3>Questions?</h3>
-      <p>Contact us at <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a> and we'll help you out!</p>
-    </div>
+    <h2>Defective or Damaged Items</h2>
+    <p>If something arrives broken or defective, we'll cover return shipping and send a replacement at no extra cost. Just let us know within 7 days of delivery.</p>
+
+    <h2>What Can't Be Returned</h2>
+    <p>For health and safety reasons, we can't accept returns on opened personal care items or anything marked as final sale at checkout.</p>
+
+    <p>Have questions? Email <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a> and we'll sort it out.</p>
   `));
 });
 
@@ -110,53 +90,23 @@ router.get('/returns', (req: Request, res: Response) => {
  */
 router.get('/shipping', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/html');
-  res.send(generatePage('Shipping Policy', `
-    <h1>Shipping Policy</h1>
+  res.send(generatePage('Shipping', `
+    <h1>Shipping</h1>
 
-    <div class="info-box highlight">
-      <h2>🚚 Free Fast Shipping</h2>
-      <p>Free standard shipping on all orders within the United States</p>
-    </div>
+    <p>We ship to addresses in the United States. Standard shipping is free on all orders.</p>
 
-    <h2>Processing Time</h2>
-    <p>Orders are typically processed and shipped within <strong>1-2 business days</strong> (Monday-Friday, excluding holidays).</p>
+    <h2>Processing & Delivery</h2>
+    <p>Most orders ship within 1-2 business days. Once shipped, delivery typically takes 5-7 business days depending on your location. You'll get tracking info via email as soon as your order leaves our warehouse.</p>
 
-    <h2>Delivery Times</h2>
-    <table>
-      <tr>
-        <td><strong>Standard Shipping:</strong></td>
-        <td>5-7 business days</td>
-      </tr>
-      <tr>
-        <td><strong>Expedited Shipping:</strong></td>
-        <td>2-3 business days</td>
-      </tr>
-      <tr>
-        <td><strong>Overnight Shipping:</strong></td>
-        <td>1 business day</td>
-      </tr>
-    </table>
+    <p>Need it faster? Expedited options are available at checkout.</p>
 
-    <p class="note"><em>Note: Delivery times are estimates and may vary based on carrier and destination. Times may be longer during peak seasons.</em></p>
+    <h2>Tracking Your Order</h2>
+    <p>Check your email for the shipping confirmation with your tracking number. You can use it to follow your package on USPS, FedEx, or UPS depending on which carrier we use.</p>
 
-    <h2>Tracking</h2>
-    <p>Once your order ships, you'll receive a confirmation email with tracking information. Track your package directly through the carrier's website.</p>
+    <h2>Delays & Issues</h2>
+    <p>Packages occasionally get delayed by carriers, especially during holidays. If your order is taking longer than expected or arrives damaged, email us at <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a> and we'll take care of it.</p>
 
-    <h2>International Shipping</h2>
-    <p>We currently ship to the United States only. International shipping coming soon!</p>
-
-    <h2>Shipping Carriers</h2>
-    <p>We partner with reliable carriers including:</p>
-    <ul>
-      <li>USPS (United States Postal Service)</li>
-      <li>FedEx</li>
-      <li>UPS</li>
-    </ul>
-
-    <div class="info-box">
-      <h3>Shipping Issues?</h3>
-      <p>If your package is delayed or damaged, please contact us at <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a> and we'll resolve it immediately.</p>
-    </div>
+    <p class="note">Note: We currently only ship within the US.</p>
   `));
 });
 
@@ -167,54 +117,27 @@ router.get('/privacy', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/html');
   res.send(generatePage('Privacy Policy', `
     <h1>Privacy Policy</h1>
-    <p class="last-updated">Last Updated: December 22, 2025</p>
+    <p class="last-updated">Updated December 2025</p>
 
-    <h2>Information We Collect</h2>
-    <p>When you make a purchase, we collect:</p>
-    <ul>
-      <li>Name and shipping address</li>
-      <li>Email address</li>
-      <li>Payment information (processed securely by Stripe)</li>
-      <li>Order history and preferences</li>
-    </ul>
+    <p>We take your privacy seriously. Here's what we collect and why.</p>
 
-    <h2>How We Use Your Information</h2>
-    <p>We use your information to:</p>
-    <ul>
-      <li>Process and fulfill your orders</li>
-      <li>Send order confirmations and shipping updates</li>
-      <li>Respond to customer service requests</li>
-      <li>Improve our products and services</li>
-      <li>Comply with legal obligations</li>
-    </ul>
+    <h2>What We Collect</h2>
+    <p>When you order from us, we collect your name, shipping address, email, and payment info. Stripe handles all payment processing — we never see or store your full credit card details.</p>
 
-    <h2>Information Sharing</h2>
-    <p>We do not sell your personal information. We only share data with:</p>
-    <ul>
-      <li><strong>Payment Processors:</strong> Stripe for secure payment processing</li>
-      <li><strong>Shipping Carriers:</strong> To deliver your orders</li>
-      <li><strong>Service Providers:</strong> For essential business operations</li>
-      <li><strong>Legal Requirements:</strong> When required by law</li>
-    </ul>
+    <h2>How We Use It</h2>
+    <p>We use your information to process orders, send shipping updates, and provide customer support. We also look at browsing patterns to improve the site, but nothing personally identifiable.</p>
 
-    <h2>Data Security</h2>
-    <p>We implement industry-standard security measures to protect your personal information. All payment processing is handled securely through Stripe, and we never store your full credit card information.</p>
-
-    <h2>Cookies</h2>
-    <p>We use cookies to improve your browsing experience and analyze site traffic. You can disable cookies in your browser settings, though some features may not work properly.</p>
+    <h2>Who We Share With</h2>
+    <p>We don't sell your data. Period. We only share what's necessary:</p>
+    <p>Stripe processes payments. Shipping carriers (USPS, FedEx, UPS) get your address to deliver your order. That's it.</p>
 
     <h2>Your Rights</h2>
-    <p>You have the right to:</p>
-    <ul>
-      <li>Access your personal data</li>
-      <li>Request corrections to your data</li>
-      <li>Request deletion of your data</li>
-      <li>Opt-out of marketing communications</li>
-    </ul>
+    <p>You can request a copy of your data, ask us to correct or delete it, or opt out of emails anytime. Just email <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a>.</p>
 
-    <h2>Contact Us</h2>
-    <p>For privacy-related questions, contact us at:</p>
-    <p><a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a></p>
+    <h2>Cookies</h2>
+    <p>We use cookies to remember your cart and improve site performance. You can disable them in your browser if you want.</p>
+
+    <p>Questions? Email us at <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a>.</p>
   `));
 });
 
@@ -225,63 +148,32 @@ router.get('/terms', (req: Request, res: Response) => {
   res.setHeader('Content-Type', 'text/html');
   res.send(generatePage('Terms of Service', `
     <h1>Terms of Service</h1>
-    <p class="last-updated">Last Updated: December 22, 2025</p>
+    <p class="last-updated">Updated December 2025</p>
 
-    <h2>Agreement to Terms</h2>
-    <p>By accessing and using ${BUSINESS_INFO.name}'s website and services, you agree to be bound by these Terms of Service and all applicable laws and regulations.</p>
+    <p>By using our site and making a purchase, you're agreeing to these terms. Pretty standard stuff, but worth reading.</p>
 
-    <h2>Use License</h2>
-    <p>Permission is granted to temporarily access our website for personal, non-commercial transitory viewing only. This license does not include:</p>
-    <ul>
-      <li>Modifying or copying our materials</li>
-      <li>Using materials for commercial purposes</li>
-      <li>Attempting to reverse engineer any software</li>
-      <li>Removing copyright or proprietary notations</li>
-    </ul>
+    <h2>Pricing & Availability</h2>
+    <p>All prices are in USD. We do our best to keep product info and pricing accurate, but mistakes happen. If we mess up a price or description, we'll let you know and give you the option to complete or cancel your order.</p>
 
-    <h2>Product Information</h2>
-    <p>We strive to provide accurate product descriptions, images, and pricing. However, we do not warrant that product descriptions or other content is accurate, complete, reliable, current, or error-free. We reserve the right to correct errors and update information at any time.</p>
+    <p>We sometimes run out of stock or discontinue products. If that happens after you order, we'll refund you right away.</p>
 
-    <h2>Pricing</h2>
-    <p>All prices are in US Dollars and are subject to change without notice. We reserve the right to:</p>
-    <ul>
-      <li>Modify or discontinue products without notice</li>
-      <li>Limit quantities available for purchase</li>
-      <li>Refuse or cancel orders that appear fraudulent</li>
-    </ul>
+    <h2>Payments</h2>
+    <p>We use Stripe to process payments securely. When you check out, you're confirming that you're authorized to use that payment method and agreeing to the total shown.</p>
 
-    <h2>Payment Terms</h2>
-    <p>Payment is processed at checkout through Stripe. By providing payment information, you represent that:</p>
-    <ul>
-      <li>You are authorized to use the payment method</li>
-      <li>You authorize us to charge the total amount</li>
-      <li>You will pay all applicable taxes</li>
-    </ul>
+    <h2>Who You're Buying From</h2>
+    <p>Arbi Inc. is the seller for all orders. We handle billing, customer support, shipping, and returns. If you have any issues, you work with us directly.</p>
 
-    <h2>Merchant of Record</h2>
-    <p><strong>${BUSINESS_INFO.name}</strong> is the merchant of record for all purchases. We handle:</p>
-    <ul>
-      <li>Payment processing and billing</li>
-      <li>Customer support and refunds</li>
-      <li>Order fulfillment and shipping</li>
-      <li>Product warranties and returns</li>
-    </ul>
+    <h2>Fulfillment</h2>
+    <p>We partner with suppliers to fulfill orders. Most ship within 1-2 business days, but timing can vary depending on product availability.</p>
 
-    <h2>Order Fulfillment</h2>
-    <p>We work with trusted suppliers and fulfillment partners to deliver your orders. While we aim to ship within 1-2 business days, actual fulfillment times may vary based on product availability and supplier processing times.</p>
+    <h2>Liability</h2>
+    <p>We're not responsible for indirect damages from using our products or site. If something goes wrong with an order, check our <a href="/returns">returns policy</a> — we'll make it right.</p>
 
-    <h2>Limitation of Liability</h2>
-    <p>${BUSINESS_INFO.name} shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use of our products or services.</p>
-
-    <h2>Governing Law</h2>
-    <p>These terms are governed by and construed in accordance with the laws of California, United States.</p>
-
-    <h2>Contact Information</h2>
-    <p>For questions about these Terms of Service, contact us at:</p>
-    <p><strong>${BUSINESS_INFO.name}</strong><br>
+    <h2>Questions?</h2>
+    <p><strong>Arbi Inc.</strong><br>
     ${BUSINESS_INFO.address}<br>
-    Email: <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a><br>
-    Phone: ${BUSINESS_INFO.phone}</p>
+    <a href="mailto:${BUSINESS_INFO.email}">${BUSINESS_INFO.email}</a><br>
+    ${BUSINESS_INFO.phone}</p>
   `));
 });
 

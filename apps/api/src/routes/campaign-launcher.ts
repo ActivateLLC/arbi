@@ -171,7 +171,19 @@ router.get('/status', async (req: Request, res: Response) => {
       customerId: !!process.env.GOOGLE_ADS_CUSTOMER_ID,
       refreshToken: !!process.env.GOOGLE_ADS_REFRESH_TOKEN,
     },
-    ready: hasGoogleAds
+    ready: hasGoogleAds,
+    accountInfo: {
+      customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || null,
+      campaignNamingPattern: 'Arbi - [Product Name]',
+      exampleCampaigns: [
+        'Arbi - Apple AirPods Pro (2nd Generation)',
+        'Arbi - Meta Quest 3 128GB VR Headset',
+        'Arbi - Dyson V15 Detect Cordless Vacuum',
+        'Arbi - Apple MacBook Air 13-inch M2 Chip',
+        'Arbi - Nintendo Switch OLED Model',
+        'Arbi - GoPro HERO12 Black Action Camera'
+      ]
+    }
   });
 });
 

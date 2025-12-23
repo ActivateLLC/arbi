@@ -1,7 +1,22 @@
-import type { Opportunity, UserBudgetSettings, RiskAssessment } from '../types';
+import type { Opportunity, UserBudgetSettings, RiskAssessment, MarketConditions, VolatilityStrategyConfig } from '../types';
+
+// Default configuration for volatility strategies
+const DEFAULT_VOLATILITY_CONFIG: VolatilityStrategyConfig = {
+  enabledDuringHighVix: false,
+  vixThreshold: 25,
+  maxVolatilityExposure: 0.2
+};
 
 export class RiskManager {
   private userSpending: Map<string, { daily: number; monthly: number; lastReset: Date }> = new Map();
+  private marketConditions?: MarketConditions;
+
+  /**
+   * Set current market conditions for volatility-aware risk assessment
+   */
+  setMarketConditions(conditions: MarketConditions): void {
+    this.marketConditions = conditions;
+  }
 
   assessRisk(
     opportunity: Opportunity,
@@ -12,7 +27,17 @@ export class RiskManager {
     const riskScore = this.calculateRiskScore(opportunity, settings);
     const reasons = this.getRiskReasons(opportunity, budgetCheck, riskScore, settings);
 
-    const approved = budgetCheck.passed && this.isRiskAcceptable(riskScore, settings.riskTolerance);
+    // Check if volatility strategies are allowed
+    const volatilityStrategyCheck = this.checkVolatilityStrategyEnabled(opportunity, settings);
+    
+    const approved = 
+      budgetCheck.passed && 
+      this.isRiskAcceptable(riskScore, settings.riskTolerance) &&
+      volatilityStrategyCheck.allowed;
+
+    if (!volatilityStrategyCheck.allowed) {
+      reasons.push(...volatilityStrategyCheck.reasons);
+    }
 
     return {
       approved,
@@ -136,5 +161,57 @@ export class RiskManager {
 
   private shouldResetMonthly(lastReset: Date, now: Date): boolean {
     return lastReset.getMonth() !== now.getMonth();
+  }
+
+  private isVolatilityStrategy(type: string): boolean {
+    const volatilityStrategies = [
+      'short_condor',
+      'short_strangle',
+      'short_straddle',
+      'bearish_spread',
+      'volatility_arbitrage'
+    ];
+    return volatilityStrategies.includes(type);
+  }
+
+  /**
+   * Check if volatility strategies are enabled based on market conditions
+   */
+  private checkVolatilityStrategyEnabled(
+    opportunity: Opportunity,
+    settings: UserBudgetSettings
+  ): { allowed: boolean; reasons: string[] } {
+    const reasons: string[] = [];
+    
+    // Not a volatility strategy - always allowed (subject to other checks)
+    if (!this.isVolatilityStrategy(opportunity.type)) {
+      return { allowed: true, reasons: [] };
+    }
+
+    // Check if volatility config exists
+    const volatilityConfig = settings.volatilityConfig || DEFAULT_VOLATILITY_CONFIG;
+
+    // If volatility strategies are not configured to be enabled during high VIX, reject
+    if (!volatilityConfig.enabledDuringHighVix) {
+      reasons.push('Volatility strategies are not enabled in user settings');
+      return { allowed: false, reasons };
+    }
+
+    // Check market conditions
+    if (!this.marketConditions) {
+      reasons.push('Market conditions unavailable - cannot assess volatility strategy');
+      return { allowed: false, reasons };
+    }
+
+    // Check if VIX is above threshold
+    if (this.marketConditions.vixLevel < volatilityConfig.vixThreshold) {
+      reasons.push(
+        `VIX level ${this.marketConditions.vixLevel.toFixed(1)} is below threshold ${volatilityConfig.vixThreshold} for volatility strategies`
+      );
+      return { allowed: false, reasons };
+    }
+
+    // All checks passed
+    return { allowed: true, reasons: [] };
   }
 }

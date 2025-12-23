@@ -305,7 +305,7 @@ function generatePage(title: string, content: string): string {
             background: linear-gradient(135deg, #050505 0%, #0a0a0a 100%);
             color: #e2e8f0;
             line-height: 1.6;
-            padding-bottom: 120px;
+            padding-bottom: 180px;
             min-height: 100vh;
             position: relative;
         }
@@ -589,6 +589,10 @@ function generatePage(title: string, content: string): string {
         }
 
         @media (max-width: 768px) {
+            body {
+                padding-bottom: 220px;
+            }
+
             .container {
                 margin: 20px;
                 padding: 20px;
@@ -604,6 +608,10 @@ function generatePage(title: string, content: string): string {
 
             .contact-grid {
                 grid-template-columns: 1fr;
+            }
+
+            .footer-links {
+                gap: 12px;
             }
         }
     </style>

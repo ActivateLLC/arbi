@@ -89,6 +89,10 @@ app.use('/', publicProductRoutes);
 // API routes
 app.use('/api', apiRoutes);
 
+// Campaign management routes
+import campaignLauncherRoutes from './routes/campaign-launcher';
+app.use('/api/campaigns', campaignLauncherRoutes);
+
 // Error handling middleware
 app.use(errorHandler);
 

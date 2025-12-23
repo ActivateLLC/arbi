@@ -535,6 +535,39 @@ function generatePage(title: string, content: string): string {
             z-index: 10;
         }
 
+        .footer-logo {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .footer-logo-icon {
+            width: 30px;
+            height: 30px;
+            background: rgba(0, 240, 255, 0.1);
+            clip-path: polygon(
+                6px 0, 100% 0,
+                100% calc(100% - 6px), calc(100% - 6px) 100%,
+                0 100%, 0 6px
+            );
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Syne', sans-serif;
+            font-size: 20px;
+            font-weight: 800;
+            color: #00f0ff;
+        }
+
+        .footer-logo-text {
+            font-family: 'Syne', sans-serif;
+            font-size: 18px;
+            font-weight: 700;
+            color: #00f0ff;
+        }
+
         .footer-links {
             display: flex;
             justify-content: center;
@@ -588,6 +621,10 @@ function generatePage(title: string, content: string): string {
     </div>
 
     <footer class="footer">
+        <div class="footer-logo">
+            <div class="footer-logo-icon">A</div>
+            <div class="footer-logo-text">ARBI</div>
+        </div>
         <div class="footer-links">
             <a href="/contact">Contact</a>
             <a href="/returns">Returns & Refunds</a>

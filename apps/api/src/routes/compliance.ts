@@ -339,11 +339,39 @@ function generatePage(title: string, content: string): string {
             );
         }
 
+        .logo-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .logo-icon {
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            clip-path: polygon(
+                8px 0, 100% 0,
+                100% calc(100% - 8px), calc(100% - 8px) 100%,
+                0 100%, 0 8px
+            );
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Syne', sans-serif;
+            font-size: 32px;
+            font-weight: 800;
+            text-shadow: 0 0 15px rgba(0, 240, 255, 0.8);
+        }
+
         .header h1 {
             font-family: 'Syne', sans-serif;
             font-size: 32px;
             font-weight: 800;
             text-shadow: 0 0 20px rgba(0, 240, 255, 0.5);
+            margin: 0;
         }
 
         .container {
@@ -549,7 +577,10 @@ function generatePage(title: string, content: string): string {
 </head>
 <body>
     <div class="header">
-        <h1>${BUSINESS_INFO.name}</h1>
+        <div class="logo-container">
+            <div class="logo-icon">A</div>
+            <h1>ARBI</h1>
+        </div>
     </div>
 
     <div class="container">

@@ -106,8 +106,15 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
  */
 router.post('/product/:listingId/checkout', async (req: Request, res: Response) => {
   const { listingId } = req.params;
+  const { quantity } = req.body;
 
   try {
+    // Validate quantity
+    const qty = parseInt(quantity) || 1;
+    if (qty < 1 || qty > 99) {
+      return res.status(400).json({ error: 'Quantity must be between 1 and 99' });
+    }
+
     // Get listing directly from database (no HTTP fetch needed!)
     const listings = await getListings('active');
     const listing = listings.find((l: any) => l.listingId === listingId);
@@ -119,6 +126,9 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
     if (!stripe) {
       return res.status(500).json({ error: 'Payment processing not configured' });
     }
+
+    // Calculate total profit for this order
+    const totalProfit = Number(listing.estimatedProfit) * qty;
 
     // Create Stripe Checkout Session with multiple payment options
     // Including Klarna, Afterpay, Affirm for "Buy Now, Pay Later"
@@ -141,7 +151,7 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
             },
             unit_amount: Math.round(Number(listing.marketplacePrice) * 100), // Convert to cents
           },
-          quantity: 1,
+          quantity: qty,
         },
       ],
       mode: 'payment',
@@ -150,8 +160,9 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
       metadata: {
         listingId,
         opportunityId: listing.opportunityId,
+        quantity: qty.toString(),
         supplierPrice: listing.supplierPrice.toString(),
-        estimatedProfit: listing.estimatedProfit.toString(),
+        estimatedProfit: totalProfit.toString(),
       },
     });
 
@@ -297,7 +308,61 @@ function generateProductLandingPage(listing: any): string {
             font-size: 16px;
             color: #4a5568;
             line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .quantity-selector {
             margin-bottom: 30px;
+        }
+
+        .quantity-selector label {
+            display: block;
+            font-size: 15px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .quantity-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .qty-btn {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 8px;
+            font-size: 20px;
+            font-weight: 600;
+            color: #667eea;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .qty-btn:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .qty-btn:active {
+            transform: scale(0.95);
+        }
+
+        #quantity {
+            width: 80px;
+            height: 40px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            color: #2d3748;
         }
 
         .features {
@@ -426,6 +491,15 @@ function generateProductLandingPage(listing: any): string {
 
             <p class="description">${listing.productDescription}</p>
 
+            <div class="quantity-selector">
+                <label for="quantity">Quantity:</label>
+                <div class="quantity-controls">
+                    <button class="qty-btn" id="qty-minus">−</button>
+                    <input type="number" id="quantity" name="quantity" value="1" min="1" max="99" readonly>
+                    <button class="qty-btn" id="qty-plus">+</button>
+                </div>
+            </div>
+
             <ul class="features">
                 <li>Free Fast Shipping</li>
                 <li>30-Day Money-Back Guarantee</li>
@@ -460,20 +534,41 @@ function generateProductLandingPage(listing: any): string {
         // Use addEventListener instead of inline onclick for CSP compatibility
         document.addEventListener('DOMContentLoaded', function() {
             const button = document.getElementById('checkout-button');
+            const quantityInput = document.getElementById('quantity');
+            const minusBtn = document.getElementById('qty-minus');
+            const plusBtn = document.getElementById('qty-plus');
 
-            if (!button) {
-                console.error('Checkout button not found');
+            if (!button || !quantityInput) {
+                console.error('Required elements not found');
                 return;
             }
 
+            // Quantity controls
+            minusBtn.addEventListener('click', function() {
+                const currentValue = parseInt(quantityInput.value);
+                if (currentValue > 1) {
+                    quantityInput.value = currentValue - 1;
+                }
+            });
+
+            plusBtn.addEventListener('click', function() {
+                const currentValue = parseInt(quantityInput.value);
+                if (currentValue < 99) {
+                    quantityInput.value = currentValue + 1;
+                }
+            });
+
+            // Checkout with quantity
             button.addEventListener('click', async function() {
+                const quantity = parseInt(quantityInput.value);
                 button.textContent = 'Processing...';
                 button.disabled = true;
 
                 try {
                     const response = await fetch('/product/${listing.listingId}/checkout', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ quantity: quantity })
                     });
 
                     if (!response.ok) {

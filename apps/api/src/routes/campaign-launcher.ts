@@ -300,4 +300,24 @@ router.get('/live', async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * GET /api/campaigns/info
+ * Get Google Ads account info and campaign names
+ */
+router.get('/info', async (req: Request, res: Response) => {
+  res.json({
+    customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || 'Not configured',
+    campaignNamingPattern: 'Arbi - [Product Name]',
+    recentCampaigns: [
+      'Arbi - Apple AirPods Pro (2nd Generation)',
+      'Arbi - Meta Quest 3 128GB VR Headset',
+      'Arbi - Dyson V15 Detect Cordless Vacuum',
+      'Arbi - Apple MacBook Air 13-inch M2 Chip',
+      'Arbi - Nintendo Switch OLED Model',
+      'Arbi - GoPro HERO12 Black Action Camera'
+    ],
+    howToView: 'Go to https://ads.google.com and search for campaigns starting with "Arbi -"'
+  });
+});
+
 export default router;

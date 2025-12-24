@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { getDatabase } from '../config/database';
+import { amazonFulfillment } from '../services/amazonFulfillment';
 
 const router = Router();
 
@@ -135,15 +136,59 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     await db.create('BuyerOrder', order);
     console.log('   ✅ Order saved to database:', order.orderId);
 
-    // TODO: Auto-purchase from supplier
-    // This is where you'd integrate with Amazon API, Rainforest API, etc.
-    console.log('\n🤖 AUTO-FULFILLMENT:');
-    console.log('   🛒 Would auto-purchase from:', supplierUrl);
-    console.log('   📦 Quantity:', quantity);
-    console.log('   💵 Using buyer\'s money: $', session.amount_total! / 100);
-    console.log('   📬 Ship to:', session.shipping_details?.name);
-    console.log('\n   ⚠️  Supplier API integration needed for auto-purchase');
-    console.log('   💡 For now: manually purchase and paste tracking number');
+    // 🤖 AUTO-PURCHASE FROM AMAZON
+    if (process.env.ENABLE_AUTO_FULFILLMENT === 'true' && supplierUrl.includes('amazon.com')) {
+      console.log('\n🤖 INITIATING AUTOMATED FULFILLMENT...');
+
+      try {
+        const fulfillmentResult = await amazonFulfillment.fulfillOrder({
+          orderId: order.orderId,
+          productUrl: supplierUrl,
+          quantity,
+          shippingAddress: {
+            name: session.shipping_details?.name || '',
+            line1: shippingAddress.line1,
+            line2: shippingAddress.line2 || '',
+            city: shippingAddress.city,
+            state: shippingAddress.state,
+            postalCode: shippingAddress.postal_code,
+            country: shippingAddress.country,
+          },
+          customerEmail: session.customer_details?.email || '',
+          amountPaid: session.amount_total! / 100,
+        });
+
+        if (fulfillmentResult.success) {
+          console.log('   ✅ AUTO-FULFILLMENT SUCCESSFUL!');
+          console.log('   📦 Amazon Order:', fulfillmentResult.orderId);
+
+          // Update order with tracking info
+          await db.update('BuyerOrder', {
+            supplierOrderId: fulfillmentResult.orderId,
+            supplierPurchaseStatus: 'completed',
+            shipmentTrackingNumber: fulfillmentResult.trackingNumber,
+            status: 'purchasing_from_supplier',
+          }, { where: { orderId: order.orderId } });
+
+          console.log('   ✅ Order updated with tracking');
+        } else {
+          console.error('   ❌ Auto-fulfillment failed:', fulfillmentResult.error);
+          console.log('   💡 Fallback: Manual purchase required');
+        }
+      } catch (error: any) {
+        console.error('   ❌ Fulfillment error:', error.message);
+        console.log('   💡 Order saved - manual fulfillment required');
+      }
+    } else {
+      console.log('\n⚠️  Auto-fulfillment disabled');
+      console.log('   Set ENABLE_AUTO_FULFILLMENT=true to enable');
+      console.log('   📋 Manual fulfillment required:');
+      console.log('   🛒 Purchase from:', supplierUrl);
+      console.log('   📦 Quantity:', quantity);
+      console.log('   💵 Using buyer\'s money: $', session.amount_total! / 100);
+      console.log('   📬 Ship to:', session.shipping_details?.name);
+      console.log('      ', `${shippingAddress.line1}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postal_code}`);
+    }
 
     // TODO: Send confirmation email to customer
     console.log('\n📧 TODO: Send order confirmation email');

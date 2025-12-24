@@ -26,16 +26,27 @@ app.use(helmet({
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for product pages
-      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles
+      scriptSrc: [
+        "'self'",
+        "'unsafe-inline'",
+        "https://unpkg.com", // Lucide Icons
+        "https://www.googletagmanager.com" // Google Analytics
+      ],
+      styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: [
         "'self'",
         "data:",
         "https://m.media-amazon.com",
         "https://res.cloudinary.com",
-        "https://placehold.co"
+        "https://placehold.co",
+        "https://www.google-analytics.com" // Google Analytics
       ],
-      connectSrc: ["'self'", "https://checkout.stripe.com"],
+      connectSrc: [
+        "'self'",
+        "https://checkout.stripe.com",
+        "https://www.google-analytics.com", // Google Analytics
+        "https://www.googletagmanager.com" // Google Analytics
+      ],
       frameSrc: ["'self'", "https://checkout.stripe.com", "https://js.stripe.com"],
       formAction: ["'self'", "https://checkout.stripe.com"]
     }

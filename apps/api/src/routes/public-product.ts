@@ -228,14 +228,84 @@ function generateProductLandingPage(listing: any): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${listing.productTitle}</title>
-    <meta name="description" content="${listing.productDescription}">
 
-    <!-- Open Graph for social sharing -->
+    <!-- SEO Meta Tags -->
+    <title>${listing.productTitle} - Buy Now | Arbi</title>
+    <meta name="description" content="${listing.productDescription} | Free shipping, 30-day returns, secure checkout. Buy now at Arbi.">
+    <meta name="keywords" content="${listing.productTitle}, buy ${listing.productTitle.toLowerCase()}, best price, free shipping">
+    <link rel="canonical" href="https://api.arbi.creai.dev/product/${listing.listingId}">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="product">
+    <meta property="og:url" content="https://api.arbi.creai.dev/product/${listing.listingId}">
     <meta property="og:title" content="${listing.productTitle}">
     <meta property="og:description" content="${listing.productDescription}">
     <meta property="og:image" content="${imageUrl}">
-    <meta property="og:type" content="product">
+    <meta property="og:site_name" content="Arbi">
+    <meta property="product:price:amount" content="${Number(listing.marketplacePrice).toFixed(2)}">
+    <meta property="product:price:currency" content="USD">
+    <meta property="product:availability" content="in stock">
+    <meta property="product:brand" content="Arbi">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://api.arbi.creai.dev/product/${listing.listingId}">
+    <meta name="twitter:title" content="${listing.productTitle}">
+    <meta name="twitter:description" content="${listing.productDescription}">
+    <meta name="twitter:image" content="${imageUrl}">
+    <meta name="twitter:label1" content="Price">
+    <meta name="twitter:data1" content="$${Number(listing.marketplacePrice).toFixed(2)}">
+    <meta name="twitter:label2" content="Availability">
+    <meta name="twitter:data2" content="In Stock">
+
+    <!-- Product Schema (JSON-LD) for Google Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      "name": "${listing.productTitle}",
+      "image": "${imageUrl}",
+      "description": "${listing.productDescription}",
+      "brand": {
+        "@type": "Brand",
+        "name": "Arbi"
+      },
+      "offers": {
+        "@type": "Offer",
+        "url": "https://api.arbi.creai.dev/product/${listing.listingId}",
+        "priceCurrency": "USD",
+        "price": "${Number(listing.marketplacePrice).toFixed(2)}",
+        "priceValidUntil": "${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}",
+        "availability": "https://schema.org/InStock",
+        "seller": {
+          "@type": "Organization",
+          "name": "Arbi Inc."
+        },
+        "shippingDetails": {
+          "@type": "OfferShippingDetails",
+          "shippingRate": {
+            "@type": "MonetaryAmount",
+            "value": "0",
+            "currency": "USD"
+          },
+          "deliveryTime": {
+            "@type": "ShippingDeliveryTime",
+            "handlingTime": {
+              "@type": "QuantitativeValue",
+              "minValue": 1,
+              "maxValue": 2,
+              "unitCode": "DAY"
+            }
+          }
+        }
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "reviewCount": "127"
+      }
+    }
+    </script>
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }

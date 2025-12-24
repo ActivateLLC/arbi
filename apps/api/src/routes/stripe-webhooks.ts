@@ -6,7 +6,7 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { getDatabase } from '../config/database';
-import { amazonFulfillment } from '../services/amazonFulfillment';
+import { supplierFulfillment } from '../services/supplierFulfillment';
 
 const router = Router();
 
@@ -136,12 +136,12 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     await db.create('BuyerOrder', order);
     console.log('   ✅ Order saved to database:', order.orderId);
 
-    // 🤖 AUTO-PURCHASE FROM AMAZON
-    if (process.env.ENABLE_AUTO_FULFILLMENT === 'true' && supplierUrl.includes('amazon.com')) {
-      console.log('\n🤖 INITIATING AUTOMATED FULFILLMENT...');
+    // 🤖 AUTO-PURCHASE FROM ANY SUPPLIER (Amazon, Walmart, Target, eBay, etc.)
+    if (process.env.ENABLE_AUTO_FULFILLMENT === 'true' && supplierUrl) {
+      console.log('\n🤖 INITIATING AUTOMATED MULTI-VENDOR FULFILLMENT...');
 
       try {
-        const fulfillmentResult = await amazonFulfillment.fulfillOrder({
+        const fulfillmentResult = await supplierFulfillment.fulfillOrder({
           orderId: order.orderId,
           productUrl: supplierUrl,
           quantity,
@@ -160,7 +160,8 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
         if (fulfillmentResult.success) {
           console.log('   ✅ AUTO-FULFILLMENT SUCCESSFUL!');
-          console.log('   📦 Amazon Order:', fulfillmentResult.orderId);
+          console.log(`   🏪 Vendor: ${fulfillmentResult.vendor?.toUpperCase()}`);
+          console.log('   📦 Order Number:', fulfillmentResult.orderId);
 
           // Update order with tracking info
           await db.update('BuyerOrder', {

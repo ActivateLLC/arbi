@@ -420,6 +420,15 @@ function generateProductLandingPage(listing: any): string {
             height: 20px;
         }
 
+        .buy-button [data-lucide="loader-2"] {
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
         .buy-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
@@ -584,8 +593,15 @@ function generateProductLandingPage(listing: any): string {
     <script>
         // Use addEventListener instead of inline onclick for CSP compatibility
         document.addEventListener('DOMContentLoaded', function() {
-            // Initialize Lucide icons
-            lucide.createIcons();
+            // Wait for Lucide to load, then initialize icons
+            function initIcons() {
+                if (typeof lucide !== 'undefined') {
+                    lucide.createIcons();
+                } else {
+                    setTimeout(initIcons, 100);
+                }
+            }
+            initIcons();
 
             const button = document.getElementById('checkout-button');
             const quantityInput = document.getElementById('quantity');
@@ -615,7 +631,9 @@ function generateProductLandingPage(listing: any): string {
             // Checkout with quantity
             button.addEventListener('click', async function() {
                 const quantity = parseInt(quantityInput.value);
-                button.textContent = 'Processing...';
+                const originalHTML = button.innerHTML;
+                button.innerHTML = '<i data-lucide="loader-2"></i> Processing...';
+                lucide.createIcons(); // Re-init icons
                 button.disabled = true;
 
                 try {
@@ -639,7 +657,8 @@ function generateProductLandingPage(listing: any): string {
                 } catch (error) {
                     console.error('Checkout error:', error);
                     alert('Error processing checkout. Please try again.');
-                    button.textContent = '🛒 Buy Now - Secure Checkout';
+                    button.innerHTML = originalHTML;
+                    lucide.createIcons(); // Re-init icons
                     button.disabled = false;
                 }
             });

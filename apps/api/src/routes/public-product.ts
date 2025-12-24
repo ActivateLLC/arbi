@@ -246,6 +246,9 @@ function generateProductLandingPage(listing: any): string {
       gtag('config', 'G-FC0RSRE67D');
     </script>
 
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -383,13 +386,16 @@ function generateProductLandingPage(listing: any): string {
             padding: 8px 0;
             color: #2d3748;
             font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        .features li:before {
-            content: "✓ ";
+        .features li svg {
+            width: 18px;
+            height: 18px;
             color: #48bb78;
-            font-weight: bold;
-            margin-right: 8px;
+            flex-shrink: 0;
         }
 
         .buy-button {
@@ -403,6 +409,15 @@ function generateProductLandingPage(listing: any): string {
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
             width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .buy-button svg {
+            width: 20px;
+            height: 20px;
         }
 
         .buy-button:hover {
@@ -422,10 +437,28 @@ function generateProductLandingPage(listing: any): string {
             text-align: center;
             font-size: 14px;
             color: #4a5568;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .guarantee-item {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .guarantee-item svg {
+            width: 16px;
+            height: 16px;
+            color: #667eea;
         }
 
         .badge {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
             background: #48bb78;
             color: white;
             padding: 6px 12px;
@@ -433,6 +466,11 @@ function generateProductLandingPage(listing: any): string {
             font-size: 13px;
             font-weight: 600;
             margin-bottom: 16px;
+        }
+
+        .badge svg {
+            width: 14px;
+            height: 14px;
         }
 
         .footer {
@@ -494,7 +532,7 @@ function generateProductLandingPage(listing: any): string {
         </div>
 
         <div class="info-section">
-            <span class="badge">⚡ Limited Offer</span>
+            <span class="badge"><i data-lucide="zap"></i> Limited Offer</span>
             <h1>${listing.productTitle}</h1>
             <div class="price">$${Number(listing.marketplacePrice).toFixed(2)}</div>
 
@@ -510,19 +548,23 @@ function generateProductLandingPage(listing: any): string {
             </div>
 
             <ul class="features">
-                <li>Free Fast Shipping</li>
-                <li>30-Day Money-Back Guarantee</li>
-                <li>Secure Payment Processing</li>
-                <li>Ships Within 1-2 Business Days</li>
+                <li><i data-lucide="truck"></i>Free Fast Shipping</li>
+                <li><i data-lucide="shield-check"></i>30-Day Money-Back Guarantee</li>
+                <li><i data-lucide="lock"></i>Secure Payment Processing</li>
+                <li><i data-lucide="package"></i>Ships Within 1-2 Business Days</li>
             </ul>
 
             <button class="buy-button" id="checkout-button">
-                🛒 Buy Now - Secure Checkout
+                <i data-lucide="shopping-cart"></i> Buy Now - Secure Checkout
             </button>
 
             <div class="guarantee">
-                🔒 Secure payment powered by Stripe<br>
-                💯 100% satisfaction guaranteed
+                <div class="guarantee-item">
+                    <i data-lucide="credit-card"></i> Secure payment powered by Stripe
+                </div>
+                <div class="guarantee-item">
+                    <i data-lucide="badge-check"></i> 100% satisfaction guaranteed
+                </div>
             </div>
         </div>
     </div>
@@ -542,6 +584,9 @@ function generateProductLandingPage(listing: any): string {
     <script>
         // Use addEventListener instead of inline onclick for CSP compatibility
         document.addEventListener('DOMContentLoaded', function() {
+            // Initialize Lucide icons
+            lucide.createIcons();
+
             const button = document.getElementById('checkout-button');
             const quantityInput = document.getElementById('quantity');
             const minusBtn = document.getElementById('qty-minus');

@@ -20,6 +20,7 @@
     "@arbi/transaction": "workspace:*",
     "@arbi/voice-interface": "workspace:*",
     "@arbi/web-automation": "workspace:*",
+    "@browserbasehq/stagehand": "^1.7.2",
     "axios": "^1.6.5",
     "cheerio": "^1.1.2",
     "cloudinary": "^2.8.0",

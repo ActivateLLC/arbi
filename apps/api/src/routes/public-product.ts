@@ -630,33 +630,44 @@ function generateProductLandingPage(listing: any): string {
 
             // Checkout with quantity
             button.addEventListener('click', async function() {
+                console.log('🛒 Checkout button clicked');
                 const quantity = parseInt(quantityInput.value);
+                console.log('📦 Quantity:', quantity);
+
                 const originalHTML = button.innerHTML;
                 button.innerHTML = '<i data-lucide="loader-2"></i> Processing...';
                 lucide.createIcons(); // Re-init icons
                 button.disabled = true;
 
                 try {
+                    console.log('📡 Sending checkout request...');
                     const response = await fetch('/product/${listing.listingId}/checkout', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ quantity: quantity })
                     });
 
+                    console.log('✅ Response received:', response.status);
+
                     if (!response.ok) {
-                        throw new Error('Checkout failed');
+                        const errorData = await response.json();
+                        console.error('❌ Checkout failed:', errorData);
+                        throw new Error(errorData.error || 'Checkout failed');
                     }
 
                     const data = await response.json();
+                    console.log('💳 Checkout data:', data);
 
                     if (data.checkoutUrl) {
+                        console.log('🔗 Redirecting to:', data.checkoutUrl);
                         window.location.href = data.checkoutUrl;
                     } else {
+                        console.error('❌ No checkout URL in response');
                         throw new Error('No checkout URL received');
                     }
                 } catch (error) {
-                    console.error('Checkout error:', error);
-                    alert('Error processing checkout. Please try again.');
+                    console.error('❌ Checkout error:', error);
+                    alert('Error processing checkout: ' + error.message + '\n\nPlease try again or contact support.');
                     button.innerHTML = originalHTML;
                     lucide.createIcons(); // Re-init icons
                     button.disabled = false;

@@ -12,6 +12,7 @@ import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
 import complianceRoutes from './routes/compliance';
 import stripeWebhookRoutes from './routes/stripe-webhooks';
+import testGoogleAdsRoutes from './routes/test-google-ads';
 
 // Initialize logger
 const logger = createLogger();
@@ -81,6 +82,9 @@ app.get('/debug/config', (req, res) => {
     }
   });
 });
+
+// Test endpoints
+app.use('/api/test', testGoogleAdsRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

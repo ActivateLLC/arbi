@@ -237,6 +237,15 @@ function generateProductLandingPage(listing: any): string {
     <meta property="og:image" content="${imageUrl}">
     <meta property="og:type" content="product">
 
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FC0RSRE67D"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-FC0RSRE67D');
+    </script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -607,6 +616,28 @@ function generateSuccessPage(session: any): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Order Confirmed!</title>
+
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FC0RSRE67D"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-FC0RSRE67D');
+
+      // Track purchase conversion
+      gtag('event', 'purchase', {
+        transaction_id: '${session.id}',
+        value: ${(session.amount_total! / 100).toFixed(2)},
+        currency: 'USD',
+        items: [{
+          item_id: '${session.metadata?.listingId}',
+          item_name: 'Product',
+          price: ${(session.amount_total! / 100).toFixed(2)}
+        }]
+      });
+    </script>
+
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {

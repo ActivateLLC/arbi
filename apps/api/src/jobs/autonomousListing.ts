@@ -72,6 +72,13 @@ class AutonomousListingJob {
 
       // 2. Process each opportunity
       for (const opp of opportunities) {
+        // Skip Target and Best Buy products (can't create accounts, poor margins)
+        const buyUrl = opp.metadata?.buyUrl || '';
+        if (buyUrl.toLowerCase().includes('target.com') || buyUrl.toLowerCase().includes('bestbuy.com')) {
+          console.log(`   ⏭️  Skipping ${opp.product.title} - vendor not supported for dropshipping`);
+          continue;
+        }
+
         // TODO: Check if already listed
 
         // 3. Create Listing and save to marketplace storage

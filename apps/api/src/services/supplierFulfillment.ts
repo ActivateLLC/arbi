@@ -1,16 +1,17 @@
 /**
  * Multi-Vendor Automated Fulfillment Service
- * Supports: Amazon, Walmart, Target, eBay, Best Buy, and any online retailer
+ * Supports: Amazon, Walmart, eBay, and any online retailer
  * Uses Stagehand browser automation to purchase and ship directly to customer
  *
- * GUEST CHECKOUT SUPPORTED (no login required):
- * ✅ Amazon - Prefers guest checkout, login optional
- * ✅ eBay - Prefers guest checkout, login optional
- * ✅ Best Buy - Prefers guest checkout, login optional
- * ⚠️  Walmart - May require login
- * ⚠️  Target - May require login
+ * SUPPORTED VENDORS FOR DROPSHIPPING:
+ * ✅ Amazon - Guest checkout, best prices, fast shipping
+ * ✅ eBay - Guest checkout, wide variety
+ * ✅ Walmart - May require login, competitive prices
  *
- * Login credentials are OPTIONAL for most vendors!
+ * ❌ Target - Requires account (can't create), REMOVED
+ * ❌ Best Buy - Expensive, poor margins, REMOVED
+ *
+ * Login credentials are OPTIONAL for Amazon and eBay!
  */
 
 import { Stagehand } from '@browserbasehq/stagehand';
@@ -32,7 +33,7 @@ interface FulfillmentRequest {
   amountPaid: number;
 }
 
-type Vendor = 'amazon' | 'walmart' | 'target' | 'ebay' | 'bestbuy' | 'other';
+type Vendor = 'amazon' | 'walmart' | 'ebay' | 'other';
 
 export class SupplierFulfillmentService {
   private stagehand: Stagehand | null = null;
@@ -68,9 +69,10 @@ export class SupplierFulfillmentService {
 
     if (urlLower.includes('amazon.com')) return 'amazon';
     if (urlLower.includes('walmart.com')) return 'walmart';
-    if (urlLower.includes('target.com')) return 'target';
     if (urlLower.includes('ebay.com')) return 'ebay';
-    if (urlLower.includes('bestbuy.com')) return 'bestbuy';
+
+    // Target and Best Buy are NOT supported for dropshipping
+    // Target requires account (can't create), Best Buy has poor margins
 
     return 'other';
   }
@@ -104,12 +106,8 @@ export class SupplierFulfillmentService {
           return await this.fulfillAmazon(request);
         case 'walmart':
           return await this.fulfillWalmart(request);
-        case 'target':
-          return await this.fulfillTarget(request);
         case 'ebay':
           return await this.fulfillEbay(request);
-        case 'bestbuy':
-          return await this.fulfillBestBuy(request);
         default:
           return await this.fulfillGeneric(request);
       }
@@ -272,69 +270,6 @@ export class SupplierFulfillmentService {
   }
 
   /**
-   * TARGET fulfillment flow
-   */
-  private async fulfillTarget(request: FulfillmentRequest): Promise<any> {
-    console.log('   🔴 Using TARGET checkout flow...');
-    const page = this.stagehand!.page;
-
-    try {
-      await page.goto(request.productUrl);
-      await page.waitForLoadState('networkidle');
-
-      // Add to cart
-      await this.stagehand!.act({
-        action: 'click "Add to cart" button'
-      });
-      await page.waitForTimeout(2000);
-
-      // View cart and checkout
-      await this.stagehand!.act({
-        action: 'click "View cart & check out" or proceed to checkout'
-      });
-      await page.waitForTimeout(2000);
-
-      // Sign in
-      await this.authenticateIfNeeded('TARGET_EMAIL', 'TARGET_PASSWORD');
-
-      // Shipping
-      await this.enterShippingAddress(request.shippingAddress);
-
-      await this.stagehand!.act({
-        action: 'select standard shipping and continue'
-      });
-      await page.waitForTimeout(2000);
-
-      // Payment
-      await this.stagehand!.act({
-        action: 'select saved payment card and continue'
-      });
-      await page.waitForTimeout(2000);
-
-      // Place order
-      await this.stagehand!.act({
-        action: 'click "Place your order" button'
-      });
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(3000);
-
-      const orderDetails = await this.extractOrderConfirmation();
-      await this.takeScreenshot(request.orderId, 'success');
-
-      return {
-        success: true,
-        vendor: 'target',
-        orderId: orderDetails.orderNumber,
-        trackingNumber: orderDetails.orderNumber,
-      };
-
-    } catch (error: any) {
-      await this.takeScreenshot(request.orderId, 'error');
-      throw error;
-    }
-  }
-
-  /**
    * EBAY fulfillment flow
    * ✅ Supports guest checkout - EBAY_EMAIL/EBAY_PASSWORD are OPTIONAL
    */
@@ -382,63 +317,6 @@ export class SupplierFulfillmentService {
       return {
         success: true,
         vendor: 'ebay',
-        orderId: orderDetails.orderNumber,
-        trackingNumber: orderDetails.orderNumber,
-      };
-
-    } catch (error: any) {
-      await this.takeScreenshot(request.orderId, 'error');
-      throw error;
-    }
-  }
-
-  /**
-   * BEST BUY fulfillment flow
-   * ✅ Supports guest checkout - BESTBUY_EMAIL/BESTBUY_PASSWORD are OPTIONAL
-   */
-  private async fulfillBestBuy(request: FulfillmentRequest): Promise<any> {
-    console.log('   🟡 Using BEST BUY checkout flow...');
-    const page = this.stagehand!.page;
-
-    try {
-      await page.goto(request.productUrl);
-      await page.waitForLoadState('networkidle');
-
-      await this.stagehand!.act({
-        action: 'click "Add to Cart" button'
-      });
-      await page.waitForTimeout(2000);
-
-      await this.stagehand!.act({
-        action: 'click "Go to Cart" and then "Checkout"'
-      });
-      await page.waitForTimeout(2000);
-
-      await this.authenticateIfNeeded('BESTBUY_EMAIL', 'BESTBUY_PASSWORD');
-      await this.enterShippingAddress(request.shippingAddress);
-
-      await this.stagehand!.act({
-        action: 'select shipping method and continue'
-      });
-      await page.waitForTimeout(2000);
-
-      await this.stagehand!.act({
-        action: 'select payment method and continue'
-      });
-      await page.waitForTimeout(2000);
-
-      await this.stagehand!.act({
-        action: 'click "Place Your Order"'
-      });
-      await page.waitForLoadState('networkidle');
-      await page.waitForTimeout(3000);
-
-      const orderDetails = await this.extractOrderConfirmation();
-      await this.takeScreenshot(request.orderId, 'success');
-
-      return {
-        success: true,
-        vendor: 'bestbuy',
         orderId: orderDetails.orderNumber,
         trackingNumber: orderDetails.orderNumber,
       };

@@ -2,14 +2,16 @@
  * Automated Ad Campaign Manager
  *
  * Automatically creates and manages ad campaigns for listed products
- * Supports: Google Ads, Facebook/Instagram Ads
+ * Supports: Google Ads, Facebook/Instagram Ads, TikTok Ads
  *
  * Flow:
  * 1. Product gets listed on marketplace
  * 2. Auto-generate landing page
- * 3. Auto-create ad campaign on Google + Facebook
+ * 3. Auto-create ad campaign on Google + Facebook + TikTok
  * 4. Customers see ad → Click → Buy → You profit!
  */
+
+import { tiktokMarketing } from './tiktokMarketing';
 
 interface ProductListing {
   listingId: string;
@@ -79,7 +81,7 @@ export class AdCampaignManager {
     }
 
     // Create TikTok Ad (if configured)
-    if (process.env.TIKTOK_ACCESS_TOKEN) {
+    if (tiktokMarketing.isConfigured()) {
       try {
         const tiktokCampaign = await this.createTikTokAd(listing, landingPageUrl);
         campaigns.push(tiktokCampaign);
@@ -87,6 +89,8 @@ export class AdCampaignManager {
       } catch (error: any) {
         console.error(`   ❌ TikTok Ad failed: ${error.message}`);
       }
+    } else {
+      console.log(`   ⚠️  TikTok Ads not configured (set TIKTOK_ACCESS_TOKEN and TIKTOK_ADVERTISER_ID)`);
     }
 
     console.log(`✅ Created ${campaigns.length} ad campaign(s)`);
@@ -354,37 +358,33 @@ export class AdCampaignManager {
   }
 
   /**
-   * Create TikTok Ad
+   * Create TikTok Ad - REAL API INTEGRATION
    */
   private async createTikTokAd(listing: ProductListing, landingPageUrl: string): Promise<AdCampaign> {
-    // TikTok Marketing API integration
-    // Docs: https://ads.tiktok.com/marketing_api/docs
+    console.log('   🎯 Creating REAL TikTok campaign...');
 
-    const campaignData = {
-      name: `Arbi - ${listing.productTitle}`,
-      objective: 'CONVERSIONS',
-      budget: {
-        dailyBudget: 10,
-      },
-      targeting: {
-        locations: ['US'],
-        ageGroups: ['25-34', '35-44'],
-        interests: this.extractInterests(listing.productTitle),
-      },
-      ad: {
-        videoUrl: listing.productImages[0], // Can auto-generate video from image
-        text: `${listing.productTitle} - Only $${listing.marketplacePrice}! Limited time offer 🔥`,
-        callToAction: 'SHOP_NOW',
-        landingPageUrl,
-      },
-    };
+    // Use real TikTok Marketing API
+    const result = await tiktokMarketing.createCampaign({
+      productTitle: listing.productTitle,
+      productDescription: listing.productDescription,
+      productImage: listing.productImages[0] || '',
+      landingPageUrl,
+      marketplacePrice: listing.marketplacePrice,
+      dailyBudget: 20, // $20/day default budget
+    });
 
-    // Simulate for now
-    const campaignId = `tiktok_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    if (!result.success) {
+      throw new Error(result.error || 'TikTok campaign creation failed');
+    }
+
+    console.log('   🎉 TikTok campaign is LIVE and spending real money!');
+    console.log(`   💰 Budget: $20/day`);
+    console.log(`   🎯 Targeting: US, Ages 25-54`);
+    console.log(`   📱 Platform: TikTok`);
 
     return {
-      campaignId,
-      platform: 'instagram', // Using instagram as generic social
+      campaignId: result.campaignId || '',
+      platform: 'instagram', // Using instagram as generic social platform type
       status: 'active',
       adSpend: 0,
       impressions: 0,

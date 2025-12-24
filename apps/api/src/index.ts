@@ -11,6 +11,7 @@ import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
 import complianceRoutes from './routes/compliance';
+import stripeWebhookRoutes from './routes/stripe-webhooks';
 
 // Initialize logger
 const logger = createLogger();
@@ -55,6 +56,10 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Stripe webhooks need raw body - add BEFORE express.json()
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
+
 app.use(express.json());
 app.use(morgan('dev'));
 

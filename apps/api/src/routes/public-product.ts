@@ -163,6 +163,10 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
         quantity: qty.toString(),
         supplierPrice: listing.supplierPrice.toString(),
         estimatedProfit: totalProfit.toString(),
+        supplierUrl: listing.supplierUrl || '',
+      },
+      shipping_address_collection: {
+        allowed_countries: ['US'], // Collect shipping address for fulfillment
       },
     });
 

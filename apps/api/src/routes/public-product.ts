@@ -237,18 +237,6 @@ function generateProductLandingPage(listing: any): string {
     <meta property="og:image" content="${imageUrl}">
     <meta property="og:type" content="product">
 
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FC0RSRE67D"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-FC0RSRE67D');
-    </script>
-
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -386,16 +374,13 @@ function generateProductLandingPage(listing: any): string {
             padding: 8px 0;
             color: #2d3748;
             font-size: 15px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
 
-        .features li svg {
-            width: 18px;
-            height: 18px;
+        .features li:before {
+            content: "✓ ";
             color: #48bb78;
-            flex-shrink: 0;
+            font-weight: bold;
+            margin-right: 8px;
         }
 
         .buy-button {
@@ -409,24 +394,6 @@ function generateProductLandingPage(listing: any): string {
             cursor: pointer;
             transition: transform 0.2s, box-shadow 0.2s;
             width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-        }
-
-        .buy-button svg {
-            width: 20px;
-            height: 20px;
-        }
-
-        .buy-button [data-lucide="loader-2"] {
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
         }
 
         .buy-button:hover {
@@ -446,28 +413,10 @@ function generateProductLandingPage(listing: any): string {
             text-align: center;
             font-size: 14px;
             color: #4a5568;
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .guarantee-item {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-        }
-
-        .guarantee-item svg {
-            width: 16px;
-            height: 16px;
-            color: #667eea;
         }
 
         .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
+            display: inline-block;
             background: #48bb78;
             color: white;
             padding: 6px 12px;
@@ -475,11 +424,6 @@ function generateProductLandingPage(listing: any): string {
             font-size: 13px;
             font-weight: 600;
             margin-bottom: 16px;
-        }
-
-        .badge svg {
-            width: 14px;
-            height: 14px;
         }
 
         .footer {
@@ -541,7 +485,7 @@ function generateProductLandingPage(listing: any): string {
         </div>
 
         <div class="info-section">
-            <span class="badge"><i data-lucide="zap"></i> Limited Offer</span>
+            <span class="badge">⚡ Limited Offer</span>
             <h1>${listing.productTitle}</h1>
             <div class="price">$${Number(listing.marketplacePrice).toFixed(2)}</div>
 
@@ -557,23 +501,19 @@ function generateProductLandingPage(listing: any): string {
             </div>
 
             <ul class="features">
-                <li><i data-lucide="truck"></i>Free Fast Shipping</li>
-                <li><i data-lucide="shield-check"></i>30-Day Money-Back Guarantee</li>
-                <li><i data-lucide="lock"></i>Secure Payment Processing</li>
-                <li><i data-lucide="package"></i>Ships Within 1-2 Business Days</li>
+                <li>Free Fast Shipping</li>
+                <li>30-Day Money-Back Guarantee</li>
+                <li>Secure Payment Processing</li>
+                <li>Ships Within 1-2 Business Days</li>
             </ul>
 
             <button class="buy-button" id="checkout-button">
-                <i data-lucide="shopping-cart"></i> Buy Now - Secure Checkout
+                🛒 Buy Now - Secure Checkout
             </button>
 
             <div class="guarantee">
-                <div class="guarantee-item">
-                    <i data-lucide="credit-card"></i> Secure payment powered by Stripe
-                </div>
-                <div class="guarantee-item">
-                    <i data-lucide="badge-check"></i> 100% satisfaction guaranteed
-                </div>
+                🔒 Secure payment powered by Stripe<br>
+                💯 100% satisfaction guaranteed
             </div>
         </div>
     </div>
@@ -593,16 +533,6 @@ function generateProductLandingPage(listing: any): string {
     <script>
         // Use addEventListener instead of inline onclick for CSP compatibility
         document.addEventListener('DOMContentLoaded', function() {
-            // Wait for Lucide to load, then initialize icons
-            function initIcons() {
-                if (typeof lucide !== 'undefined') {
-                    lucide.createIcons();
-                } else {
-                    setTimeout(initIcons, 100);
-                }
-            }
-            initIcons();
-
             const button = document.getElementById('checkout-button');
             const quantityInput = document.getElementById('quantity');
             const minusBtn = document.getElementById('qty-minus');
@@ -630,46 +560,32 @@ function generateProductLandingPage(listing: any): string {
 
             // Checkout with quantity
             button.addEventListener('click', async function() {
-                console.log('🛒 Checkout button clicked');
                 const quantity = parseInt(quantityInput.value);
-                console.log('📦 Quantity:', quantity);
-
-                const originalHTML = button.innerHTML;
-                button.innerHTML = '<i data-lucide="loader-2"></i> Processing...';
-                lucide.createIcons(); // Re-init icons
+                button.textContent = 'Processing...';
                 button.disabled = true;
 
                 try {
-                    console.log('📡 Sending checkout request...');
                     const response = await fetch('/product/${listing.listingId}/checkout', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ quantity: quantity })
                     });
 
-                    console.log('✅ Response received:', response.status);
-
                     if (!response.ok) {
-                        const errorData = await response.json();
-                        console.error('❌ Checkout failed:', errorData);
-                        throw new Error(errorData.error || 'Checkout failed');
+                        throw new Error('Checkout failed');
                     }
 
                     const data = await response.json();
-                    console.log('💳 Checkout data:', data);
 
                     if (data.checkoutUrl) {
-                        console.log('🔗 Redirecting to:', data.checkoutUrl);
                         window.location.href = data.checkoutUrl;
                     } else {
-                        console.error('❌ No checkout URL in response');
                         throw new Error('No checkout URL received');
                     }
                 } catch (error) {
-                    console.error('❌ Checkout error:', error);
-                    alert('Error processing checkout: ' + error.message + '\n\nPlease try again or contact support.');
-                    button.innerHTML = originalHTML;
-                    lucide.createIcons(); // Re-init icons
+                    console.error('Checkout error:', error);
+                    alert('Error processing checkout. Please try again.');
+                    button.textContent = '🛒 Buy Now - Secure Checkout';
                     button.disabled = false;
                 }
             });
@@ -691,28 +607,6 @@ function generateSuccessPage(session: any): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Order Confirmed!</title>
-
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-FC0RSRE67D"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag(){dataLayer.push(arguments);}
-      gtag('js', new Date());
-      gtag('config', 'G-FC0RSRE67D');
-
-      // Track purchase conversion
-      gtag('event', 'purchase', {
-        transaction_id: '${session.id}',
-        value: ${(session.amount_total! / 100).toFixed(2)},
-        currency: 'USD',
-        items: [{
-          item_id: '${session.metadata?.listingId}',
-          item_name: 'Product',
-          price: ${(session.amount_total! / 100).toFixed(2)}
-        }]
-      });
-    </script>
-
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {

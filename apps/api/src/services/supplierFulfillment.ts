@@ -1,7 +1,16 @@
 /**
  * Multi-Vendor Automated Fulfillment Service
- * Supports: Amazon, Walmart, Target, eBay, and any online retailer
+ * Supports: Amazon, Walmart, Target, eBay, Best Buy, and any online retailer
  * Uses Stagehand browser automation to purchase and ship directly to customer
+ *
+ * GUEST CHECKOUT SUPPORTED (no login required):
+ * ✅ Amazon - Prefers guest checkout, login optional
+ * ✅ eBay - Prefers guest checkout, login optional
+ * ✅ Best Buy - Prefers guest checkout, login optional
+ * ⚠️  Walmart - May require login
+ * ⚠️  Target - May require login
+ *
+ * Login credentials are OPTIONAL for most vendors!
  */
 
 import { Stagehand } from '@browserbasehq/stagehand';
@@ -117,6 +126,7 @@ export class SupplierFulfillmentService {
 
   /**
    * AMAZON fulfillment flow
+   * ✅ Supports guest checkout - AMAZON_EMAIL/AMAZON_PASSWORD are OPTIONAL
    */
   private async fulfillAmazon(request: FulfillmentRequest): Promise<any> {
     console.log('   🟠 Using AMAZON checkout flow...');
@@ -142,7 +152,7 @@ export class SupplierFulfillmentService {
       });
       await page.waitForTimeout(2000);
 
-      // Step 4: Sign in if needed
+      // Step 4: Guest checkout preferred (login only if credentials provided)
       console.log('   🔐 Step 4: Authenticating...');
       await this.authenticateIfNeeded('AMAZON_EMAIL', 'AMAZON_PASSWORD');
 
@@ -326,6 +336,7 @@ export class SupplierFulfillmentService {
 
   /**
    * EBAY fulfillment flow
+   * ✅ Supports guest checkout - EBAY_EMAIL/EBAY_PASSWORD are OPTIONAL
    */
   private async fulfillEbay(request: FulfillmentRequest): Promise<any> {
     console.log('   🟡 Using EBAY checkout flow...');
@@ -383,6 +394,7 @@ export class SupplierFulfillmentService {
 
   /**
    * BEST BUY fulfillment flow
+   * ✅ Supports guest checkout - BESTBUY_EMAIL/BESTBUY_PASSWORD are OPTIONAL
    */
   private async fulfillBestBuy(request: FulfillmentRequest): Promise<any> {
     console.log('   🟡 Using BEST BUY checkout flow...');
@@ -513,6 +525,7 @@ export class SupplierFulfillmentService {
 
   /**
    * Helper: Authenticate if not already signed in
+   * PREFERS GUEST CHECKOUT - only uses login if credentials are provided
    */
   private async authenticateIfNeeded(emailEnv: string, passwordEnv: string) {
     const isSignedIn = await this.stagehand!.observe({
@@ -520,18 +533,21 @@ export class SupplierFulfillmentService {
     });
 
     if (!isSignedIn) {
-      console.log(`   🔐 Signing in with ${emailEnv}...`);
-
       const email = process.env[emailEnv];
       const password = process.env[passwordEnv];
 
+      // Prefer guest checkout if credentials not provided
       if (!email || !password) {
-        console.warn(`   ⚠️  Missing ${emailEnv} or ${passwordEnv} - attempting guest checkout`);
+        console.log(`   👤 Using GUEST CHECKOUT (${emailEnv} not set)`);
         await this.stagehand!.act({
-          action: 'continue as guest or skip sign-in if possible'
+          action: 'click "Continue as guest" or "Guest checkout" button, or look for option to checkout without signing in'
         });
+        await this.stagehand!.page.waitForTimeout(2000);
         return;
       }
+
+      // Only use login if credentials are explicitly provided
+      console.log(`   🔐 Signing in with ${emailEnv}...`);
 
       await this.stagehand!.act({
         action: `enter email "${email}" in the email or username field`

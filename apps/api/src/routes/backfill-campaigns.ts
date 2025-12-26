@@ -6,7 +6,7 @@
  */
 
 import express from 'express';
-import { MarketplaceListing } from './marketplace';
+import { getListings, getListing, type MarketplaceListing } from './marketplace';
 import { adCampaignManager } from '../services/adCampaigns';
 
 const router = express.Router();
@@ -21,12 +21,7 @@ router.post('/campaigns', async (req, res) => {
     console.log('🔄 BACKFILL: Starting campaign generation for existing listings...\n');
 
     // Fetch all active marketplace listings
-    const listings = await MarketplaceListing.findAll({
-      where: {
-        status: 'active',
-      },
-      order: [['createdAt', 'DESC']],
-    });
+    const listings = await getListings('active');
 
     console.log(`📦 Found ${listings.length} active listings to process\n`);
 
@@ -133,9 +128,7 @@ router.post('/campaigns/:listingId', async (req, res) => {
     console.log(`🔄 Creating campaigns for listing: ${listingId}\n`);
 
     // Fetch the listing
-    const listing = await MarketplaceListing.findOne({
-      where: { listingId },
-    });
+    const listing = await getListing(listingId);
 
     if (!listing) {
       return res.status(404).json({

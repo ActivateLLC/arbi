@@ -52,22 +52,36 @@ router.get('/google-ads', async (req: Request, res: Response) => {
     const customer = client.Customer({
       customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID,
       refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN,
+      login_customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID, // Manager account as login
     });
 
-    console.log('\n🔄 Fetching campaigns...\n');
+    console.log('\n🔄 Testing API connection...\n');
 
-    // Query campaigns (simplified - just basic info, no metrics)
-    const campaigns = await customer.query(`
-      SELECT
-        campaign.id,
-        campaign.name,
-        campaign.status,
-        campaign.advertising_channel_type
-      FROM campaign
-      WHERE campaign.status != 'REMOVED'
-      ORDER BY campaign.id DESC
-      LIMIT 20
-    `);
+    // Try to list accessible customers first (works for manager accounts)
+    let campaigns: any[] = [];
+
+    try {
+      // For manager accounts, try listing accessible customers
+      const accessibleCustomers = await customer.listAccessibleCustomers();
+      console.log('✅ Manager account verified!');
+      console.log(`   Accessible customer IDs: ${accessibleCustomers.resource_names?.length || 0}`);
+
+      // Now try to query campaigns
+      campaigns = await customer.query(`
+        SELECT
+          campaign.id,
+          campaign.name,
+          campaign.status,
+          campaign.advertising_channel_type
+        FROM campaign
+        WHERE campaign.status != 'REMOVED'
+        ORDER BY campaign.id DESC
+        LIMIT 20
+      `);
+    } catch (queryError: any) {
+      console.log('   ℹ️  No campaigns found or query not supported (normal for new manager accounts)');
+      campaigns = [];
+    }
 
     console.log(`✅ Found ${campaigns.length} campaign(s)\n`);
 

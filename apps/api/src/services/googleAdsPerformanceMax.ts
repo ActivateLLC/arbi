@@ -146,14 +146,14 @@ export class GoogleAdsPerformanceMax {
    * Create campaign budget
    */
   private async createBudget(name: string, dailyBudgetUsd: number): Promise<string> {
-    const budgetResult = await this.customer.campaignBudgets.create({
+    const budgetResults = await this.customer.campaignBudgets.create([{
       name: `Budget - ${name}`,
       amount_micros: dailyBudgetUsd * 1_000_000, // Convert dollars to micros
       delivery_method: enums.BudgetDeliveryMethod.STANDARD,
       explicitly_shared: false,
-    });
+    }]);
 
-    return budgetResult.resource_name;
+    return budgetResults[0].resource_name;
   }
 
   /**
@@ -198,9 +198,9 @@ export class GoogleAdsPerformanceMax {
       campaignConfig.bidding_strategy_type = enums.BiddingStrategyType.MAXIMIZE_CONVERSION_VALUE;
     }
 
-    const campaignResult = await this.customer.campaigns.create(campaignConfig);
+    const campaignResults = await this.customer.campaigns.create([campaignConfig]);
 
-    return campaignResult.resource_name;
+    return campaignResults[0].resource_name;
   }
 
   /**
@@ -226,7 +226,7 @@ export class GoogleAdsPerformanceMax {
     const descriptions = this.generateDescriptions(config.productDescription);
 
     // Step 5: Create Asset Group
-    const assetGroupResult = await this.customer.assetGroups.create({
+    const assetGroupResults = await this.customer.assetGroups.create([{
       campaign: campaignResourceName,
       name: `Assets - ${config.productTitle.substring(0, 50)}`,
       status: enums.AssetGroupStatus.ENABLED,
@@ -237,9 +237,9 @@ export class GoogleAdsPerformanceMax {
 
       // Asset combinations
       // Google AI will test EVERY combination to find what works best
-    });
+    }]);
 
-    const assetGroupResourceName = assetGroupResult.resource_name;
+    const assetGroupResourceName = assetGroupResults[0].resource_name;
 
     // Step 6: Link all assets to the asset group
     await this.linkAssetsToGroup(
@@ -261,15 +261,15 @@ export class GoogleAdsPerformanceMax {
 
     for (const imageUrl of imageUrls.slice(0, 20)) { // Max 20 images
       try {
-        const assetResult = await this.customer.assets.create({
+        const assetResults = await this.customer.assets.create([{
           type: enums.AssetType.IMAGE,
           image_asset: {
             data: await this.downloadImageAsBase64(imageUrl),
           },
           name: `Product Image - ${Date.now()}`,
-        });
+        }]);
 
-        assetResourceNames.push(assetResult.resource_name);
+        assetResourceNames.push(assetResults[0].resource_name);
       } catch (error: any) {
         console.error(`   ⚠️  Failed to upload image: ${error.message}`);
       }
@@ -290,15 +290,15 @@ export class GoogleAdsPerformanceMax {
         // If video is not on YouTube, we need to upload to YouTube first
         // For now, we'll create a media bundle asset
 
-        const assetResult = await this.customer.assets.create({
+        const assetResults = await this.customer.assets.create([{
           type: enums.AssetType.YOUTUBE_VIDEO,
           youtube_video_asset: {
             youtube_video_id: this.extractYouTubeId(videoUrl),
           },
           name: `Product Video - ${Date.now()}`,
-        });
+        }]);
 
-        assetResourceNames.push(assetResult.resource_name);
+        assetResourceNames.push(assetResults[0].resource_name);
       } catch (error: any) {
         console.error(`   ⚠️  Failed to upload video: ${error.message}`);
         console.log(`   ℹ️  Videos must be on YouTube. Upload ${videoUrl} to YouTube first.`);

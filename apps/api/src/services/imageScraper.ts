@@ -11,6 +11,7 @@
 
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { backgroundRemovalService } from './backgroundRemoval';
 
 interface ScrapedImage {
   url: string;
@@ -395,6 +396,70 @@ export class ImageScraper {
     }
 
     return unique;
+  }
+
+  /**
+   * Upload image to Cloudinary with optional background removal
+   * @param imageUrl - URL of the image to upload
+   * @param productId - Unique identifier for organizing images
+   * @param removeBackground - Whether to remove background (default: true)
+   */
+  async uploadToCloudinary(
+    imageUrl: string,
+    productId: string,
+    removeBackground: boolean = false // Disabled by default - enable with env var
+  ): Promise<any> {
+    console.log(`📤 Uploading to Cloudinary: ${imageUrl}`);
+
+    try {
+      const cloudinary = require('cloudinary').v2;
+
+      // Configure Cloudinary
+      if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
+        throw new Error('Cloudinary not configured');
+      }
+
+      cloudinary.config({
+        cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+        api_key: process.env.CLOUDINARY_API_KEY,
+        api_secret: process.env.CLOUDINARY_API_SECRET,
+      });
+
+      // Step 1: Remove background if enabled (via parameter or env var)
+      let imageToUpload = imageUrl;
+      const shouldRemoveBackground = removeBackground || process.env.ENABLE_BACKGROUND_REMOVAL === 'true';
+
+      if (shouldRemoveBackground) {
+        console.log('   🖼️  Removing background...');
+        const bgRemovalResult = await backgroundRemovalService.removeBackground({
+          imageUrl,
+          outputFormat: 'png',
+          quality: 90,
+        });
+
+        if (bgRemovalResult.success && bgRemovalResult.processedImagePath) {
+          imageToUpload = bgRemovalResult.processedImagePath;
+          console.log('   ✅ Background removed successfully');
+        } else {
+          console.log('   ⚠️  Background removal failed, using original image');
+        }
+      }
+
+      // Step 2: Upload to Cloudinary
+      const result = await cloudinary.uploader.upload(imageToUpload, {
+        folder: `arbi/products/${productId}`,
+        resource_type: 'image',
+        public_id: `product_${Date.now()}`,
+      });
+
+      console.log(`   ✅ Uploaded to Cloudinary: ${result.secure_url}`);
+
+      return result;
+
+    } catch (error: any) {
+      console.error(`   ❌ Cloudinary upload failed: ${error.message}`);
+      throw error;
+    }
   }
 }
 

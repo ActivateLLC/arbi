@@ -12,6 +12,8 @@
  */
 
 import { tiktokMarketing } from './tiktokMarketing';
+import { aiVideoGenerator } from './aiVideoGenerator';
+import { googleAdsPerformanceMax } from './googleAdsPerformanceMax';
 
 interface ProductListing {
   listingId: string;
@@ -99,147 +101,94 @@ export class AdCampaignManager {
   }
 
   /**
-   * Create Google Shopping/Display Ad
+   * Create Google Performance Max Campaign with AI-generated video ads
+   * Performance Max = AI-optimized across ALL Google properties (Search, YouTube, Display, etc.)
    */
   private async createGoogleAd(listing: ProductListing, landingPageUrl: string): Promise<AdCampaign> {
-    // Google Ads API integration
-    // Docs: https://developers.google.com/google-ads/api/docs/start
+    console.log('   🎬 Generating AI video ad...');
 
-    const campaignData = {
-      name: `Arbi - ${listing.productTitle.substring(0, 50)}`,
-      type: 'SHOPPING', // or 'DISPLAY' for display ads
-      budget: {
-        dailyBudget: 10, // $10/day
-        totalBudget: listing.estimatedProfit * 2, // Spend max 2x potential profit
-      },
-      bidding: {
-        strategy: 'MAXIMIZE_CONVERSIONS',
-        maxCpc: 0.50, // Max $0.50 per click
-      },
-      targeting: {
-        locations: ['US'], // Target USA
-        languages: ['en'],
-        demographics: {
-          ageRanges: ['25-34', '35-44', '45-54'],
-        },
-      },
-      ad: {
-        headline: listing.productTitle.substring(0, 30),
-        description: listing.productDescription.substring(0, 90),
-        finalUrl: landingPageUrl,
-        images: listing.productImages,
-        price: listing.marketplacePrice,
-      },
-    };
+    // Step 1: Generate AI video ad from product images
+    let videoUrls: string[] = [];
 
-    // Real Google Ads API Integration
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { GoogleAdsApi, enums } = require('google-ads-api');
+    if (aiVideoGenerator.isConfigured()) {
+      try {
+        const video = await aiVideoGenerator.generateVideoAd({
+          productTitle: listing.productTitle,
+          productDescription: listing.productDescription,
+          productImages: listing.productImages,
+          duration: 15, // 15 second video
+          aspectRatio: '16:9', // Landscape for YouTube
+          style: 'modern',
+        });
 
-      if (!process.env.GOOGLE_ADS_CLIENT_ID || !process.env.GOOGLE_ADS_CLIENT_SECRET) {
-        throw new Error('Google Ads credentials not configured');
+        if (video.success && video.videoUrl) {
+          videoUrls.push(video.videoUrl);
+          console.log(`   ✅ AI video generated: ${video.provider}`);
+        }
+      } catch (error: any) {
+        console.log(`   ⚠️  Video generation skipped: ${error.message}`);
       }
+    }
 
-      const client = new GoogleAdsApi({
-        client_id: process.env.GOOGLE_ADS_CLIENT_ID,
-        client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET,
-        developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
-      });
+    // Step 2: Create Performance Max campaign
+    console.log('   🚀 Creating Performance Max campaign (AI-optimized)...');
 
-      const customer = client.Customer({
-        customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID,
-        refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN,
-      });
+    if (googleAdsPerformanceMax.isConfigured()) {
+      try {
+        const result = await googleAdsPerformanceMax.createCampaign({
+          productTitle: listing.productTitle,
+          productDescription: listing.productDescription,
+          productImages: listing.productImages,
+          productVideos: videoUrls.length > 0 ? videoUrls : undefined,
+          landingPageUrl,
+          price: listing.marketplacePrice,
+          dailyBudget: 20, // $20/day
+          targetRoas: 3.0, // Target 300% ROAS ($3 revenue per $1 ad spend)
+        });
 
-      console.log('   🚀 Creating real Google Ads campaign...');
+        if (result.success) {
+          console.log(`   🎉 Performance Max campaign LIVE!`);
+          console.log(`   🤖 Google AI optimizing across ALL platforms`);
+          console.log(`   📺 YouTube + Search + Display + Discover + Gmail + Maps`);
+          console.log(`   💰 Budget: $${result.budgetAmount}/day`);
+          console.log(`   🎯 Target: 300% ROAS`);
 
-      // Step 1: Create Campaign Budget
-      const budgetResourceName = `customers/${process.env.GOOGLE_ADS_CUSTOMER_ID}/campaignBudgets/${Date.now()}`;
+          return {
+            campaignId: result.campaignId || '',
+            platform: 'google',
+            status: 'active',
+            adSpend: 0,
+            impressions: 0,
+            clicks: 0,
+            conversions: 0,
+            revenue: 0,
+            roi: 0,
+          };
+        }
 
-      const budgetResults = await customer.campaignBudgets.create([{
-        name: `Budget - ${campaignData.name}`,
-        amount_micros: campaignData.budget.dailyBudget * 1000000, // $10 = 10,000,000 micros
-        delivery_method: enums.BudgetDeliveryMethod.STANDARD,
-      }]);
-      const budget = budgetResults[0];
+        throw new Error(result.error || 'Campaign creation failed');
 
-      console.log(`   ✅ Budget created: ${budget.resource_name}`);
+      } catch (error: any) {
+        console.error(`   ❌ Performance Max creation failed: ${error.message}`);
 
-      // Step 2: Create Campaign
-      const campaignResults = await customer.campaigns.create([{
-        name: campaignData.name,
-        campaign_budget: budget.resource_name,
-        status: enums.CampaignStatus.ENABLED,
-        advertising_channel_type: enums.AdvertisingChannelType.SEARCH,
-        bidding_strategy_type: enums.BiddingStrategyType.MAXIMIZE_CONVERSIONS,
-        start_date: new Date().toISOString().split('T')[0].replace(/-/g, ''),
-        network_settings: {
-          target_google_search: true,
-          target_search_network: true,
-          target_content_network: false,
-        },
-      }]);
-      const campaign = campaignResults[0];
+        // Return simulation as fallback
+        const campaignId = `pmax_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        return {
+          campaignId,
+          platform: 'google',
+          status: 'active',
+          adSpend: 0,
+          impressions: 0,
+          clicks: 0,
+          conversions: 0,
+          revenue: 0,
+          roi: 0,
+        };
+      }
+    } else {
+      console.log('   ℹ️  Google Ads not configured (Performance Max skipped)');
 
-      console.log(`   ✅ Campaign created: ${campaign.resource_name}`);
-
-      // Step 3: Create Ad Group
-      const adGroupResults = await customer.adGroups.create([{
-        name: `AdGroup - ${listing.productTitle.substring(0, 30)}`,
-        campaign: campaign.resource_name,
-        status: enums.AdGroupStatus.ENABLED,
-        type: enums.AdGroupType.SEARCH_STANDARD,
-        cpc_bid_micros: campaignData.bidding.maxCpc * 1000000, // $0.50 = 500,000 micros
-      }]);
-      const adGroup = adGroupResults[0];
-
-      console.log(`   ✅ Ad Group created: ${adGroup.resource_name}`);
-
-      // Step 4: Create Responsive Search Ad
-      const adResults = await customer.adGroupAds.create([{
-        ad_group: adGroup.resource_name,
-        status: enums.AdGroupAdStatus.ENABLED,
-        ad: {
-          final_urls: [landingPageUrl],
-          responsive_search_ad: {
-            headlines: [
-              { text: campaignData.ad.headline },
-              { text: `${listing.productTitle.substring(0, 30)} - Best Deal` },
-              { text: `Buy ${listing.productTitle.substring(0, 25)} Now` },
-            ],
-            descriptions: [
-              { text: campaignData.ad.description },
-              { text: `Free shipping. Klarna available. Secure checkout via Stripe.` },
-            ],
-            path1: 'shop',
-            path2: 'deals',
-          },
-        },
-      }]);
-      const ad = adResults[0];
-
-      console.log(`   ✅ Ad created: ${ad.resource_name}`);
-      console.log(`   🎯 Campaign LIVE: ${campaignData.name}`);
-
-      return {
-        campaignId: campaign.id.toString(),
-        platform: 'google',
-        status: 'active',
-        adSpend: 0,
-        impressions: 0,
-        clicks: 0,
-        conversions: 0,
-        revenue: 0,
-        roi: 0,
-      };
-
-    } catch (error: any) {
-      console.error(`   ❌ Google Ads campaign creation failed: ${error.message}`);
-      console.error(`   Error details:`, error);
-
-      // Return simulation as fallback if API fails
-      const campaignId = `google_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const campaignId = `pmax_simulated_${Date.now()}`;
       return {
         campaignId,
         platform: 'google',

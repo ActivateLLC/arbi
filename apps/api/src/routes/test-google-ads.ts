@@ -56,16 +56,13 @@ router.get('/google-ads', async (req: Request, res: Response) => {
 
     console.log('\n🔄 Fetching campaigns...\n');
 
-    // Query campaigns
+    // Query campaigns (simplified - just basic info, no metrics)
     const campaigns = await customer.query(`
       SELECT
         campaign.id,
         campaign.name,
         campaign.status,
-        campaign.advertising_channel_type,
-        metrics.impressions,
-        metrics.clicks,
-        metrics.cost_micros
+        campaign.advertising_channel_type
       FROM campaign
       WHERE campaign.status != 'REMOVED'
       ORDER BY campaign.id DESC
@@ -76,17 +73,12 @@ router.get('/google-ads', async (req: Request, res: Response) => {
 
     const campaignList = campaigns.map((row: any) => {
       const campaign = row.campaign;
-      const metrics = row.metrics;
-      const cost = (metrics.cost_micros / 1000000).toFixed(2);
 
       return {
         id: campaign.id,
         name: campaign.name,
         status: campaign.status,
         type: campaign.advertising_channel_type,
-        impressions: metrics.impressions,
-        clicks: metrics.clicks,
-        spend: `$${cost}`,
       };
     });
 

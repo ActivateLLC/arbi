@@ -6,7 +6,7 @@
  */
 
 import express from 'express';
-import { MarketplaceListing } from '../models/MarketplaceListing';
+import { MarketplaceListing } from './marketplace';
 import { adCampaignManager } from '../services/adCampaigns';
 
 const router = express.Router();

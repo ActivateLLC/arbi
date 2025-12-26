@@ -59,15 +59,15 @@ export class GoogleAdsPerformanceMax {
     }
 
     this.client = new GoogleAdsApi({
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID,
-      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET,
-      developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN!,
+      client_id: process.env.GOOGLE_ADS_CLIENT_ID.trim(),
+      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET.trim(),
+      developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN!.trim(),
     });
 
     this.customer = this.client.Customer({
-      customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!,
-      refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
-      login_customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID, // For manager accounts
+      customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!.trim(),
+      refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!.trim(),
+      login_customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!.trim(), // For manager accounts
     });
   }
 
@@ -88,7 +88,7 @@ export class GoogleAdsPerformanceMax {
       console.log(`   Budget: $${config.dailyBudget || 20}/day`);
 
       const campaignName = `Arbi PMax - ${config.productTitle.substring(0, 50)}`;
-      const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID!;
+      const customerId = process.env.GOOGLE_ADS_CUSTOMER_ID!.trim();
 
       // Step 1: Create Campaign Budget
       const budgetResourceName = await this.createBudget(

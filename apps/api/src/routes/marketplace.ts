@@ -4,6 +4,7 @@ import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
 import { getDatabase } from '../config/database';
 import { adCampaignManager } from '../services/adCampaigns';
+import { imageScraper } from '../services/imageScraper';
 
 const router = Router();
 
@@ -11,7 +12,10 @@ const router = Router();
 let db: ReturnType<typeof getDatabase> | null = null;
 try {
   db = getDatabase();
-} catch (error) {
+  console.log('✅ Database initialized for marketplace routes');
+} catch (error: any) {
+  console.error('❌ Database initialization failed for marketplace:', error.message);
+  console.error('   Stack:', error.stack);
   console.log('⚠️  Database not available for marketplace - using in-memory storage');
 }
 
@@ -128,23 +132,33 @@ export async function getListing(listingId: string): Promise<MarketplaceListing 
 }
 
 export async function getListings(status?: string): Promise<MarketplaceListing[]> {
+  console.log(`🔍 getListings called with status: ${status || 'all'}`);
+  console.log(`   Database available: ${db ? 'YES' : 'NO'}`);
+  console.log(`   In-memory listings count: ${listings.size}`);
+
   if (db) {
     try {
       const where = status ? { status } : {};
+      console.log(`   Querying database with where:`, where);
       const results = await db.find('MarketplaceListing', {
         where,
         order: [['listedAt', 'DESC']]
       });
+      console.log(`   ✅ Database returned ${results.length} listings`);
       return results as MarketplaceListing[];
     } catch (error: any) {
       console.error('❌ Database query failed, using memory:', error.message);
+      console.error('   Error stack:', error.stack);
       const allListings = Array.from(listings.values());
-      return status ? allListings.filter(l => l.status === status) : allListings;
+      const filtered = status ? allListings.filter(l => l.status === status) : allListings;
+      console.log(`   Falling back to memory: ${filtered.length} listings`);
+      return filtered;
     }
   }
 
   const allListings = Array.from(listings.values());
   const filtered = status ? allListings.filter(l => l.status === status) : allListings;
+  console.log(`   ⚠️  No database, using memory: ${filtered.length} listings`);
   return filtered.sort((a, b) => b.listedAt.getTime() - a.listedAt.getTime());
 }
 
@@ -252,12 +266,29 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
     const marketplacePrice = supplierPrice * (1 + markupPercentage / 100);
     const estimatedProfit = marketplacePrice - supplierPrice;
 
-    // Upload product images to Cloudinary for hosting
-    const cloudinaryUrls: string[] = [];
-    if (productImageUrls && productImageUrls.length > 0) {
-      console.log(`📸 Uploading ${productImageUrls.length} product images to Cloudinary...`);
+    // Step 1: Try to scrape real product images from multiple sources
+    let sourceImageUrls = productImageUrls || [];
 
-      for (const imageUrl of productImageUrls) {
+    // If no images provided or Cloudinary upload fails, scrape from web
+    if (!sourceImageUrls || sourceImageUrls.length === 0) {
+      console.log(`🔍 No images provided - scraping from web sources...`);
+      try {
+        const scraped = await imageScraper.scrapeProductImages(productTitle);
+        if (scraped.images.length > 0) {
+          sourceImageUrls = scraped.images.map(img => img.url);
+          console.log(`   ✅ Scraped ${scraped.images.length} images from ${scraped.sources.join(', ')}`);
+        }
+      } catch (error: any) {
+        console.error(`   ⚠️  Image scraping failed: ${error.message}`);
+      }
+    }
+
+    // Step 2: Upload product images to Cloudinary for hosting
+    const cloudinaryUrls: string[] = [];
+    if (sourceImageUrls && sourceImageUrls.length > 0) {
+      console.log(`📸 Uploading ${sourceImageUrls.length} product images to Cloudinary...`);
+
+      for (const imageUrl of sourceImageUrls) {
         try {
           const result = await cloudinary.uploader.upload(imageUrl, {
             folder: 'arbi-marketplace',
@@ -268,8 +299,38 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
           console.log(`   ✅ Uploaded: ${result.secure_url}`);
         } catch (error: any) {
           console.error(`   ❌ Failed to upload ${imageUrl}:`, error.message);
+          // Don't use Amazon URLs - they get blocked by tracking prevention
+          // Instead, try to scrape alternative images if this was the only source
+          if (sourceImageUrls.length === 1 && !imageUrl.includes('cloudinary.com')) {
+            console.log(`   🔍 Attempting to find alternative images...`);
+            try {
+              const scraped = await imageScraper.scrapeProductImages(productTitle, undefined, 3);
+              for (const scrapedImg of scraped.images) {
+                try {
+                  const altResult = await cloudinary.uploader.upload(scrapedImg.url, {
+                    folder: 'arbi-marketplace',
+                    public_id: `${opportunityId}-${Date.now()}`,
+                    resource_type: 'image'
+                  });
+                  cloudinaryUrls.push(altResult.secure_url);
+                  console.log(`   ✅ Uploaded alternative: ${altResult.secure_url}`);
+                  break; // Stop after first successful upload
+                } catch (altError) {
+                  continue; // Try next image
+                }
+              }
+            } catch (scrapeError) {
+              console.error(`   ⚠️  Alternative image search failed`);
+            }
+          }
         }
       }
+    }
+
+    // Step 3: If still no images, use placeholder
+    if (cloudinaryUrls.length === 0) {
+      console.log(`   📋 No images available - using professional placeholder`);
+      cloudinaryUrls.push(`https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(productTitle.substring(0, 30))}`);
     }
 
     // Create marketplace listing
@@ -315,7 +376,7 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       console.error(`   ⚠️  Ad campaign creation failed: ${error.message}`);
     }
 
-    const baseUrl = process.env.PUBLIC_URL || 'https://arbi.creai.dev';
+    const baseUrl = process.env.PUBLIC_URL || 'https://www.arbi.creai.dev';
     const publicUrl = `${baseUrl}/product/${listingId}`;
 
     res.status(201).json({
@@ -356,6 +417,43 @@ router.get('/listings', async (req: Request, res: Response) => {
     total: filteredListings.length,
     listings: filteredListings
   });
+});
+
+/**
+ * DELETE /api/marketplace/listings/:listingId
+ * Delete a marketplace listing
+ */
+router.delete('/listings/:listingId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { listingId } = req.params;
+
+    const listing = await getListing(listingId);
+    if (!listing) {
+      throw new ApiError(404, 'Listing not found');
+    }
+
+    // Delete from both database AND in-memory cache
+    if (db) {
+      try {
+        await db.destroy('MarketplaceListing', { where: { listingId } });
+        console.log(`✅ Deleted listing from database: ${listingId}`);
+      } catch (error: any) {
+        console.error('❌ Database delete failed:', error.message);
+      }
+    }
+
+    // Always delete from in-memory cache to keep them in sync
+    listings.delete(listingId);
+    console.log(`✅ Deleted listing from in-memory cache: ${listingId}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Listing ${listingId} deleted`,
+      deletedListing: listing
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 /**

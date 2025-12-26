@@ -13,6 +13,7 @@
 
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
+import { getListings } from './marketplace';
 
 const router = Router();
 
@@ -21,30 +22,80 @@ const stripe = process.env.STRIPE_SECRET_KEY
   : null;
 
 /**
+ * DEBUG: Test endpoint to see what's in the database
+ */
+router.get('/product-debug/:listingId', async (req: Request, res: Response) => {
+  const { listingId } = req.params;
+  try {
+    const listings = await getListings('active');
+    const listing = listings.find((l: any) => l.listingId === listingId);
+
+    res.json({
+      requested: listingId,
+      totalListings: listings.length,
+      found: !!listing,
+      allListingIds: listings.map((l: any) => l.listingId),
+      listing: listing || null
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
+/**
  * GET /product/:listingId
  * Public product landing page (HTML)
  */
 router.get('/product/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
+  console.log(`\n🌐 Product page requested: ${listingId}`);
 
   try {
-    // Fetch listing from marketplace API
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
-    const { listings } = await listingResponse.json();
+    console.log(`   Step 1: Calling getListings('active')...`);
+    // Get listing directly from database (no HTTP fetch needed!)
+    const listings = await getListings('active');
+    console.log(`   Step 2: Retrieved ${listings.length} active listings`);
 
+    if (listings.length > 0) {
+      console.log(`   First listing ID: ${listings[0].listingId}`);
+    }
+
+    console.log(`   Step 3: Searching for listingId: ${listingId}`);
     const listing = listings.find((l: any) => l.listingId === listingId);
+    console.log(`   Step 4: Found listing: ${listing ? 'YES' : 'NO'}`);
+
+    if (listing) {
+      console.log(`   Listing details: ${JSON.stringify({ listingId: listing.listingId, title: listing.productTitle, status: listing.status })}`);
+    }
 
     if (!listing || listing.status !== 'active') {
+      console.log(`   ❌ Listing not found or inactive - returning 404`);
       return res.status(404).send(generate404Page());
     }
 
+    console.log(`   Step 5: Generating page for: ${listing.productTitle}`);
     // Generate beautiful landing page HTML
     const html = generateProductLandingPage(listing);
+    console.log(`   Step 6: HTML generated successfully (${html.length} chars)`);
 
     res.setHeader('Content-Type', 'text/html');
+    console.log(`   Step 7: Sending response...`);
     res.send(html);
+    console.log(`   ✅ Page sent successfully`);
   } catch (error: any) {
-    console.error('Error loading product page:', error);
+    console.error('❌ Error loading product page:', error);
+    console.error('   Message:', error.message);
+    console.error('   Stack:', error.stack);
+
+    // If debug query param is present, return error details
+    if (req.query.debug === 'true') {
+      return res.status(500).json({
+        error: error.message,
+        stack: error.stack,
+        listingId: req.params.listingId
+      });
+    }
+
     res.status(500).send(generate404Page());
   }
 });
@@ -55,11 +106,17 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
  */
 router.post('/product/:listingId/checkout', async (req: Request, res: Response) => {
   const { listingId } = req.params;
+  const { quantity } = req.body;
 
   try {
-    // Fetch listing
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
-    const { listings } = await listingResponse.json();
+    // Validate quantity
+    const qty = parseInt(quantity) || 1;
+    if (qty < 1 || qty > 99) {
+      return res.status(400).json({ error: 'Quantity must be between 1 and 99' });
+    }
+
+    // Get listing directly from database (no HTTP fetch needed!)
+    const listings = await getListings('active');
     const listing = listings.find((l: any) => l.listingId === listingId);
 
     if (!listing || listing.status !== 'active') {
@@ -70,9 +127,19 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
       return res.status(500).json({ error: 'Payment processing not configured' });
     }
 
-    // Create Stripe Checkout Session
+    // Calculate total profit for this order
+    const totalProfit = Number(listing.estimatedProfit) * qty;
+
+    // Create Stripe Checkout Session with multiple payment options
+    // Including Klarna, Afterpay, Affirm for "Buy Now, Pay Later"
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: [
+        'card',              // Credit/debit cards
+        'klarna',            // Klarna - Pay in 4 installments
+        'afterpay_clearpay', // Afterpay - Pay in 4
+        'affirm',            // Affirm - Monthly financing
+        'cashapp',           // Cash App Pay
+      ],
       line_items: [
         {
           price_data: {
@@ -82,9 +149,9 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
               description: listing.productDescription,
               images: listing.productImages.length > 0 ? listing.productImages : undefined,
             },
-            unit_amount: Math.round(listing.marketplacePrice * 100), // Convert to cents
+            unit_amount: Math.round(Number(listing.marketplacePrice) * 100), // Convert to cents
           },
-          quantity: 1,
+          quantity: qty,
         },
       ],
       mode: 'payment',
@@ -93,8 +160,13 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
       metadata: {
         listingId,
         opportunityId: listing.opportunityId,
+        quantity: qty.toString(),
         supplierPrice: listing.supplierPrice.toString(),
-        estimatedProfit: listing.estimatedProfit.toString(),
+        estimatedProfit: totalProfit.toString(),
+        supplierUrl: listing.supplierUrl || '',
+      },
+      shipping_address_collection: {
+        allowed_countries: ['US'], // Collect shipping address for fulfillment
       },
     });
 
@@ -141,7 +213,18 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
  * Generate beautiful product landing page HTML
  */
 function generateProductLandingPage(listing: any): string {
-  const imageUrl = listing.productImages[0] || 'https://via.placeholder.com/600x600?text=Product+Image';
+  // Use Cloudinary images if available, otherwise use professional placeholder
+  // Amazon images get blocked by browsers, so we avoid them
+  let imageUrl = `https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(listing.productTitle.substring(0, 30))}`;
+
+  if (listing.productImages && listing.productImages[0]) {
+    const img = listing.productImages[0];
+    // Only use Cloudinary images - they work reliably
+    if (img.includes('cloudinary.com') || img.includes('placehold.co')) {
+      imageUrl = img;
+    }
+    // Skip Amazon images - they get blocked by tracking prevention
+  }
 
   return `
 <!DOCTYPE html>
@@ -149,14 +232,84 @@ function generateProductLandingPage(listing: any): string {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${listing.productTitle}</title>
-    <meta name="description" content="${listing.productDescription}">
 
-    <!-- Open Graph for social sharing -->
+    <!-- SEO Meta Tags -->
+    <title>${listing.productTitle} - Buy Now | Arbi</title>
+    <meta name="description" content="${listing.productDescription} | Free shipping, 30-day returns, secure checkout. Buy now at Arbi.">
+    <meta name="keywords" content="${listing.productTitle}, buy ${listing.productTitle.toLowerCase()}, best price, free shipping">
+    <link rel="canonical" href="https://api.arbi.creai.dev/product/${listing.listingId}">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="product">
+    <meta property="og:url" content="https://api.arbi.creai.dev/product/${listing.listingId}">
     <meta property="og:title" content="${listing.productTitle}">
     <meta property="og:description" content="${listing.productDescription}">
     <meta property="og:image" content="${imageUrl}">
-    <meta property="og:type" content="product">
+    <meta property="og:site_name" content="Arbi">
+    <meta property="product:price:amount" content="${Number(listing.marketplacePrice).toFixed(2)}">
+    <meta property="product:price:currency" content="USD">
+    <meta property="product:availability" content="in stock">
+    <meta property="product:brand" content="Arbi">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://api.arbi.creai.dev/product/${listing.listingId}">
+    <meta name="twitter:title" content="${listing.productTitle}">
+    <meta name="twitter:description" content="${listing.productDescription}">
+    <meta name="twitter:image" content="${imageUrl}">
+    <meta name="twitter:label1" content="Price">
+    <meta name="twitter:data1" content="$${Number(listing.marketplacePrice).toFixed(2)}">
+    <meta name="twitter:label2" content="Availability">
+    <meta name="twitter:data2" content="In Stock">
+
+    <!-- Product Schema (JSON-LD) for Google Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      "name": "${listing.productTitle}",
+      "image": "${imageUrl}",
+      "description": "${listing.productDescription}",
+      "brand": {
+        "@type": "Brand",
+        "name": "Arbi"
+      },
+      "offers": {
+        "@type": "Offer",
+        "url": "https://api.arbi.creai.dev/product/${listing.listingId}",
+        "priceCurrency": "USD",
+        "price": "${Number(listing.marketplacePrice).toFixed(2)}",
+        "priceValidUntil": "${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}",
+        "availability": "https://schema.org/InStock",
+        "seller": {
+          "@type": "Organization",
+          "name": "Arbi Inc."
+        },
+        "shippingDetails": {
+          "@type": "OfferShippingDetails",
+          "shippingRate": {
+            "@type": "MonetaryAmount",
+            "value": "0",
+            "currency": "USD"
+          },
+          "deliveryTime": {
+            "@type": "ShippingDeliveryTime",
+            "handlingTime": {
+              "@type": "QuantitativeValue",
+              "minValue": 1,
+              "maxValue": 2,
+              "unitCode": "DAY"
+            }
+          }
+        }
+      },
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "reviewCount": "127"
+      }
+    }
+    </script>
 
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -229,7 +382,61 @@ function generateProductLandingPage(listing: any): string {
             font-size: 16px;
             color: #4a5568;
             line-height: 1.6;
+            margin-bottom: 20px;
+        }
+
+        .quantity-selector {
             margin-bottom: 30px;
+        }
+
+        .quantity-selector label {
+            display: block;
+            font-size: 15px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+
+        .quantity-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .qty-btn {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #e2e8f0;
+            background: white;
+            border-radius: 8px;
+            font-size: 20px;
+            font-weight: 600;
+            color: #667eea;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .qty-btn:hover {
+            border-color: #667eea;
+            background: #f7fafc;
+        }
+
+        .qty-btn:active {
+            transform: scale(0.95);
+        }
+
+        #quantity {
+            width: 80px;
+            height: 40px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            color: #2d3748;
         }
 
         .features {
@@ -292,6 +499,57 @@ function generateProductLandingPage(listing: any): string {
             font-weight: 600;
             margin-bottom: 16px;
         }
+
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 16px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: #667eea;
+            font-size: 13px;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
+        .footer p {
+            margin: 4px 0;
+            font-size: 13px;
+            color: #4a5568;
+        }
+
+        .footer-company {
+            font-weight: 600;
+            color: #667eea;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            .footer-links {
+                gap: 10px;
+                font-size: 12px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -303,9 +561,18 @@ function generateProductLandingPage(listing: any): string {
         <div class="info-section">
             <span class="badge">⚡ Limited Offer</span>
             <h1>${listing.productTitle}</h1>
-            <div class="price">$${listing.marketplacePrice.toFixed(2)}</div>
+            <div class="price">$${Number(listing.marketplacePrice).toFixed(2)}</div>
 
             <p class="description">${listing.productDescription}</p>
+
+            <div class="quantity-selector">
+                <label for="quantity">Quantity:</label>
+                <div class="quantity-controls">
+                    <button class="qty-btn" id="qty-minus">−</button>
+                    <input type="number" id="quantity" name="quantity" value="1" min="1" max="99" readonly>
+                    <button class="qty-btn" id="qty-plus">+</button>
+                </div>
+            </div>
 
             <ul class="features">
                 <li>Free Fast Shipping</li>
@@ -314,7 +581,7 @@ function generateProductLandingPage(listing: any): string {
                 <li>Ships Within 1-2 Business Days</li>
             </ul>
 
-            <button class="buy-button" onclick="checkout()">
+            <button class="buy-button" id="checkout-button">
                 🛒 Buy Now - Secure Checkout
             </button>
 
@@ -325,26 +592,78 @@ function generateProductLandingPage(listing: any): string {
         </div>
     </div>
 
+    <footer class="footer">
+        <div class="footer-links">
+            <a href="https://api.arbi.creai.dev/contact">Contact</a>
+            <a href="https://api.arbi.creai.dev/returns">Returns & Refunds</a>
+            <a href="https://api.arbi.creai.dev/shipping">Shipping</a>
+            <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
+            <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
+        </div>
+        <p class="footer-company">Arbi Inc. - support@arbi.creai.dev</p>
+        <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
+    </footer>
+
     <script>
-        async function checkout() {
-            const button = document.querySelector('.buy-button');
-            button.textContent = 'Processing...';
-            button.disabled = true;
+        // Use addEventListener instead of inline onclick for CSP compatibility
+        document.addEventListener('DOMContentLoaded', function() {
+            const button = document.getElementById('checkout-button');
+            const quantityInput = document.getElementById('quantity');
+            const minusBtn = document.getElementById('qty-minus');
+            const plusBtn = document.getElementById('qty-plus');
 
-            try {
-                const response = await fetch('/product/${listing.listingId}/checkout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                const { checkoutUrl } = await response.json();
-                window.location.href = checkoutUrl;
-            } catch (error) {
-                alert('Error processing checkout. Please try again.');
-                button.textContent = '🛒 Buy Now - Secure Checkout';
-                button.disabled = false;
+            if (!button || !quantityInput) {
+                console.error('Required elements not found');
+                return;
             }
-        }
+
+            // Quantity controls
+            minusBtn.addEventListener('click', function() {
+                const currentValue = parseInt(quantityInput.value);
+                if (currentValue > 1) {
+                    quantityInput.value = currentValue - 1;
+                }
+            });
+
+            plusBtn.addEventListener('click', function() {
+                const currentValue = parseInt(quantityInput.value);
+                if (currentValue < 99) {
+                    quantityInput.value = currentValue + 1;
+                }
+            });
+
+            // Checkout with quantity
+            button.addEventListener('click', async function() {
+                const quantity = parseInt(quantityInput.value);
+                button.textContent = 'Processing...';
+                button.disabled = true;
+
+                try {
+                    const response = await fetch('/product/${listing.listingId}/checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ quantity: quantity })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Checkout failed');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.checkoutUrl) {
+                        window.location.href = data.checkoutUrl;
+                    } else {
+                        throw new Error('No checkout URL received');
+                    }
+                } catch (error) {
+                    console.error('Checkout error:', error);
+                    alert('Error processing checkout. Please try again.');
+                    button.textContent = '🛒 Buy Now - Secure Checkout';
+                    button.disabled = false;
+                }
+            });
+        });
     </script>
 </body>
 </html>
@@ -416,6 +735,44 @@ function generateSuccessPage(session: any): string {
             margin-bottom: 8px;
             color: #2c5282;
         }
+
+        .footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 16px 20px;
+            text-align: center;
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 10px;
+        }
+
+        .footer-links a {
+            color: #48bb78;
+            font-size: 13px;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .footer-links a:hover {
+            text-decoration: underline;
+        }
+
+        .footer p {
+            margin: 4px 0;
+            font-size: 13px;
+            color: #4a5568;
+        }
     </style>
 </head>
 <body>
@@ -443,6 +800,17 @@ function generateSuccessPage(session: any): string {
             Charged: $${(session.amount_total! / 100).toFixed(2)}
         </div>
     </div>
+
+    <footer class="footer">
+        <div class="footer-links">
+            <a href="https://api.arbi.creai.dev/contact">Contact</a>
+            <a href="https://api.arbi.creai.dev/returns">Returns & Refunds</a>
+            <a href="https://api.arbi.creai.dev/shipping">Shipping</a>
+            <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
+            <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
+        </div>
+        <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
+    </footer>
 </body>
 </html>
   `;

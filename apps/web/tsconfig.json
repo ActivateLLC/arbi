@@ -1,9 +1,0 @@
-{
-  "extends": "@arbi/tsconfig/react.json",
-  "compilerOptions": {
-    "jsx": "react-jsx",
-    "outDir": "./dist"
-  },
-  "include": ["src"],
-  "references": [{ "path": "./tsconfig.node.json" }]
-}

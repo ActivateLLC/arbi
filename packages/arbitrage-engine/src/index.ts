@@ -6,6 +6,7 @@ export * from './scouts/ECommerceScout';
 export * from './scouts/WebScraperScout';
 export * from './scouts/RainforestScout';
 export * from './scouts/FacebookMarketplaceScout';
+export * from './scouts/SlickdealsScout';
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';
@@ -40,13 +41,14 @@ export class ArbitrageEngine {
     this.riskManager = new RiskManager();
     this.opportunityCache = new SimpleCache<Opportunity[]>(5 * 60 * 1000); // 5 minute cache
 
-  // Register default scouts
-  this.registerScout(new ECommerceScout());
-  this.registerScout(new FacebookMarketplaceScout());
+  // NO DEFAULT SCOUTS - Only real scouts registered via API routes
+  // ECommerceScout and FacebookMarketplaceScout generate MOCK DATA
+  // Real scouts: RainforestScout, WebScraperScout, SlickdealsScout
   }
 
   registerScout(scout: OpportunityScout): void {
-    this.scouts.set(scout.type, scout);
+    // Use scout name as key to allow multiple scouts of same type
+    this.scouts.set(scout.name, scout);
   }
 
   async findOpportunities(config: ScoutConfig): Promise<Opportunity[]> {

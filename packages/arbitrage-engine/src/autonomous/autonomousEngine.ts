@@ -1,6 +1,7 @@
 import { RainforestScout } from '../scouts/RainforestScout';
 import { ECommerceScout } from '../scouts/ECommerceScout';
 import { WebScraperScout } from '../scouts/WebScraperScout';
+import { SlickdealsScout } from '../scouts/SlickdealsScout';
 import { AlibabaScout } from '../scouts/AlibabaScout';
 import { TaobaoScout } from '../scouts/TaobaoScout';
 import { DHGateScout } from '../scouts/DHGateScout';
@@ -49,12 +50,12 @@ export class AutonomousEngine {
     this.profitCalculator = new ProfitCalculator();
     this.scorer = new OpportunityScorer();
 
-    // Register remote-only scouts (no physical pickup required)
-    // eBay API/App ID logic removed. Only use web-scraper/automation for eBay if needed.
-    this.registerScout('amazon', new RainforestScout());
+    // Register scouts - 10k Rainforest credits/month available
+    this.registerScout('amazon', new RainforestScout()); // RE-ENABLED - 10k credits/month
     this.registerScout('retail', new ECommerceScout());
-    this.registerScout('webscraper', new WebScraperScout());
-    // Global import/export and dropshipping scouts
+    this.registerScout('webscraper', new WebScraperScout()); // FREE - Playwright scraping
+    this.registerScout('slickdeals', new SlickdealsScout()); // FREE - Real deals, no API key
+    // Global import/export scouts (stubs - need API keys)
     this.registerScout('alibaba', new AlibabaScout());
     this.registerScout('taobao', new TaobaoScout());
     this.registerScout('dhgate', new DHGateScout());
@@ -65,7 +66,10 @@ export class AutonomousEngine {
     // Note: Facebook Marketplace NOT registered - requires local pickup/physical handling
     // If you want local arbitrage, you'd need to add FacebookMarketplaceScout here
 
-    console.log('🤖 Autonomous Engine initialized with remote-only arbitrage');
+    console.log('🤖 Autonomous Engine initialized - 10k Rainforest credits/month');
+    console.log('   ✅ Rainforest ENABLED - Amazon Bestsellers');
+    console.log('   ✅ Slickdeals ENABLED - Real deals, no API key');
+    console.log('   ✅ WebScraper ENABLED - 13 global retailers');
     console.log(`   Platforms: ${Array.from(this.scouts.keys()).join(', ')}`);
   }
 

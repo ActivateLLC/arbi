@@ -42,22 +42,23 @@ router.get('/google-ads', async (req: Request, res: Response) => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { GoogleAdsApi } = require('google-ads-api');
 
-    // Initialize client
+    // Initialize client with trimmed credentials
     const client = new GoogleAdsApi({
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID,
-      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET,
-      developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
+      client_id: process.env.GOOGLE_ADS_CLIENT_ID!.trim(),
+      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET!.trim(),
+      developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN!.trim(),
     });
 
     // Individual account (not manager)
     const customer = client.Customer({
-      customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID,
-      refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN,
+      customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!.trim(),
+      refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!.trim(),
     });
 
     console.log('\n🔄 Testing API connection...\n');
+    console.log(`   Customer ID (trimmed): ${process.env.GOOGLE_ADS_CUSTOMER_ID!.trim()}`);
 
-    // Query campaigns
+    // Query ALL campaigns (including REMOVED) to see what's in the account
     let campaigns: any[] = [];
 
     try {
@@ -68,13 +69,13 @@ router.get('/google-ads', async (req: Request, res: Response) => {
           campaign.status,
           campaign.advertising_channel_type
         FROM campaign
-        WHERE campaign.status != 'REMOVED'
         ORDER BY campaign.id DESC
-        LIMIT 20
+        LIMIT 50
       `);
-      console.log('✅ Individual account verified!');
+      console.log(`✅ Individual account verified! Found ${campaigns.length} campaign(s) (all statuses)`);
     } catch (queryError: any) {
-      console.log('   ℹ️  No campaigns found or query not supported (normal for new accounts)');
+      console.log(`   ℹ️  Query error: ${queryError.message}`);
+      console.log('   This might be a new account with no campaigns yet.');
       campaigns = [];
     }
 

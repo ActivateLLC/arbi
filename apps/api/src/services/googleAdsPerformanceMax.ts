@@ -64,10 +64,10 @@ export class GoogleAdsPerformanceMax {
       developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN!.trim(),
     });
 
+    // Note: Individual account (not manager), so no login_customer_id needed
     this.customer = this.client.Customer({
       customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!.trim(),
       refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!.trim(),
-      login_customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!.trim(), // For manager accounts
     });
   }
 

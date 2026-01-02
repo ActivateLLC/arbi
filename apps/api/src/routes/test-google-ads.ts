@@ -49,24 +49,18 @@ router.get('/google-ads', async (req: Request, res: Response) => {
       developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
     });
 
+    // Individual account (not manager)
     const customer = client.Customer({
       customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID,
       refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN,
-      login_customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID, // Manager account as login
     });
 
     console.log('\n🔄 Testing API connection...\n');
 
-    // Try to list accessible customers first (works for manager accounts)
+    // Query campaigns
     let campaigns: any[] = [];
 
     try {
-      // For manager accounts, try listing accessible customers
-      const accessibleCustomers = await customer.listAccessibleCustomers();
-      console.log('✅ Manager account verified!');
-      console.log(`   Accessible customer IDs: ${accessibleCustomers.resource_names?.length || 0}`);
-
-      // Now try to query campaigns
       campaigns = await customer.query(`
         SELECT
           campaign.id,
@@ -78,8 +72,9 @@ router.get('/google-ads', async (req: Request, res: Response) => {
         ORDER BY campaign.id DESC
         LIMIT 20
       `);
+      console.log('✅ Individual account verified!');
     } catch (queryError: any) {
-      console.log('   ℹ️  No campaigns found or query not supported (normal for new manager accounts)');
+      console.log('   ℹ️  No campaigns found or query not supported (normal for new accounts)');
       campaigns = [];
     }
 

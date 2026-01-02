@@ -61,6 +61,7 @@ router.get('/google-ads', async (req: Request, res: Response) => {
     // Query ALL campaigns (including REMOVED) to see what's in the account
     let campaigns: any[] = [];
 
+    let queryError: any = null;
     try {
       campaigns = await customer.query(`
         SELECT
@@ -73,9 +74,14 @@ router.get('/google-ads', async (req: Request, res: Response) => {
         LIMIT 50
       `);
       console.log(`✅ Individual account verified! Found ${campaigns.length} campaign(s) (all statuses)`);
-    } catch (queryError: any) {
-      console.log(`   ℹ️  Query error: ${queryError.message}`);
-      console.log('   This might be a new account with no campaigns yet.');
+    } catch (err: any) {
+      console.error(`   ❌ Query error: ${err.message}`);
+      console.error(`   Error details:`, err);
+      queryError = {
+        message: err.message,
+        code: err.code,
+        details: err.details || err.toString(),
+      };
       campaigns = [];
     }
 
@@ -111,6 +117,7 @@ router.get('/google-ads', async (req: Request, res: Response) => {
       arbiCampaigns: arbiCampaigns.length,
       campaigns: campaignList,
       arbiCampaignsDetail: arbiCampaigns,
+      queryError: queryError || null,
     });
 
   } catch (error: any) {

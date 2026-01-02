@@ -14,6 +14,7 @@ import complianceRoutes from './routes/compliance';
 import stripeWebhookRoutes from './routes/stripe-webhooks';
 import testGoogleAdsRoutes from './routes/test-google-ads';
 import backfillCampaignsRoutes from './routes/backfill-campaigns';
+import redditRoutes from './routes/reddit';
 
 // Initialize logger
 const logger = createLogger();
@@ -89,6 +90,9 @@ app.use('/api/test', testGoogleAdsRoutes);
 
 // Backfill endpoints (create campaigns for existing listings)
 app.use('/api/backfill', backfillCampaignsRoutes);
+
+// Reddit automated posting
+app.use('/api/reddit', redditRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

@@ -11,7 +11,6 @@
 
 import axios from 'axios';
 import * as cheerio from 'cheerio';
-import { backgroundRemovalService } from './backgroundRemoval';
 
 interface ScrapedImage {
   url: string;
@@ -399,15 +398,13 @@ export class ImageScraper {
   }
 
   /**
-   * Upload image to Cloudinary with optional background removal
+   * Upload image to Cloudinary
    * @param imageUrl - URL of the image to upload
    * @param productId - Unique identifier for organizing images
-   * @param removeBackground - Whether to remove background (default: true)
    */
   async uploadToCloudinary(
     imageUrl: string,
-    productId: string,
-    removeBackground: boolean = false // Disabled by default - enable with env var
+    productId: string
   ): Promise<any> {
     console.log(`📤 Uploading to Cloudinary: ${imageUrl}`);
 
@@ -425,28 +422,9 @@ export class ImageScraper {
         api_secret: process.env.CLOUDINARY_API_SECRET,
       });
 
-      // Step 1: Remove background if enabled (via parameter or env var)
-      let imageToUpload = imageUrl;
-      const shouldRemoveBackground = removeBackground || process.env.ENABLE_BACKGROUND_REMOVAL === 'true';
-
-      if (shouldRemoveBackground) {
-        console.log('   🖼️  Removing background...');
-        const bgRemovalResult = await backgroundRemovalService.removeBackground({
-          imageUrl,
-          outputFormat: 'png',
-          quality: 90,
-        });
-
-        if (bgRemovalResult.success && bgRemovalResult.processedImagePath) {
-          imageToUpload = bgRemovalResult.processedImagePath;
-          console.log('   ✅ Background removed successfully');
-        } else {
-          console.log('   ⚠️  Background removal failed, using original image');
-        }
-      }
-
-      // Step 2: Upload to Cloudinary
-      const result = await cloudinary.uploader.upload(imageToUpload, {
+      // Background removal feature removed (not needed)
+      // Upload directly to Cloudinary
+      const result = await cloudinary.uploader.upload(imageUrl, {
         folder: `arbi/products/${productId}`,
         resource_type: 'image',
         public_id: `product_${Date.now()}`,

@@ -16,6 +16,7 @@ import testGoogleAdsRoutes from './routes/test-google-ads';
 import testAssetsRoutes from './routes/test-assets';
 import backfillCampaignsRoutes from './routes/backfill-campaigns';
 import redditRoutes from './routes/reddit';
+import validateProductsRoutes from './routes/validate-products';
 
 // Initialize logger
 const logger = createLogger();
@@ -95,6 +96,9 @@ app.use('/api/backfill', backfillCampaignsRoutes);
 
 // Reddit automated posting
 app.use('/api/reddit', redditRoutes);
+
+// Product validation (before ad campaigns)
+app.use('/api/validate', validateProductsRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

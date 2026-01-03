@@ -17,6 +17,7 @@ import testAssetsRoutes from './routes/test-assets';
 import backfillCampaignsRoutes from './routes/backfill-campaigns';
 import redditRoutes from './routes/reddit';
 import validateProductsRoutes from './routes/validate-products';
+import suppliersRoutes from './routes/suppliers';
 
 // Initialize logger
 const logger = createLogger();
@@ -99,6 +100,9 @@ app.use('/api/reddit', redditRoutes);
 
 // Product validation (before ad campaigns)
 app.use('/api/validate', validateProductsRoutes);
+
+// Supplier management (multi-supplier fallback system)
+app.use('/api/suppliers', suppliersRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

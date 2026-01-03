@@ -13,6 +13,7 @@ import directCheckoutRoutes from './routes/direct-checkout';
 import complianceRoutes from './routes/compliance';
 import stripeWebhookRoutes from './routes/stripe-webhooks';
 import testGoogleAdsRoutes from './routes/test-google-ads';
+import testAssetsRoutes from './routes/test-assets';
 import backfillCampaignsRoutes from './routes/backfill-campaigns';
 import redditRoutes from './routes/reddit';
 
@@ -87,6 +88,7 @@ app.get('/debug/config', (req, res) => {
 
 // Test endpoints
 app.use('/api/test', testGoogleAdsRoutes);
+app.use('/api/test', testAssetsRoutes);
 
 // Backfill endpoints (create campaigns for existing listings)
 app.use('/api/backfill', backfillCampaignsRoutes);

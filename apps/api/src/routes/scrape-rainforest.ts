@@ -56,9 +56,17 @@ router.post('/:listingId', async (req: Request, res: Response) => {
       timeout: 30000,
     });
 
+    console.log(`   📊 Rainforest response status: ${rainforestResponse.status}`);
+    console.log(`   📦 Response keys:`, Object.keys(rainforestResponse.data));
+
     const product = rainforestResponse.data.product;
     if (!product) {
-      return res.status(404).json({ success: false, error: 'Product not found by Rainforest API' });
+      console.log(`   ⚠️  No product in response. Full response:`, JSON.stringify(rainforestResponse.data).substring(0, 500));
+      return res.status(404).json({
+        success: false,
+        error: 'Product not found by Rainforest API',
+        rainforestData: rainforestResponse.data,
+      });
     }
 
     const imageUrls: string[] = [];

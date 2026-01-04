@@ -18,6 +18,7 @@ import backfillCampaignsRoutes from './routes/backfill-campaigns';
 import redditRoutes from './routes/reddit';
 import validateProductsRoutes from './routes/validate-products';
 import suppliersRoutes from './routes/suppliers';
+import fetchImagesRoutes from './routes/fetch-images';
 
 // Initialize logger
 const logger = createLogger();
@@ -103,6 +104,9 @@ app.use('/api/validate', validateProductsRoutes);
 
 // Supplier management (multi-supplier fallback system)
 app.use('/api/suppliers', suppliersRoutes);
+
+// Fetch product images from Amazon
+app.use('/api/fetch-images', fetchImagesRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

@@ -23,6 +23,7 @@ import cleanupPlaceholdersRoutes from './routes/cleanup-placeholders';
 import scrapeImagesRoutes from './routes/scrape-images';
 import scrapeImagesSimpleRoutes from './routes/scrape-images-simple';
 import scrapeAmazonBuddyRoutes from './routes/scrape-amazon-buddy';
+import scrapeRainforestRoutes from './routes/scrape-rainforest';
 
 // Initialize logger
 const logger = createLogger();
@@ -123,6 +124,9 @@ app.use('/api/scrape-images-simple', scrapeImagesSimpleRoutes);
 
 // Scrape Amazon products with amazon-buddy (open source)
 app.use('/api/scrape-amazon-buddy', scrapeAmazonBuddyRoutes);
+
+// Scrape Amazon products with Rainforest API (premium, bypasses bot detection)
+app.use('/api/scrape-rainforest', scrapeRainforestRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

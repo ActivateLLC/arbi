@@ -213,18 +213,23 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
  * Generate beautiful product landing page HTML
  */
 function generateProductLandingPage(listing: any): string {
-  // Use Cloudinary images if available, otherwise use professional placeholder
-  // Amazon images get blocked by browsers, so we avoid them
-  let imageUrl = `https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(listing.productTitle.substring(0, 30))}`;
+  // Process all product images for gallery
+  const productImages = listing.productImages && Array.isArray(listing.productImages) && listing.productImages.length > 0
+    ? listing.productImages.filter((img: string) => img.includes('cloudinary.com') || img.includes('placehold.co'))
+    : [`https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(listing.productTitle.substring(0, 30))}`];
 
-  if (listing.productImages && listing.productImages[0]) {
-    const img = listing.productImages[0];
-    // Only use Cloudinary images - they work reliably
-    if (img.includes('cloudinary.com') || img.includes('placehold.co')) {
-      imageUrl = img;
-    }
-    // Skip Amazon images - they get blocked by tracking prevention
-  }
+  const mainImageUrl = productImages[0];
+
+  // Generate thumbnail gallery HTML
+  const thumbnailsHtml = productImages.length > 1
+    ? `<div class="thumbnail-gallery">
+        ${productImages.map((img: string, idx: number) =>
+          `<img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="thumbnail${idx === 0 ? ' active' : ''}" data-index="${idx}">`
+        ).join('\n        ')}
+       </div>`
+    : '';
+
+  const imageUrl = mainImageUrl;
 
   return `
 <!DOCTYPE html>
@@ -346,8 +351,52 @@ function generateProductLandingPage(listing: any): string {
             background: #f8f9fa;
             padding: 40px;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
+            gap: 20px;
+        }
+
+        .main-image-container {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .main-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+
+        .thumbnail-gallery {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .thumbnail {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 8px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.2s;
+            opacity: 0.6;
+        }
+
+        .thumbnail:hover {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+
+        .thumbnail.active {
+            border-color: #667eea;
+            opacity: 1;
         }
 
         .image-section img {
@@ -555,7 +604,10 @@ function generateProductLandingPage(listing: any): string {
 <body>
     <div class="container">
         <div class="image-section">
-            <img src="${imageUrl}" alt="${listing.productTitle}">
+            <div class="main-image-container">
+                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="main-image" id="mainImage">
+            </div>
+            ${thumbnailsHtml}
         </div>
 
         <div class="info-section">
@@ -631,6 +683,25 @@ function generateProductLandingPage(listing: any): string {
                     quantityInput.value = currentValue + 1;
                 }
             });
+
+            // Image gallery - thumbnail click handling
+            const thumbnails = document.querySelectorAll('.thumbnail');
+            const mainImage = document.getElementById('mainImage');
+
+            if (thumbnails.length > 0 && mainImage) {
+                thumbnails.forEach(function(thumbnail) {
+                    thumbnail.addEventListener('click', function() {
+                        // Update main image
+                        mainImage.src = thumbnail.src;
+
+                        // Update active state
+                        thumbnails.forEach(function(t) {
+                            t.classList.remove('active');
+                        });
+                        thumbnail.classList.add('active');
+                    });
+                });
+            }
 
             // Checkout with quantity
             button.addEventListener('click', async function() {

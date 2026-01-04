@@ -20,6 +20,7 @@ import validateProductsRoutes from './routes/validate-products';
 import suppliersRoutes from './routes/suppliers';
 import fetchImagesRoutes from './routes/fetch-images';
 import cleanupPlaceholdersRoutes from './routes/cleanup-placeholders';
+import scrapeImagesRoutes from './routes/scrape-images';
 
 // Initialize logger
 const logger = createLogger();
@@ -111,6 +112,9 @@ app.use('/api/fetch-images', fetchImagesRoutes);
 
 // Cleanup placeholder images
 app.use('/api/cleanup-placeholders', cleanupPlaceholdersRoutes);
+
+// Scrape product images with Stagehand
+app.use('/api/scrape-images', scrapeImagesRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

@@ -4,7 +4,7 @@
  */
 
 import { Router, Request, Response } from 'express';
-import AmazonScraper from 'amazon-buddy';
+const AmazonScraper = require('amazon-buddy');
 import axios from 'axios';
 import { getListing, updateListing } from './marketplace';
 
@@ -41,12 +41,10 @@ router.post('/:listingId', async (req: Request, res: Response) => {
 
     console.log(`🖼️  Scraping Amazon product: ${asin}`);
 
-    // Use amazon-buddy to scrape
-    const products = await AmazonScraper({
-      asin: [asin],
+    // Use amazon-buddy to scrape using ASIN method
+    const products = await AmazonScraper.asin({
+      asin: asin,
       bulk: false,
-      sponsored: false,
-      category: 'aps',
       cli: false,
     });
 

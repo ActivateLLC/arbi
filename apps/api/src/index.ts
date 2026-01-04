@@ -19,6 +19,7 @@ import redditRoutes from './routes/reddit';
 import validateProductsRoutes from './routes/validate-products';
 import suppliersRoutes from './routes/suppliers';
 import fetchImagesRoutes from './routes/fetch-images';
+import cleanupPlaceholdersRoutes from './routes/cleanup-placeholders';
 
 // Initialize logger
 const logger = createLogger();
@@ -107,6 +108,9 @@ app.use('/api/suppliers', suppliersRoutes);
 
 // Fetch product images from Amazon
 app.use('/api/fetch-images', fetchImagesRoutes);
+
+// Cleanup placeholder images
+app.use('/api/cleanup-placeholders', cleanupPlaceholdersRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

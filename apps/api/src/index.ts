@@ -22,6 +22,7 @@ import fetchImagesRoutes from './routes/fetch-images';
 import cleanupPlaceholdersRoutes from './routes/cleanup-placeholders';
 import scrapeImagesRoutes from './routes/scrape-images';
 import scrapeImagesSimpleRoutes from './routes/scrape-images-simple';
+import scrapeAmazonBuddyRoutes from './routes/scrape-amazon-buddy';
 
 // Initialize logger
 const logger = createLogger();
@@ -119,6 +120,9 @@ app.use('/api/scrape-images', scrapeImagesRoutes);
 
 // Scrape product images (simple HTTP-based, no browser)
 app.use('/api/scrape-images-simple', scrapeImagesSimpleRoutes);
+
+// Scrape Amazon products with amazon-buddy (open source)
+app.use('/api/scrape-amazon-buddy', scrapeAmazonBuddyRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

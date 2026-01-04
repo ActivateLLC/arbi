@@ -213,14 +213,17 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
  * Generate beautiful product landing page HTML
  */
 function generateProductLandingPage(listing: any): string {
-  // Process all product images for gallery
+  // Only use REAL product images from Cloudinary - NO PLACEHOLDERS
   const productImages = listing.productImages && Array.isArray(listing.productImages) && listing.productImages.length > 0
-    ? listing.productImages.filter((img: string) => img.includes('cloudinary.com') || img.includes('placehold.co'))
-    : [`https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(listing.productTitle.substring(0, 30))}`];
+    ? listing.productImages.filter((img: string) => img.includes('cloudinary.com'))
+    : [];
 
-  const mainImageUrl = productImages[0];
+  // If no real images, use a default professional placeholder (only as last resort)
+  const mainImageUrl = productImages.length > 0
+    ? productImages[0]
+    : `https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(listing.productTitle.substring(0, 30))}`;
 
-  // Generate thumbnail gallery HTML
+  // Only show gallery if we have 2+ REAL images
   const thumbnailsHtml = productImages.length > 1
     ? `<div class="thumbnail-gallery">
         ${productImages.map((img: string, idx: number) =>

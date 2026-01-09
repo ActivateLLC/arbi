@@ -7,6 +7,7 @@ import morgan from 'morgan';
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { initializeDatabase } from './config/database';
+import { apiLimiter, strictLimiter, checkoutLimiter } from './middleware/rateLimiter';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
@@ -24,6 +25,7 @@ import scrapeImagesRoutes from './routes/scrape-images';
 import scrapeImagesSimpleRoutes from './routes/scrape-images-simple';
 import scrapeAmazonBuddyRoutes from './routes/scrape-amazon-buddy';
 import scrapeRainforestRoutes from './routes/scrape-rainforest';
+import generateVideoRoutes from './routes/generate-video';
 
 // Initialize logger
 const logger = createLogger();
@@ -75,7 +77,20 @@ app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), strip
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Health check endpoint
+// Apply rate limiting to all API routes
+app.use('/api/', apiLimiter);
+
+// Apply strict rate limiting to expensive operations
+app.use('/api/scrape-rainforest/', strictLimiter);
+app.use('/api/scrape-images/', strictLimiter);
+app.use('/api/scrape-amazon-buddy/', strictLimiter);
+app.use('/api/campaigns/launch/', strictLimiter);
+app.use('/api/backfill/', strictLimiter);
+
+// Apply checkout rate limiting
+app.use('/api/marketplace/checkout', checkoutLimiter);
+
+// Health check endpoint (no rate limiting)
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
@@ -127,6 +142,9 @@ app.use('/api/scrape-amazon-buddy', scrapeAmazonBuddyRoutes);
 
 // Scrape Amazon products with Rainforest API (premium, bypasses bot detection)
 app.use('/api/scrape-rainforest', scrapeRainforestRoutes);
+
+// Video ad generation for Performance Max campaigns
+app.use('/api/generate-video', generateVideoRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

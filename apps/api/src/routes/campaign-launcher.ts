@@ -6,14 +6,16 @@
 import { Router, Request, Response } from 'express';
 import { adCampaignManager } from '../services/adCampaigns';
 import { getDatabase } from '../config/database';
+import { requireApiKey } from '../middleware/apiAuth';
 
 const router = Router();
 
 /**
  * POST /api/campaigns/launch
  * Automatically create Google Ads campaigns for top products
+ * PROTECTED: Requires API key
  */
-router.post('/launch', async (req: Request, res: Response) => {
+router.post('/launch', requireApiKey, async (req: Request, res: Response) => {
   console.log('🚀 AUTO-LAUNCH: Starting automated campaign creation...');
 
   try {

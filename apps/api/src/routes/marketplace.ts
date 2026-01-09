@@ -5,6 +5,8 @@ import { v2 as cloudinary } from 'cloudinary';
 import { getDatabase } from '../config/database';
 import { adCampaignManager } from '../services/adCampaigns';
 import { imageScraper } from '../services/imageScraper';
+import { requireApiKey } from '../middleware/apiAuth';
+import { createListingSchema, checkoutSchema, validateSchema } from '../schemas/marketplace';
 
 const router = Router();
 
@@ -244,9 +246,13 @@ async function updateOrder(orderId: string, data: Partial<BuyerOrder>): Promise<
 /**
  * POST /api/marketplace/list
  * Create marketplace listing from arbitrage opportunity
+ * PROTECTED: Requires API key
  */
-router.post('/list', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/list', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Validate request body
+    const validatedData = validateSchema(createListingSchema, req.body);
+
     const {
       opportunityId,
       productTitle,
@@ -255,12 +261,8 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       supplierPrice,
       supplierUrl,
       supplierPlatform,
-      markupPercentage = 30 // Default 30% markup
-    } = req.body;
-
-    if (!opportunityId || !productTitle || !supplierPrice || !supplierUrl) {
-      throw new ApiError(400, 'Missing required fields');
-    }
+      markupPercentage
+    } = validatedData;
 
     // Calculate marketplace price with markup
     const marketplacePrice = supplierPrice * (1 + markupPercentage / 100);
@@ -422,8 +424,9 @@ router.get('/listings', async (req: Request, res: Response) => {
 /**
  * DELETE /api/marketplace/listings/:listingId
  * Delete a marketplace listing
+ * PROTECTED: Requires API key
  */
-router.delete('/listings/:listingId', async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/listings/:listingId', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { listingId } = req.params;
 
@@ -462,16 +465,15 @@ router.delete('/listings/:listingId', async (req: Request, res: Response, next: 
  */
 router.post('/checkout', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Validate checkout data
+    const validatedData = validateSchema(checkoutSchema, req.body);
+
     const {
       listingId,
       buyerEmail,
       shippingAddress,
       paymentMethodId // Stripe payment method from frontend
-    } = req.body;
-
-    if (!listingId || !buyerEmail || !shippingAddress || !paymentMethodId) {
-      throw new ApiError(400, 'Missing required checkout fields');
-    }
+    } = validatedData;
 
     const listing = await getListing(listingId);
     if (!listing) {

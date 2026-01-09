@@ -2,6 +2,8 @@
  * Video Ad Generator Service
  * Automatically creates product videos for Performance Max campaigns
  *
+ * Uses Remotion (FREE, open source) as primary method
+ * Falls back to Shotstack API if Remotion unavailable
  * Generates 15-30 second videos from product images and text
  * Uploads to Cloudinary for use in Google Ads
  */
@@ -16,6 +18,7 @@ export interface VideoGenerationConfig {
   includePrice?: boolean;
   includeCTA?: boolean;
   ctaText?: string;
+  orientation?: 'horizontal' | 'vertical'; // New: support vertical videos
 }
 
 export interface GeneratedVideo {
@@ -24,29 +27,56 @@ export interface GeneratedVideo {
   duration: number;
   width: number;
   height: number;
+  method: 'remotion' | 'shotstack' | 'cloudinary'; // Track which method was used
 }
 
 /**
- * Video Ad Generator using Shotstack API
- * Alternative: Can be replaced with Remotion for zero-cost solution
+ * Video Ad Generator
+ * Primary: Remotion (FREE, open source, unlimited videos)
+ * Fallback: Shotstack API ($49/month, professional templates)
+ * Last resort: Cloudinary (basic image enhancements)
  */
 export class VideoAdGenerator {
   private shotstackApiKey: string | undefined;
-  private useCloudinaryTransform: boolean;
+  private remotionAvailable: boolean;
+  private method: 'remotion' | 'shotstack' | 'cloudinary';
 
   constructor() {
     this.shotstackApiKey = process.env.SHOTSTACK_API_KEY;
-    this.useCloudinaryTransform = !this.shotstackApiKey;
 
-    if (this.useCloudinaryTransform) {
-      console.log('📹 Using Cloudinary video transformations (free tier)');
+    // Check if Remotion is available
+    this.remotionAvailable = this.checkRemotionAvailability();
+
+    // Determine which method to use (priority: Remotion > Shotstack > Cloudinary)
+    if (this.remotionAvailable) {
+      this.method = 'remotion';
+      console.log('📹 Using Remotion (FREE open source) for video generation');
+    } else if (this.shotstackApiKey) {
+      this.method = 'shotstack';
+      console.log('📹 Using Shotstack API ($49/month) for video generation');
     } else {
-      console.log('📹 Using Shotstack API for advanced video generation');
+      this.method = 'cloudinary';
+      console.log('📹 Using Cloudinary (basic enhancements) - install Remotion for full videos');
+    }
+  }
+
+  /**
+   * Check if Remotion is installed and available
+   */
+  private checkRemotionAvailability(): boolean {
+    try {
+      require('remotion');
+      require('@remotion/bundler');
+      require('@remotion/renderer');
+      return true;
+    } catch (error) {
+      return false;
     }
   }
 
   /**
    * Generate a product video from marketplace listing
+   * Routes to best available method: Remotion > Shotstack > Cloudinary
    */
   async generateProductVideo(
     listing: MarketplaceListing,
@@ -57,10 +87,12 @@ export class VideoAdGenerator {
       template = 'product-showcase',
       includePrice = true,
       includeCTA = true,
-      ctaText = 'Shop Now'
+      ctaText = 'Shop Now',
+      orientation = 'horizontal'
     } = config;
 
-    console.log(`🎬 Generating ${duration}s video for: ${listing.productTitle}`);
+    console.log(`🎬 Generating ${duration}s ${orientation} video for: ${listing.productTitle}`);
+    console.log(`   Method: ${this.method.toUpperCase()}`);
 
     // Filter to only Cloudinary-hosted images
     const cloudinaryImages = listing.productImages.filter(img =>
@@ -73,29 +105,149 @@ export class VideoAdGenerator {
 
     console.log(`   Using ${cloudinaryImages.length} product images`);
 
-    if (this.useCloudinaryTransform) {
-      // Method 1: Cloudinary Video Transformations (FREE)
-      // Creates a simple slideshow video from images
-      return await this.generateWithCloudinary(
-        cloudinaryImages,
-        listing,
-        duration,
-        includePrice,
-        includeCTA,
-        ctaText
+    // Route to appropriate video generation method
+    switch (this.method) {
+      case 'remotion':
+        return await this.generateWithRemotion(
+          cloudinaryImages,
+          listing,
+          duration,
+          orientation,
+          includePrice,
+          includeCTA,
+          ctaText
+        );
+
+      case 'shotstack':
+        return await this.generateWithShotstack(
+          cloudinaryImages,
+          listing,
+          template,
+          duration,
+          includePrice,
+          includeCTA,
+          ctaText
+        );
+
+      case 'cloudinary':
+      default:
+        return await this.generateWithCloudinary(
+          cloudinaryImages,
+          listing,
+          duration,
+          includePrice,
+          includeCTA,
+          ctaText
+        );
+    }
+  }
+
+  /**
+   * Generate video using Remotion (FREE, open source)
+   * Professional videos with React-based templates
+   */
+  private async generateWithRemotion(
+    images: string[],
+    listing: MarketplaceListing,
+    duration: number,
+    orientation: 'horizontal' | 'vertical',
+    includePrice: boolean,
+    includeCTA: boolean,
+    ctaText: string
+  ): Promise<GeneratedVideo> {
+    try {
+      const { bundle } = require('@remotion/bundler');
+      const { renderMedia, selectComposition } = require('@remotion/renderer');
+      const path = require('path');
+      const fs = require('fs');
+
+      console.log(`   🎬 Remotion: Rendering ${duration}s ${orientation} video...`);
+
+      // Determine composition ID based on duration and orientation
+      const compositionId =
+        duration === 30
+          ? 'ProductShowcase30s'
+          : orientation === 'vertical'
+          ? 'ProductShowcaseVertical'
+          : 'ProductShowcase';
+
+      // Step 1: Bundle Remotion composition
+      const remotionEntry = path.join(__dirname, 'remotion', 'index.tsx');
+
+      if (!fs.existsSync(remotionEntry)) {
+        throw new Error(`Remotion entry point not found: ${remotionEntry}`);
+      }
+
+      const bundleLocation = await bundle({
+        entryPoint: remotionEntry,
+        webpackOverride: (config: any) => config,
+      });
+
+      console.log(`   ✅ Bundle created: ${bundleLocation}`);
+
+      // Step 2: Get composition details
+      const composition = await selectComposition({
+        serveUrl: bundleLocation,
+        id: compositionId,
+        inputProps: {
+          productTitle: listing.productTitle,
+          productImages: images,
+          marketplacePrice: Number(listing.marketplacePrice),
+          ctaText,
+          includePrice,
+        },
+      });
+
+      console.log(`   ✅ Composition selected: ${compositionId}`);
+
+      // Step 3: Render video
+      const outputPath = path.join(
+        '/tmp',
+        `video-${listing.listingId}-${Date.now()}.mp4`
       );
-    } else {
-      // Method 2: Shotstack API (PAID - $49/month)
-      // Professional video templates with animations
-      return await this.generateWithShotstack(
-        cloudinaryImages,
-        listing,
-        template,
+
+      await renderMedia({
+        composition,
+        serveUrl: bundleLocation,
+        codec: 'h264',
+        outputLocation: outputPath,
+        inputProps: {
+          productTitle: listing.productTitle,
+          productImages: images,
+          marketplacePrice: Number(listing.marketplacePrice),
+          ctaText,
+          includePrice,
+        },
+      });
+
+      console.log(`   ✅ Video rendered: ${outputPath}`);
+
+      // Step 4: Upload to Cloudinary for permanent hosting
+      const uploadResult = await cloudinary.uploader.upload(outputPath, {
+        resource_type: 'video',
+        folder: 'arbi-video-ads',
+        public_id: `video-${listing.listingId}-${Date.now()}`,
+      });
+
+      console.log(`   ✅ Uploaded to Cloudinary: ${uploadResult.secure_url}`);
+
+      // Clean up temporary file
+      if (fs.existsSync(outputPath)) {
+        fs.unlinkSync(outputPath);
+      }
+
+      return {
+        videoUrl: uploadResult.secure_url,
+        thumbnailUrl: uploadResult.secure_url.replace('.mp4', '.jpg'),
         duration,
-        includePrice,
-        includeCTA,
-        ctaText
-      );
+        width: orientation === 'vertical' ? 1080 : 1920,
+        height: orientation === 'vertical' ? 1920 : 1080,
+        method: 'remotion',
+      };
+    } catch (error: any) {
+      console.error('❌ Remotion rendering failed:', error.message);
+      console.error('   Stack:', error.stack);
+      throw new Error(`Remotion video generation failed: ${error.message}`);
     }
   }
 
@@ -166,6 +318,7 @@ export class VideoAdGenerator {
         duration: 0,
         width: 1920,
         height: 1080,
+        method: 'cloudinary',
       };
     } catch (error: any) {
       console.error('❌ Cloudinary video generation failed:', error.message);
@@ -321,6 +474,7 @@ export class VideoAdGenerator {
         duration,
         width: 1920,
         height: 1080,
+        method: 'shotstack',
       };
     } catch (error: any) {
       console.error('❌ Shotstack video generation failed:', error.message);

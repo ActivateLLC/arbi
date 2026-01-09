@@ -7,16 +7,16 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import { videoAdGenerator } from '../services/videoAdGenerator';
 import { getListing } from './marketplace';
-import { requireApiKey } from '../middleware/apiAuth';
+// import { requireApiKey } from '../middleware/apiAuth'; // Optional: Uncomment to require API key authentication
 
 const router = Router();
 
 /**
  * POST /api/generate-video/:listingId
  * Generate a product video for a marketplace listing
- * PROTECTED: Requires API key
+ * NOTE: Add requireApiKey middleware when ready to enable authentication
  */
-router.post('/:listingId', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/:listingId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { listingId } = req.params;
     const {
@@ -72,9 +72,9 @@ router.post('/:listingId', requireApiKey, async (req: Request, res: Response, ne
 /**
  * POST /api/generate-video/batch
  * Generate videos for multiple listings
- * PROTECTED: Requires API key
+ * NOTE: Add requireApiKey middleware when ready to enable authentication
  */
-router.post('/batch', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/batch', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const {
       listingIds,

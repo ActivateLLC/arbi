@@ -5,7 +5,7 @@ import { v2 as cloudinary } from 'cloudinary';
 import { getDatabase } from '../config/database';
 import { adCampaignManager } from '../services/adCampaigns';
 import { imageScraper } from '../services/imageScraper';
-import { requireApiKey } from '../middleware/apiAuth';
+// import { requireApiKey } from '../middleware/apiAuth'; // Optional: Uncomment to require API key authentication
 import { createListingSchema, checkoutSchema, validateSchema } from '../schemas/marketplace';
 
 const router = Router();
@@ -246,9 +246,9 @@ async function updateOrder(orderId: string, data: Partial<BuyerOrder>): Promise<
 /**
  * POST /api/marketplace/list
  * Create marketplace listing from arbitrage opportunity
- * PROTECTED: Requires API key
+ * NOTE: Add requireApiKey middleware when ready to enable authentication
  */
-router.post('/list', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
+router.post('/list', async (req: Request, res: Response, next: NextFunction) => {
   try {
     // Validate request body
     const validatedData = validateSchema(createListingSchema, req.body);
@@ -424,9 +424,9 @@ router.get('/listings', async (req: Request, res: Response) => {
 /**
  * DELETE /api/marketplace/listings/:listingId
  * Delete a marketplace listing
- * PROTECTED: Requires API key
+ * NOTE: Add requireApiKey middleware when ready to enable authentication
  */
-router.delete('/listings/:listingId', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
+router.delete('/listings/:listingId', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { listingId } = req.params;
 

@@ -147,6 +147,17 @@ router.post('/batch', async (req: Request, res: Response, next: NextFunction) =>
  * Check video generation service status
  */
 router.get('/status', async (req: Request, res: Response) => {
+  // Check Remotion availability
+  let hasRemotion = false;
+  try {
+    require('remotion');
+    require('@remotion/bundler');
+    require('@remotion/renderer');
+    hasRemotion = true;
+  } catch (error) {
+    hasRemotion = false;
+  }
+
   const hasShotstack = !!process.env.SHOTSTACK_API_KEY;
   const hasCloudinary = !!(
     process.env.CLOUDINARY_CLOUD_NAME &&
@@ -154,34 +165,52 @@ router.get('/status', async (req: Request, res: Response) => {
     process.env.CLOUDINARY_API_SECRET
   );
 
+  // Determine active method (same priority as VideoAdGenerator)
+  const activeMethod = hasRemotion ? 'remotion' : hasShotstack ? 'shotstack' : hasCloudinary ? 'cloudinary' : 'none';
+
   res.status(200).json({
     status: 'ok',
     videoGeneration: {
-      available: hasCloudinary,
-      method: hasShotstack ? 'shotstack' : hasCloudinary ? 'cloudinary' : 'none',
+      available: hasRemotion || hasShotstack || hasCloudinary,
+      activeMethod,
       features: {
+        remotion: {
+          enabled: hasRemotion,
+          description: 'FREE open-source video generation with React',
+          cost: '$0 (unlimited videos)',
+          priority: 1,
+          installation: hasRemotion ? 'Installed ✅' : 'Run: cd apps/api && pnpm install',
+        },
         shotstack: {
           enabled: hasShotstack,
           description: 'Professional video generation with templates',
           cost: '$49/month',
+          priority: 2,
         },
         cloudinary: {
           enabled: hasCloudinary,
-          description: 'Basic image enhancements (video requires additional setup)',
+          description: 'Basic image enhancements (not true video)',
           cost: 'Free tier available',
-        },
-        remotion: {
-          enabled: false,
-          description: 'React-based video generation (requires implementation)',
-          cost: 'Free (open source)',
+          priority: 3,
         },
       },
     },
-    recommendation: hasShotstack
-      ? 'Using Shotstack API for professional videos'
+    recommendation: hasRemotion
+      ? '✅ Using Remotion (FREE) - unlimited professional videos!'
+      : hasShotstack
+      ? 'Using Shotstack ($49/month) - install Remotion for FREE unlimited videos'
       : hasCloudinary
-      ? 'Cloudinary available - consider adding Shotstack or Remotion for videos'
-      : 'Configure CLOUDINARY_* env vars to enable video generation',
+      ? 'Install Remotion for FREE video generation: cd apps/api && pnpm install'
+      : 'Configure CLOUDINARY_* env vars and install Remotion',
+    nextSteps: hasRemotion
+      ? [
+          'Preview template: npx remotion preview src/services/remotion/index.tsx',
+          'Generate video: POST /api/generate-video/:listingId',
+        ]
+      : [
+          'Install Remotion: cd apps/api && pnpm install',
+          'Preview template: npx remotion preview src/services/remotion/index.tsx',
+        ],
   });
 });
 

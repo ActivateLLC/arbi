@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Composition } from 'remotion';
+import { Composition, registerRoot } from 'remotion';
 import { ProductShowcase, ProductShowcaseProps } from './ProductShowcase';
 
 export const RemotionRoot: React.FC = () => {
@@ -67,3 +67,6 @@ export const RemotionRoot: React.FC = () => {
     </>
   );
 };
+
+// Register the root component
+registerRoot(RemotionRoot);

@@ -80,40 +80,65 @@ router.post('/batch', async (req: Request, res: Response, next: NextFunction) =>
 
 /**
  * POST /api/analyze-ads/facebook
- * Scrape and analyze ads from Facebook Ad Library
+ * Scrape and analyze ads from Facebook Ad Library (FULLY AUTOMATED)
  */
 router.post('/facebook', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { query, limit = 5 } = req.body;
+    const { query, limit = 5, autoAnalyze = true } = req.body;
 
     if (!query) {
       throw new ApiError(400, 'Search query is required');
     }
 
-    console.log(`🔍 Searching Facebook Ad Library for: "${query}"`);
+    console.log(`🚀 AUTOMATED: Scraping Facebook Ad Library for: "${query}"`);
 
-    // Note: This is a placeholder - Facebook Ad Library scraping requires
-    // browser automation (Playwright/Puppeteer) or their official API
+    const { scrapeAndPrepareAds } = await import('../services/scraping/facebookAdLibraryScraper');
+
+    // Step 1: Scrape, download, and upload ads automatically
+    const { ads, videoUrls } = await scrapeAndPrepareAds({
+      query,
+      limit,
+      adType: 'video',
+    });
+
+    console.log(`✅ Scraped ${videoUrls.length} video ads`);
+
+    // Step 2: Automatically analyze if requested
+    let analysis = null;
+    if (autoAnalyze && videoUrls.length > 0) {
+      console.log(`🤖 Auto-analyzing ${videoUrls.length} ads...`);
+
+      const result = await analyzeBatch(videoUrls, {
+        productCategory: query,
+        platform: 'facebook',
+      });
+
+      analysis = result;
+    }
+
     res.status(200).json({
-      success: false,
-      message: 'Facebook Ad Library integration coming soon',
-      workaround: {
-        instructions: [
-          '1. Visit https://www.facebook.com/ads/library/',
-          `2. Search for: "${query}"`,
-          '3. Find high-performing ads (look for recent ads from big brands)',
-          '4. Download the video file',
-          '5. Upload to Cloudinary or provide URL',
-          '6. Use POST /api/analyze-ads/single with the video URL',
-        ],
-        example: {
-          videoUrl: 'https://video-url-here.mp4',
-          context: {
-            productCategory: query,
-            platform: 'facebook',
-          },
-        },
-      },
+      success: true,
+      query,
+      totalScraped: ads.length,
+      ads: ads.map(ad => ({
+        advertiser: ad.advertiser,
+        adText: ad.adText,
+        platforms: ad.platform,
+        videoUrl: ad.cloudinaryUrl,
+      })),
+      videoUrls,
+      analysis: autoAnalyze ? analysis : null,
+      message: `✅ Automatically scraped and ${autoAnalyze ? 'analyzed' : 'prepared'} ${ads.length} video ads`,
+      nextSteps: autoAnalyze
+        ? [
+            'Review the common patterns below',
+            'Use the replication guide to create winning ads',
+            'Generate videos with: POST /api/generate-video/:listingId/clone',
+          ]
+        : [
+            'Analyze the videos with: POST /api/analyze-ads/batch',
+            'Or use videoUrls for manual review',
+          ],
     });
   } catch (error: any) {
     console.error('❌ Facebook scraping failed:', error.message);

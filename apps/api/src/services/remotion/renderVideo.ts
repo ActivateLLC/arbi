@@ -45,8 +45,11 @@ export async function renderProductVideoWithRemotion(
         ? 'ProductShowcaseVertical'
         : 'ProductShowcase';
 
+    // Use absolute path to source files (works in both dev and production)
+    const entryPoint = path.join(process.cwd(), 'src', 'services', 'remotion', 'index.tsx');
+
     const bundleLocation = await bundle({
-      entryPoint: path.join(__dirname, 'remotion', 'index.tsx'),
+      entryPoint,
       // Set to true only during development for helpful logs
       webpackOverride: (config) => config,
     });

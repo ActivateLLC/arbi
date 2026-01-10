@@ -26,6 +26,7 @@ import scrapeImagesSimpleRoutes from './routes/scrape-images-simple';
 import scrapeAmazonBuddyRoutes from './routes/scrape-amazon-buddy';
 import scrapeRainforestRoutes from './routes/scrape-rainforest';
 import generateVideoRoutes from './routes/generate-video';
+import analyzeAdsRoutes from './routes/analyze-ads';
 
 // Initialize logger
 const logger = createLogger();
@@ -145,6 +146,9 @@ app.use('/api/scrape-rainforest', scrapeRainforestRoutes);
 
 // Video ad generation for Performance Max campaigns
 app.use('/api/generate-video', generateVideoRoutes);
+
+// Analyze successful ads and extract replication blueprints
+app.use('/api/analyze-ads', analyzeAdsRoutes);
 
 // Compliance pages (required for Google Ads)
 app.use('/', complianceRoutes);

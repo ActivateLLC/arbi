@@ -23,12 +23,6 @@ export async function extractVideoFromAdPage(adUrl: string): Promise<{
   try {
     await stagehand.init();
 
-    // Set realistic browser
-    await stagehand.page.setViewport({ width: 1920, height: 1080 });
-    await stagehand.page.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
-
     console.log('   📍 Opening ad page...');
     await stagehand.page.goto(adUrl, {
       waitUntil: 'networkidle',

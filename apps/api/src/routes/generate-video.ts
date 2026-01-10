@@ -7,13 +7,107 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import { videoAdGenerator } from '../services/videoAdGenerator';
 import { getListing } from './marketplace';
+import { generateVideoHooks, generateHookVariations } from '../services/ai/hookGenerator';
 // import { requireApiKey } from '../middleware/apiAuth'; // Optional: Uncomment to require API key authentication
 
 const router = Router();
 
 /**
+ * POST /api/generate-video/:listingId/modern
+ * Generate a MODERN UGC-style video with AI-generated hooks
+ * This uses 2026 best practices for high-converting video ads
+ */
+router.post('/:listingId/modern', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { listingId } = req.params;
+    const {
+      format = 'deal-discovery', // deal-discovery, problem-solution, gift-idea, day-in-life
+      orientation = 'horizontal', // horizontal or vertical
+      duration = 15,
+      generateVariations = false, // Generate 3 variations for A/B testing
+    } = req.body;
+
+    console.log(`🎬 MODERN video generation for listing: ${listingId}`);
+    console.log(`   Format: ${format}`);
+    console.log(`   Orientation: ${orientation}`);
+
+    // Get listing
+    const listing = await getListing(listingId);
+    if (!listing) {
+      throw new ApiError(404, 'Listing not found');
+    }
+
+    // Calculate original price for savings calculation
+    const supplierPrice = parseFloat(listing.supplierPrice);
+    const marketplacePrice = parseFloat(listing.marketplacePrice);
+
+    // Generate AI hooks
+    console.log('🤖 Generating AI-powered hooks...');
+
+    let hooksData;
+    if (generateVariations) {
+      const variations = await generateHookVariations({
+        productTitle: listing.productTitle,
+        price: marketplacePrice,
+        originalPrice: supplierPrice * 1.5, // Estimate retail price
+        format: format as any,
+      }, 3);
+      hooksData = variations[0]; // Use first variation for now
+    } else {
+      hooksData = await generateVideoHooks({
+        productTitle: listing.productTitle,
+        price: marketplacePrice,
+        originalPrice: supplierPrice * 1.5,
+        format: format as any,
+      });
+    }
+
+    console.log(`   ✅ Hook: "${hooksData.primaryHook}"`);
+    console.log(`   ✅ Benefits: ${hooksData.benefits.length}`);
+
+    // Use the new modern video generator
+    const video = await videoAdGenerator.generateModernProductVideo(listing, {
+      format: format as any,
+      hook: hooksData.primaryHook,
+      benefits: hooksData.benefits,
+      originalPrice: supplierPrice * 1.5,
+      orientation: orientation as any,
+      duration,
+    });
+
+    console.log(`✅ Modern video generated: ${video.videoUrl}`);
+
+    res.status(200).json({
+      success: true,
+      listingId,
+      productTitle: listing.productTitle,
+      format,
+      hooks: hooksData,
+      video: {
+        url: video.videoUrl,
+        thumbnail: video.thumbnailUrl,
+        duration: video.duration,
+        width: video.width,
+        height: video.height,
+        style: 'modern-ugc',
+      },
+      message: '🔥 Modern UGC-style video generated successfully!',
+      tips: [
+        'This video follows 2026 best practices',
+        'UGC-style content performs 80% better than traditional ads',
+        'The hook is designed to stop scrolling in 0.5 seconds',
+        'Captions are included for sound-off viewing',
+      ],
+    });
+  } catch (error: any) {
+    console.error('❌ Modern video generation failed:', error.message);
+    next(error);
+  }
+});
+
+/**
  * POST /api/generate-video/:listingId
- * Generate a product video for a marketplace listing
+ * Generate a product video for a marketplace listing (CLASSIC template)
  * NOTE: Add requireApiKey middleware when ready to enable authentication
  */
 router.post('/:listingId', async (req: Request, res: Response, next: NextFunction) => {

@@ -21,6 +21,15 @@ export interface VideoGenerationConfig {
   orientation?: 'horizontal' | 'vertical'; // New: support vertical videos
 }
 
+export interface ModernVideoConfig {
+  format: 'deal-discovery' | 'problem-solution' | 'gift-idea' | 'day-in-life';
+  hook: string;
+  benefits: string[];
+  originalPrice?: number;
+  orientation?: 'horizontal' | 'vertical';
+  duration?: number;
+}
+
 export interface GeneratedVideo {
   videoUrl: string;
   thumbnailUrl: string;
@@ -531,6 +540,140 @@ export class VideoAdGenerator {
   private truncateText(text: string, maxLength: number): string {
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength - 3) + '...';
+  }
+
+  /**
+   * Generate MODERN UGC-style video with AI hooks (2026 best practices)
+   * Uses new ModernProductAd template with authentic creator vibes
+   */
+  async generateModernProductVideo(
+    listing: MarketplaceListing,
+    config: ModernVideoConfig
+  ): Promise<GeneratedVideo> {
+    const {
+      format,
+      hook,
+      benefits,
+      originalPrice,
+      orientation = 'horizontal',
+      duration = 15,
+    } = config;
+
+    console.log(`🔥 Generating MODERN ${format} video for: ${listing.productTitle}`);
+    console.log(`   Hook: "${hook}"`);
+    console.log(`   Orientation: ${orientation}`);
+
+    if (!this.remotionAvailable) {
+      throw new Error('Modern video generation requires Remotion. Please install: pnpm install');
+    }
+
+    // Filter to only Cloudinary-hosted images
+    const cloudinaryImages = listing.productImages.filter(img =>
+      img.includes('cloudinary.com')
+    );
+
+    if (cloudinaryImages.length === 0) {
+      throw new Error('No Cloudinary-hosted images available for video generation');
+    }
+
+    try {
+      const { bundle } = require('@remotion/bundler');
+      const { renderMedia, selectComposition } = require('@remotion/renderer');
+      const path = require('path');
+      const fs = require('fs');
+
+      // Map format to composition ID
+      const compositionMap: Record<string, string> = {
+        'deal-discovery': orientation === 'vertical' ? 'ModernDealDiscoveryVertical' : 'ModernDealDiscovery',
+        'problem-solution': 'ModernProblemSolution',
+        'gift-idea': 'ModernGiftIdea',
+        'day-in-life': 'ModernDayInLife',
+      };
+
+      const compositionId = compositionMap[format] || 'ModernDealDiscovery';
+
+      // Step 1: Bundle Remotion composition
+      const remotionEntry = path.join(process.cwd(), 'src', 'services', 'remotion', 'index.tsx');
+
+      if (!fs.existsSync(remotionEntry)) {
+        throw new Error(`Remotion entry point not found: ${remotionEntry}`);
+      }
+
+      const bundleLocation = await bundle({
+        entryPoint: remotionEntry,
+        webpackOverride: (config: any) => config,
+      });
+
+      console.log(`   ✅ Bundle created`);
+
+      // Step 2: Get composition details
+      const composition = await selectComposition({
+        serveUrl: bundleLocation,
+        id: compositionId,
+        inputProps: {
+          productTitle: listing.productTitle,
+          productImages: cloudinaryImages,
+          marketplacePrice: Number(listing.marketplacePrice),
+          originalPrice: originalPrice || Number(listing.supplierPrice) * 1.5,
+          hook,
+          benefits,
+          format,
+        },
+      });
+
+      console.log(`   ✅ Composition selected: ${compositionId}`);
+
+      // Step 3: Render video
+      const outputPath = path.join(
+        '/tmp',
+        `modern-video-${listing.listingId}-${Date.now()}.mp4`
+      );
+
+      await renderMedia({
+        composition,
+        serveUrl: bundleLocation,
+        codec: 'h264',
+        outputLocation: outputPath,
+        inputProps: {
+          productTitle: listing.productTitle,
+          productImages: cloudinaryImages,
+          marketplacePrice: Number(listing.marketplacePrice),
+          originalPrice: originalPrice || Number(listing.supplierPrice) * 1.5,
+          hook,
+          benefits,
+          format,
+        },
+      });
+
+      console.log(`   ✅ Video rendered`);
+
+      // Step 4: Upload to Cloudinary for permanent hosting
+      const uploadResult = await cloudinary.uploader.upload(outputPath, {
+        resource_type: 'video',
+        folder: 'arbi-video-ads/modern',
+        public_id: `modern-${format}-${listing.listingId}-${Date.now()}`,
+        tags: ['modern', 'ugc-style', format, orientation],
+      });
+
+      console.log(`   ✅ Uploaded: ${uploadResult.secure_url}`);
+
+      // Clean up temporary file
+      if (fs.existsSync(outputPath)) {
+        fs.unlinkSync(outputPath);
+      }
+
+      return {
+        videoUrl: uploadResult.secure_url,
+        thumbnailUrl: uploadResult.secure_url.replace('.mp4', '.jpg'),
+        duration,
+        width: orientation === 'vertical' ? 1080 : 1920,
+        height: orientation === 'vertical' ? 1920 : 1080,
+        method: 'remotion',
+      };
+    } catch (error: any) {
+      console.error('❌ Modern video generation failed:', error.message);
+      throw new Error(`Modern video generation failed: ${error.message}`);
+    }
   }
 }
 

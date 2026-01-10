@@ -48,24 +48,54 @@ export async function scrapeFacebookAdLibrary(
   const stagehand = new Stagehand({
     env: 'LOCAL',
     enableCaching: false,
-    headless: false, // Use headed mode for better debugging
+    headless: true, // Headless for production
+    domSettleTimeoutMs: 5000,
   });
 
   try {
     await stagehand.init();
 
+    // Set realistic user agent and viewport
+    await stagehand.page.setViewport({ width: 1920, height: 1080 });
+    await stagehand.page.setUserAgent(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+    );
+
     // Navigate to Facebook Ad Library
     const searchUrl = buildFacebookAdLibraryUrl(query, country, activeStatus);
     console.log(`   📍 Opening: ${searchUrl}`);
 
-    await stagehand.page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
+    await stagehand.page.goto(searchUrl, {
+      waitUntil: 'networkidle',
+      timeout: 60000,
+    });
 
-    // Wait for page to fully load
-    console.log('   ⏳ Waiting for ads to load...');
-    await new Promise(resolve => setTimeout(resolve, 8000));
+    // Wait for initial load
+    console.log('   ⏳ Waiting for page to load...');
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // Scroll to trigger lazy loading
+    console.log('   📜 Scrolling to load content...');
+    await stagehand.page.evaluate(() => {
+      window.scrollBy(0, 1000);
+    });
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Get page content for debugging
+    const pageContent = await stagehand.page.content();
+    console.log(`   📄 Page content length: ${pageContent.length} chars`);
+
+    // Check if we hit a login wall
+    const hasLoginPrompt = pageContent.includes('Log In') || pageContent.includes('Sign Up');
+    if (hasLoginPrompt) {
+      console.log('   ⚠️  Login wall detected');
+    }
 
     // Take screenshot for debugging
-    await stagehand.page.screenshot({ path: '/tmp/fb-ad-library-loaded.png' });
+    await stagehand.page.screenshot({
+      path: '/tmp/fb-ad-library-loaded.png',
+      fullPage: true,
+    });
     console.log('   📸 Screenshot saved: /tmp/fb-ad-library-loaded.png');
 
     // Use Stagehand's AI to extract ad data
@@ -104,7 +134,26 @@ export async function scrapeFacebookAdLibrary(
 
     // Parse the extracted data
     const extractedAds = (adsData as any).ads || [];
-    console.log(`   📊 Found ${extractedAds.length} ads with AI extraction`);
+    console.log(`   📊 AI extracted ${extractedAds.length} ads`);
+
+    if (extractedAds.length === 0) {
+      console.log('   ⚠️  No ads found. Possible reasons:');
+      console.log('       - Login wall blocking access');
+      console.log('       - Anti-bot protection');
+      console.log('       - Page structure changed');
+      console.log('       - Content not loaded yet');
+
+      // Save HTML for debugging
+      const html = await stagehand.page.content();
+      const debugPath = '/tmp/fb-ad-library-debug.html';
+      require('fs').writeFileSync(debugPath, html);
+      console.log(`   💾 HTML saved to: ${debugPath}`);
+
+      await stagehand.close();
+      throw new Error(
+        'No ads found. Check /tmp/fb-ad-library-loaded.png and /tmp/fb-ad-library-debug.html for details.'
+      );
+    }
 
     const scrapedAds: ScrapedAd[] = extractedAds
       .filter((ad: any) => ad.videoUrl && ad.videoUrl.trim() !== '')
@@ -118,6 +167,12 @@ export async function scrapeFacebookAdLibrary(
       }));
 
     await stagehand.close();
+
+    if (scrapedAds.length === 0) {
+      throw new Error(
+        `AI found ${extractedAds.length} ads but none had valid video URLs`
+      );
+    }
 
     console.log(`✅ Successfully scraped ${scrapedAds.length} video ads`);
     return scrapedAds;

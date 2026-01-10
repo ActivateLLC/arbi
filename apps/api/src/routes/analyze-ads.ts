@@ -147,6 +147,83 @@ router.post('/facebook', async (req: Request, res: Response, next: NextFunction)
 });
 
 /**
+ * POST /api/analyze-ads/from-url
+ * Extract and analyze a video from a specific Facebook Ad Library URL
+ * FASTER: User provides the direct ad link
+ */
+router.post('/from-url', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { adUrl } = req.body;
+
+    if (!adUrl) {
+      throw new ApiError(400, 'adUrl is required');
+    }
+
+    if (!adUrl.includes('facebook.com/ads/library')) {
+      throw new ApiError(400, 'Must be a Facebook Ad Library URL');
+    }
+
+    console.log(`🎯 Extracting specific ad from: ${adUrl}`);
+
+    const { extractVideoFromAdPage, downloadVideo } = await import(
+      '../services/scraping/extractSpecificAd'
+    );
+    const { v2: cloudinary } = await import('cloudinary');
+
+    // Step 1: Extract video URL from ad page
+    const adData = await extractVideoFromAdPage(adUrl);
+
+    // Step 2: Download video
+    const videoPath = await downloadVideo(adData.videoUrl);
+
+    // Step 3: Upload to Cloudinary
+    console.log('   ☁️  Uploading to Cloudinary...');
+    const uploadResult = await cloudinary.uploader.upload(videoPath, {
+      resource_type: 'video',
+      folder: 'arbi-scraped-ads',
+      public_id: `fb-ad-manual-${Date.now()}`,
+      tags: ['facebook', 'manual', adData.advertiser.toLowerCase().replace(/\s+/g, '-')],
+    });
+
+    const cloudinaryUrl = uploadResult.secure_url;
+    console.log(`   ✅ Uploaded: ${cloudinaryUrl}`);
+
+    // Clean up
+    if (require('fs').existsSync(videoPath)) {
+      require('fs').unlinkSync(videoPath);
+    }
+
+    // Step 4: Analyze with Claude Vision
+    console.log('   🤖 Analyzing with Claude Vision...');
+    const analysis = await analyzeVideoAd(cloudinaryUrl, {
+      productCategory: 'user-provided',
+      platform: 'facebook',
+    });
+
+    res.status(200).json({
+      success: true,
+      ad: {
+        advertiser: adData.advertiser,
+        adText: adData.adText,
+        originalUrl: adUrl,
+        videoUrl: cloudinaryUrl,
+      },
+      analysis,
+      message: '✅ Ad extracted and analyzed successfully!',
+      replicationGuide: analysis.replicationGuide,
+      nextSteps: [
+        'Review the analysis above',
+        'Use replicationGuide to create similar ads',
+        'Key elements: ' + analysis.replicationGuide.keyElements.join(', '),
+      ],
+    });
+  } catch (error: any) {
+    console.error('❌ URL extraction failed:', error.message);
+    next(error);
+  }
+});
+
+/**
  * GET /api/analyze-ads/sources
  * Get recommended sources for finding high-performing ads
  */

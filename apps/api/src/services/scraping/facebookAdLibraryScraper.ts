@@ -59,19 +59,40 @@ export async function scrapeFacebookAdLibrary(
     const searchUrl = buildFacebookAdLibraryUrl(query, country, activeStatus);
     console.log(`   📍 Navigating to: ${searchUrl}`);
 
-    await stagehand.page.goto(searchUrl, { waitUntil: 'networkidle' });
+    await stagehand.page.goto(searchUrl, { waitUntil: 'domcontentloaded' });
 
-    // Wait for ad results to load
-    await stagehand.page.waitForSelector('[data-testid="search_result_item"]', {
-      timeout: 30000,
-    });
+    // Wait a bit for page to load
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
-    console.log('   ✅ Ad results loaded');
+    console.log('   🔍 Searching for ad containers...');
 
-    // Extract ad cards
-    const adCards = await stagehand.page.$$('[data-testid="search_result_item"]');
+    // Try multiple possible selectors (Facebook changes their structure)
+    let adCards = [];
+    const selectors = [
+      '[data-testid="search_result_item"]',
+      '[role="article"]',
+      '.x1yc6y37',
+      'div[class*="search"]',
+    ];
 
-    console.log(`   📊 Found ${adCards.length} ad results`);
+    for (const selector of selectors) {
+      try {
+        await stagehand.page.waitForSelector(selector, { timeout: 10000 });
+        adCards = await stagehand.page.$$(selector);
+        if (adCards.length > 0) {
+          console.log(`   ✅ Found ${adCards.length} ads using selector: ${selector}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`   ⏭️  Selector ${selector} not found, trying next...`);
+      }
+    }
+
+    if (adCards.length === 0) {
+      console.log('   ⚠️  No ads found with any selector. Taking screenshot...');
+      await stagehand.page.screenshot({ path: '/tmp/fb-ad-library-debug.png' });
+      throw new Error('No ads found on page. Screenshot saved to /tmp/fb-ad-library-debug.png');
+    }
 
     const scrapedAds: ScrapedAd[] = [];
 

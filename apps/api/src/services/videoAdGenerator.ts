@@ -172,7 +172,8 @@ export class VideoAdGenerator {
           : 'ProductShowcase';
 
       // Step 1: Bundle Remotion composition
-      const remotionEntry = path.join(__dirname, 'remotion', 'index.tsx');
+      // Use absolute path to source files (works in both dev and production)
+      const remotionEntry = path.join(process.cwd(), 'src', 'services', 'remotion', 'index.tsx');
 
       if (!fs.existsSync(remotionEntry)) {
         throw new Error(`Remotion entry point not found: ${remotionEntry}`);

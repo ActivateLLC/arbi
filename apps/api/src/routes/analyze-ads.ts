@@ -170,6 +170,13 @@ router.post('/from-url', async (req: Request, res: Response, next: NextFunction)
     );
     const { v2: cloudinary } = await import('cloudinary');
 
+    // Configure Cloudinary
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+
     // Step 1: Extract video URL from ad page
     const adData = await extractVideoFromAdPage(adUrl);
 

@@ -197,92 +197,72 @@ export async function discoverWinningAdsSimple(
               }
             }
 
-            // Extract ad ID from links or data attributes - try multiple strategies
+            // Extract ad ID by finding clickable link to detail page
             let adId = '';
+            let adDetailUrl = '';
 
-            // Strategy 1: Links with ads/library in href
+            // Strategy 1: Find link that goes to ad detail page
             const links = card.querySelectorAll('a');
             for (const link of Array.from(links)) {
               const href = (link as HTMLAnchorElement).href;
-              // Try multiple URL patterns
-              const idMatch = href.match(/[?&]id=(\d+)/) ||
-                             href.match(/ads\/library\/(\d+)/) ||
-                             href.match(/ad_id=(\d+)/);
-              if (idMatch) {
-                adId = idMatch[1];
-                break;
+
+              // Check if this is an ad detail link
+              if (href.includes('ads/library') || href.includes('ad_id')) {
+                // Try to extract ID from URL
+                const idMatch = href.match(/[?&]id=(\d+)/) ||
+                               href.match(/ads\/library\/(\d+)/) ||
+                               href.match(/ad_id=(\d+)/);
+
+                if (idMatch) {
+                  adId = idMatch[1];
+                  adDetailUrl = href;
+                  break;
+                }
+
+                // If no ID in URL yet, save the link (might navigate to page with ID)
+                if (href.includes('ads/library') && !adDetailUrl) {
+                  adDetailUrl = href;
+                }
               }
             }
 
-            // Strategy 2: Look in onclick handlers and data attributes
+            // Strategy 2: If we have a detail URL but no ID, it might be revealed on navigation
+            // For now, we'll use a placeholder and let the extraction phase handle it
+            if (adDetailUrl && !adId) {
+              // Generate a temporary marker that we'll resolve during extraction
+              adId = adDetailUrl;
+            }
+
+            // Strategy 3: Look in data attributes and onclick
             if (!adId) {
               const allElements = card.querySelectorAll('*');
               for (const el of Array.from(allElements)) {
-                // Check data attributes
                 const id = el.getAttribute('data-ad-id') ||
                           el.getAttribute('data-adid') ||
-                          el.getAttribute('data-id') ||
                           el.getAttribute('data-ad-archive-id');
-                if (id && id.match(/^\d+$/)) {
+                if (id && id.match(/^\d{10,}$/)) {
                   adId = id;
                   break;
                 }
-
-                // Check onclick attribute for ad IDs
-                const onclick = el.getAttribute('onclick') || '';
-                const onclickMatch = onclick.match(/(\d{10,})/); // Ad IDs are typically 10+ digits
-                if (onclickMatch) {
-                  adId = onclickMatch[1];
-                  break;
-                }
               }
             }
 
-            // Strategy 3: Look in card's entire HTML for ad ID patterns
+            // Skip if we couldn't find any way to identify this ad
             if (!adId) {
-              const cardHTML = card.innerHTML;
-              // Look for common ad ID patterns in HTML
-              const htmlMatches = [
-                cardHTML.match(/ad_archive_id["\s:=]+(\d{10,})/i),
-                cardHTML.match(/adId["\s:=]+(\d{10,})/i),
-                cardHTML.match(/ad_id["\s:=]+(\d{10,})/i),
-                cardHTML.match(/["']id["']\s*:\s*["'](\d{10,})["']/),
-              ];
-
-              for (const match of htmlMatches) {
-                if (match && match[1]) {
-                  adId = match[1];
-                  break;
-                }
-              }
-            }
-
-            // Strategy 4: Look near the video element specifically
-            if (!adId && video) {
-              let currentEl: Element | null = video;
-              // Walk up 5 levels looking for ID
-              for (let i = 0; i < 5; i++) {
-                if (!currentEl) break;
-
-                const parentHTML = currentEl.outerHTML;
-                const match = parentHTML.match(/[?&]id=(\d{10,})/) ||
-                             parentHTML.match(/data-ad[^=]*=["'](\d{10,})["']/i);
-                if (match) {
-                  adId = match[1];
-                  break;
-                }
-
-                currentEl = currentEl.parentElement;
-              }
-            }
-
-            // Skip this ad if we couldn't find a real ID
-            if (!adId || !adId.match(/^\d{10,}$/)) {
-              console.log('⚠️  Skipping ad - no real Facebook ad ID found');
+              console.log('⚠️  Skipping ad - no ad ID or detail link found');
               continue;
             }
 
-            console.log(`✅ Found ad ID: ${adId}`);
+            // If ID is actually a URL, we'll use it as the URL and extract ID later
+            const isUrl = adId.startsWith('http');
+            if (isUrl) {
+              adDetailUrl = adId;
+              adId = 'pending-' + Date.now(); // Temporary ID until we navigate
+            } else if (!adDetailUrl) {
+              adDetailUrl = `https://www.facebook.com/ads/library/?id=${adId}`;
+            }
+
+            console.log(`✅ Found ad: ${isUrl ? 'URL to detail page' : 'ID ' + adId}`);
 
             // Determine platforms
             const platforms: string[] = ['facebook'];
@@ -317,6 +297,7 @@ export async function discoverWinningAdsSimple(
 
             results.push({
               id: adId,
+              detailUrl: adDetailUrl,
               advertiser,
               adText,
               hasVideo: true,
@@ -343,7 +324,7 @@ export async function discoverWinningAdsSimple(
     // Convert to proper format
     const discoveredAds: DiscoveredAd[] = ads.map(ad => ({
       id: ad.id,
-      url: `https://www.facebook.com/ads/library/?id=${ad.id}`,
+      url: ad.detailUrl || `https://www.facebook.com/ads/library/?id=${ad.id}`,
       advertiser: ad.advertiser,
       adText: ad.adText,
       hasVideo: true,

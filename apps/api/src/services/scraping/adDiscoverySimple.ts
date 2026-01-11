@@ -81,17 +81,42 @@ export async function discoverWinningAdsSimple(
       const results: any[] = [];
 
       try {
-        // Find all ad containers (Facebook Ad Library structure)
-        const adCards = document.querySelectorAll('[data-pagelet]');
-        console.log(`Found ${adCards.length} potential ad containers`);
+        // Try multiple selector strategies for Facebook Ad Library
+        const selectors = [
+          '[data-pagelet*="AdCard"]',
+          '[data-pagelet]',
+          'div[role="article"]',
+          '[data-testid*="ad"]',
+          'div[class*="ad-card"]',
+          'div[class*="AdCard"]'
+        ];
 
-        for (const card of Array.from(adCards)) {
+        let adCards: Element[] = [];
+        for (const selector of selectors) {
+          adCards = Array.from(document.querySelectorAll(selector));
+          if (adCards.length > 0) {
+            console.log(`✅ Found ${adCards.length} containers using selector: ${selector}`);
+            break;
+          }
+        }
+
+        if (adCards.length === 0) {
+          console.log('❌ No ad containers found with any selector');
+          console.log('Page structure:', document.body.innerHTML.substring(0, 1000));
+          return [];
+        }
+
+        for (const card of adCards) {
           if (results.length >= maxAds) break;
 
           // Try to extract data from this card
           try {
-            // Look for video elements
-            const hasVideo = card.querySelector('video') !== null;
+            // Look for video elements - try multiple selectors
+            const video = card.querySelector('video') ||
+                         document.querySelector('video') ||
+                         card.querySelector('[data-video-id]');
+
+            const hasVideo = video !== null;
             if (!hasVideo) continue; // Skip non-video ads
 
             // Extract advertiser name (look for headings or specific text)

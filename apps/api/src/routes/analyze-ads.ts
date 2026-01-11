@@ -7,6 +7,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import { analyzeVideoAd, analyzeBatch } from '../services/ai/adAnalyzer';
 import { discoverWinningAds, discoverAdsForProducts } from '../services/scraping/adDiscovery';
+import { discoverWinningAdsSimple } from '../services/scraping/adDiscoverySimple';
 
 const router = Router();
 
@@ -325,13 +326,19 @@ router.post('/discover', async (req: Request, res: Response, next: NextFunction)
 
     console.log(`🔍 Discovering ads for: "${searchTerm}"`);
 
-    const ads = await discoverWinningAds({
-      searchTerm,
-      platform: platform || 'all',
-      mediaType: mediaType || 'video',
-      minRunningDays: minRunningDays || 30,
-      limit: limit || 10,
-    });
+    let ads;
+    try {
+      ads = await discoverWinningAds({
+        searchTerm,
+        platform: platform || 'all',
+        mediaType: mediaType || 'video',
+        minRunningDays: minRunningDays || 30,
+        limit: limit || 10,
+      });
+    } catch (error: any) {
+      console.warn('⚠️  Complex discovery failed, trying simple method:', error.message);
+      ads = await discoverWinningAdsSimple(searchTerm, limit || 10);
+    }
 
     res.status(200).json({
       success: true,
@@ -422,11 +429,17 @@ router.post('/discover-and-extract', async (req: Request, res: Response, next: N
     console.log(`🔍 Discovering and extracting ads for: "${searchTerm}"`);
 
     // Step 1: Discover ads
-    const ads = await discoverWinningAds({
-      searchTerm,
-      mediaType: 'video',
-      limit: maxExtract || 5,
-    });
+    let ads;
+    try {
+      ads = await discoverWinningAds({
+        searchTerm,
+        mediaType: 'video',
+        limit: maxExtract || 5,
+      });
+    } catch (error: any) {
+      console.warn('⚠️  Complex discovery failed, trying simple method:', error.message);
+      ads = await discoverWinningAdsSimple(searchTerm, maxExtract || 5);
+    }
 
     if (ads.length === 0) {
       return res.status(200).json({

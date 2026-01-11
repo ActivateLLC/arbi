@@ -15,6 +15,7 @@ import stripeWebhook from './stripe-webhook';
 import campaignLauncherRoutes from './campaign-launcher';
 import autonomousMarketplaceRoutes from './autonomous-marketplace';
 import googleAdsRoutes from './google-ads';
+import googleAdsWebRoutes from './google-ads-web';
 import analyzeAdsRoutes from './analyze-ads';
 
 const router = Router();
@@ -40,8 +41,11 @@ router.use('/marketplace', marketplaceRoutes);
 // Campaign launcher routes (automated Google Ads)
 router.use('/campaigns', campaignLauncherRoutes);
 
-// Google Ads automation routes (NEW - Automated campaign creation)
+// Google Ads automation routes (API-based)
 router.use('/google-ads', googleAdsRoutes);
+
+// Google Ads web automation routes (NO API NEEDED - uses browser automation)
+router.use('/google-ads-web', googleAdsWebRoutes);
 
 // Ad extraction and analysis routes (Extract winning ads from Facebook)
 router.use('/analyze-ads', analyzeAdsRoutes);

@@ -9,18 +9,27 @@ WORKDIR /app
 # Install pnpm globally
 RUN npm install -g pnpm@8.14.0
 
-# Copy package files for dependency installation
+# Copy package files and workspace configuration
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY tsconfig.json ./
 
-# Copy workspace packages
+# Copy all workspace packages and apps
 COPY packages ./packages
-COPY apps/api ./apps/api
+COPY apps ./apps
 
 # Install dependencies (no frozen lockfile due to lockfile sync issues)
 RUN pnpm install --no-frozen-lockfile
 
+# Build workspace packages first (dependencies of API)
+RUN pnpm --filter "@arbi/data" build || true
+RUN pnpm --filter "@arbi/arbitrage-engine" build || true
+RUN pnpm --filter "@arbi/ai-engine" build || true
+RUN pnpm --filter "@arbi/transaction" build || true
+RUN pnpm --filter "@arbi/voice-interface" build || true
+RUN pnpm --filter "@arbi/web-automation" build || true
+
 # Build the API
-RUN pnpm --filter @arbi/api build
+RUN pnpm --filter "@arbi/api" build
 
 # Set environment variables
 ENV NODE_ENV=production

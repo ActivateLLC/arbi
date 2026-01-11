@@ -4,7 +4,18 @@
  */
 
 import { GoogleAdsApi, Customer, Campaign, AdGroup, Ad } from 'google-ads-api';
-import { canUseAutomatedAds, canUseAIContent } from '../../../../packages/arbitrage-engine/src/compliance/google-ads-restrictions';
+
+// Google Ads Compliance - Inline for build compatibility
+const ALLOWED_COUNTRIES = ['US', 'CA', 'GB', 'AU', 'JP', 'KR', 'SG', 'AE', 'BR', 'MX', 'IN'];
+const AI_CONTENT_ALLOWED = ['US', 'CA', 'GB', 'AU', 'JP', 'KR', 'SG', 'AE', 'BR', 'MX', 'IN'];
+
+function canUseAutomatedAds(countryCode: string): boolean {
+  return ALLOWED_COUNTRIES.includes(countryCode);
+}
+
+function canUseAIContent(countryCode: string): boolean {
+  return AI_CONTENT_ALLOWED.includes(countryCode);
+}
 
 // Initialize Google Ads API
 const client = new GoogleAdsApi({

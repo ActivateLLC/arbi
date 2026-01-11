@@ -18,8 +18,7 @@ COPY packages ./packages
 COPY apps ./apps
 
 # Install dependencies (no frozen lockfile due to lockfile sync issues)
-# Skip optional dependencies that might fail (like onnxruntime-node GPU binaries)
-RUN pnpm install --no-frozen-lockfile --no-optional
+RUN pnpm install --no-frozen-lockfile
 
 # Build workspace packages first (dependencies of API)
 RUN pnpm --filter "@arbi/data" build || true

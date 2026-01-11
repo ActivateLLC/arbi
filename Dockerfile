@@ -46,5 +46,6 @@ EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
   CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start the API server
-CMD ["pnpm", "--filter", "@arbi/api", "start"]
+# Start the API server from root (workspace symlinks require root context)
+WORKDIR /app
+CMD ["node", "apps/api/dist/index.js"]

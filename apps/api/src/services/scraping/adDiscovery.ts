@@ -80,44 +80,74 @@ export async function discoverWinningAds(
     console.log('   🤖 Using AI to extract ads...');
 
     // Use Stagehand AI to extract ad data
-    const result = await stagehand.extract({
-      instruction: `Find all video ad cards on this page. For each ad, extract:
-        1. The advertiser/brand name
-        2. The ad text/copy (the main message)
-        3. The ad ID from the URL or data attributes
-        4. Which platforms it's running on (Facebook, Instagram, etc.)
-        5. When the ad started running (if visible)
-        6. Any engagement metrics visible (likes, comments, shares)
+    let result;
+    try {
+      result = await stagehand.extract({
+        instruction: `Find all video ad cards on this page. For each ad, extract:
+          1. The advertiser/brand name
+          2. The ad text/copy (the main message)
+          3. The ad ID from the URL or data attributes
+          4. Which platforms it's running on (Facebook, Instagram, etc.)
+          5. When the ad started running (if visible)
 
-        Look for:
-        - Big brand names (Apple, Sony, GoPro, Samsung, etc.)
-        - Long-running ads (30+ days if date is visible)
-        - High engagement (lots of interactions)
-        - Professional video content
+          Look for:
+          - Big brand names (Apple, Sony, GoPro, Samsung, etc.)
+          - Long-running ads (30+ days if date is visible)
+          - High engagement (lots of interactions)
+          - Professional video content
 
-        Return an array of the top ${limit} most promising ads.
-        Only include ads that have VIDEO content.`,
-      schema: {
-        type: 'object',
-        properties: {
-          ads: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                advertiser: { type: 'string' },
-                adText: { type: 'string' },
-                adId: { type: 'string' },
-                platforms: { type: 'array', items: { type: 'string' } },
-                startDate: { type: 'string' },
-                hasVideo: { type: 'boolean' },
+          Return an array of the top ${limit} most promising ads.
+          Only include ads that have VIDEO content.`,
+        schema: {
+          type: 'object',
+          properties: {
+            ads: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  advertiser: { type: 'string' },
+                  adText: { type: 'string' },
+                  adId: { type: 'string' },
+                  platforms: { type: 'array', items: { type: 'string' } },
+                  startDate: { type: 'string' },
+                  hasVideo: { type: 'boolean' },
+                },
+                required: ['advertiser', 'adText', 'adId'],
               },
-              required: ['advertiser', 'adText', 'adId'],
             },
           },
         },
-      },
-    });
+      });
+
+      console.log('   ✅ Extract completed successfully');
+      console.log('   📊 Raw result:', JSON.stringify(result).substring(0, 500));
+    } catch (extractError: any) {
+      console.error('   ❌ Extract failed:', extractError.message);
+      console.error('   📊 Error stack:', extractError.stack);
+
+      // Fallback: Try without schema (just get page content)
+      console.log('   🔄 Trying fallback method without schema...');
+
+      try {
+        // Get page HTML and manually parse
+        const pageContent = await stagehand.page.content();
+        console.log('   📄 Page content length:', pageContent.length);
+
+        // Save screenshot for debugging
+        await stagehand.page.screenshot({
+          path: '/tmp/ad-library-debug.png',
+          fullPage: false,
+        });
+        console.log('   📸 Screenshot saved: /tmp/ad-library-debug.png');
+
+        await stagehand.close();
+        throw new Error(`Stagehand extract failed: ${extractError.message}. Check /tmp/ad-library-debug.png for page state.`);
+      } catch (fallbackError: any) {
+        await stagehand.close();
+        throw new Error(`Both extract and fallback failed: ${extractError.message}`);
+      }
+    }
 
     await stagehand.close();
 

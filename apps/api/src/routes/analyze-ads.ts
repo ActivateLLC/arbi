@@ -351,7 +351,9 @@ router.post('/discover', async (req: Request, res: Response, next: NextFunction)
         platform: ad.platform,
         hasVideo: ad.hasVideo,
         startDate: ad.startDate,
-        engagement: ad.engagement,
+        daysRunning: ad.daysRunning,
+        hasHighEngagement: ad.hasHighEngagement,
+        isActive: ad.isActive,
       })),
       nextSteps: [
         'Review the discovered ads above',

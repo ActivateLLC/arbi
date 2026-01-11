@@ -199,45 +199,90 @@ export async function discoverWinningAdsSimple(
 
             // Extract ad ID from links or data attributes - try multiple strategies
             let adId = '';
-            // Strategy 1: Links with ads/library
+
+            // Strategy 1: Links with ads/library in href
             const links = card.querySelectorAll('a');
             for (const link of Array.from(links)) {
               const href = (link as HTMLAnchorElement).href;
-              const match = href.match(/[?&]id=(\d+)/);
-              if (match) {
-                adId = match[1];
+              // Try multiple URL patterns
+              const idMatch = href.match(/[?&]id=(\d+)/) ||
+                             href.match(/ads\/library\/(\d+)/) ||
+                             href.match(/ad_id=(\d+)/);
+              if (idMatch) {
+                adId = idMatch[1];
                 break;
               }
             }
-            // Strategy 2: Data attributes
+
+            // Strategy 2: Look in onclick handlers and data attributes
             if (!adId) {
               const allElements = card.querySelectorAll('*');
               for (const el of Array.from(allElements)) {
+                // Check data attributes
                 const id = el.getAttribute('data-ad-id') ||
                           el.getAttribute('data-adid') ||
-                          el.getAttribute('data-id');
+                          el.getAttribute('data-id') ||
+                          el.getAttribute('data-ad-archive-id');
                 if (id && id.match(/^\d+$/)) {
                   adId = id;
                   break;
                 }
-              }
-            }
-            // Strategy 3: Look in entire page HTML for ad ID pattern near video
-            if (!adId && video) {
-              const videoParent = video.parentElement?.parentElement?.innerHTML || '';
-              const idMatch = videoParent.match(/ads\/library\/\?id=(\d+)/);
-              if (idMatch) {
-                adId = idMatch[1];
+
+                // Check onclick attribute for ad IDs
+                const onclick = el.getAttribute('onclick') || '';
+                const onclickMatch = onclick.match(/(\d{10,})/); // Ad IDs are typically 10+ digits
+                if (onclickMatch) {
+                  adId = onclickMatch[1];
+                  break;
+                }
               }
             }
 
+            // Strategy 3: Look in card's entire HTML for ad ID patterns
             if (!adId) {
-              // Try data attributes
-              const idAttr = card.getAttribute('data-ad-id') ||
-                           card.getAttribute('id') ||
-                           `temp-${Date.now()}-${Math.random()}`;
-              adId = idAttr;
+              const cardHTML = card.innerHTML;
+              // Look for common ad ID patterns in HTML
+              const htmlMatches = [
+                cardHTML.match(/ad_archive_id["\s:=]+(\d{10,})/i),
+                cardHTML.match(/adId["\s:=]+(\d{10,})/i),
+                cardHTML.match(/ad_id["\s:=]+(\d{10,})/i),
+                cardHTML.match(/["']id["']\s*:\s*["'](\d{10,})["']/),
+              ];
+
+              for (const match of htmlMatches) {
+                if (match && match[1]) {
+                  adId = match[1];
+                  break;
+                }
+              }
             }
+
+            // Strategy 4: Look near the video element specifically
+            if (!adId && video) {
+              let currentEl: Element | null = video;
+              // Walk up 5 levels looking for ID
+              for (let i = 0; i < 5; i++) {
+                if (!currentEl) break;
+
+                const parentHTML = currentEl.outerHTML;
+                const match = parentHTML.match(/[?&]id=(\d{10,})/) ||
+                             parentHTML.match(/data-ad[^=]*=["'](\d{10,})["']/i);
+                if (match) {
+                  adId = match[1];
+                  break;
+                }
+
+                currentEl = currentEl.parentElement;
+              }
+            }
+
+            // Skip this ad if we couldn't find a real ID
+            if (!adId || !adId.match(/^\d{10,}$/)) {
+              console.log('⚠️  Skipping ad - no real Facebook ad ID found');
+              continue;
+            }
+
+            console.log(`✅ Found ad ID: ${adId}`);
 
             // Determine platforms
             const platforms: string[] = ['facebook'];

@@ -51,8 +51,40 @@ export async function discoverWinningAdsSimple(
       timeout: 60000,
     });
 
-    // Wait for content to load
-    await new Promise(resolve => setTimeout(resolve, 10000));
+    // Wait for initial page load
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    // Check if there's a country selector and handle it
+    const hasCountrySelector = await stagehand.page.evaluate(() => {
+      return document.body.innerText.includes('Select country') ||
+             document.body.innerText.includes('Choose a country');
+    });
+
+    if (hasCountrySelector) {
+      console.log('   🌍 Country selector detected - handling...');
+      // The URL already has country=US in params, so just wait for redirect/load
+      await new Promise(resolve => setTimeout(resolve, 5000));
+
+      // Try clicking on United States if visible
+      try {
+        await stagehand.page.evaluate(() => {
+          const links = Array.from(document.querySelectorAll('a'));
+          const usLink = links.find(link =>
+            link.textContent?.includes('United States') ||
+            link.textContent?.includes('USA')
+          );
+          if (usLink) {
+            (usLink as HTMLAnchorElement).click();
+          }
+        });
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      } catch (err) {
+        console.log('   ⚠️  Could not auto-select country');
+      }
+    }
+
+    // Wait for content to fully load
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     // Log page title and URL for debugging
     const pageTitle = await stagehand.page.title();

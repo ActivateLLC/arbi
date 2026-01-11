@@ -113,7 +113,6 @@ export async function discoverWinningAds(
                   startDate: { type: 'string' },
                   hasVideo: { type: 'boolean' },
                 },
-                required: ['advertiser', 'adText', 'adId'],
               },
             },
           },

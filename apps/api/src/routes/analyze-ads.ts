@@ -6,6 +6,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import { analyzeVideoAd, analyzeBatch } from '../services/ai/adAnalyzer';
+import { discoverWinningAds, discoverAdsForProducts } from '../services/scraping/adDiscovery';
 
 const router = Router();
 
@@ -308,6 +309,206 @@ router.get('/sources', async (req: Request, res: Response) => {
       '5. Use the common patterns to generate videos for your products',
     ],
   });
+});
+
+/**
+ * POST /api/analyze-ads/discover
+ * Automatically discover winning ads from Facebook Ad Library
+ */
+router.post('/discover', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { searchTerm, platform, mediaType, minRunningDays, limit } = req.body;
+
+    if (!searchTerm) {
+      throw new ApiError(400, 'searchTerm is required');
+    }
+
+    console.log(`🔍 Discovering ads for: "${searchTerm}"`);
+
+    const ads = await discoverWinningAds({
+      searchTerm,
+      platform: platform || 'all',
+      mediaType: mediaType || 'video',
+      minRunningDays: minRunningDays || 30,
+      limit: limit || 10,
+    });
+
+    res.status(200).json({
+      success: true,
+      searchTerm,
+      totalFound: ads.length,
+      ads: ads.map(ad => ({
+        advertiser: ad.advertiser,
+        adText: ad.adText.substring(0, 200) + (ad.adText.length > 200 ? '...' : ''),
+        url: ad.url,
+        platform: ad.platform,
+        hasVideo: ad.hasVideo,
+        startDate: ad.startDate,
+        engagement: ad.engagement,
+      })),
+      nextSteps: [
+        'Review the discovered ads above',
+        'Copy interesting ad URLs',
+        'Extract videos using POST /api/analyze-ads/from-url',
+        'Or extract all at once using POST /api/analyze-ads/discover-and-extract',
+      ],
+    });
+  } catch (error: any) {
+    console.error('❌ Ad discovery failed:', error.message);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/analyze-ads/discover-bulk
+ * Discover ads for multiple products at once
+ */
+router.post('/discover-bulk', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { products, platform, mediaType, minRunningDays, limit } = req.body;
+
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      throw new ApiError(400, 'products array is required');
+    }
+
+    console.log(`🔍 Discovering ads for ${products.length} products...`);
+
+    const results = await discoverAdsForProducts(products, {
+      platform: platform || 'all',
+      mediaType: mediaType || 'video',
+      minRunningDays: minRunningDays || 30,
+      limit: limit || 5,
+    });
+
+    const response: any = {
+      success: true,
+      totalProducts: products.length,
+      totalAdsFound: 0,
+      products: {},
+    };
+
+    results.forEach((ads, product) => {
+      response.totalAdsFound += ads.length;
+      response.products[product] = {
+        found: ads.length,
+        ads: ads.map(ad => ({
+          advertiser: ad.advertiser,
+          url: ad.url,
+          platform: ad.platform,
+          hasVideo: ad.hasVideo,
+        })),
+      };
+    });
+
+    res.status(200).json(response);
+  } catch (error: any) {
+    console.error('❌ Bulk ad discovery failed:', error.message);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/analyze-ads/discover-and-extract
+ * Discover winning ads AND extract their videos automatically
+ */
+router.post('/discover-and-extract', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { searchTerm, maxExtract } = req.body;
+
+    if (!searchTerm) {
+      throw new ApiError(400, 'searchTerm is required');
+    }
+
+    console.log(`🔍 Discovering and extracting ads for: "${searchTerm}"`);
+
+    // Step 1: Discover ads
+    const ads = await discoverWinningAds({
+      searchTerm,
+      mediaType: 'video',
+      limit: maxExtract || 5,
+    });
+
+    if (ads.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No video ads found for this search',
+        searchTerm,
+        totalFound: 0,
+      });
+    }
+
+    console.log(`   ✅ Found ${ads.length} ads, extracting videos...`);
+
+    // Step 2: Extract videos from discovered ads
+    const { extractVideoFromAdPage, downloadVideo } = await import(
+      '../services/scraping/extractSpecificAd'
+    );
+    const { v2: cloudinary } = await import('cloudinary');
+
+    // Configure Cloudinary
+    cloudinary.config({
+      cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+      api_key: process.env.CLOUDINARY_API_KEY,
+      api_secret: process.env.CLOUDINARY_API_SECRET,
+    });
+
+    const extractedAds = [];
+
+    for (const ad of ads) {
+      try {
+        console.log(`   📥 Extracting: ${ad.advertiser}`);
+
+        const adData = await extractVideoFromAdPage(ad.url);
+        const videoPath = await downloadVideo(adData.videoUrl);
+
+        const uploadResult = await cloudinary.uploader.upload(videoPath, {
+          resource_type: 'video',
+          folder: 'arbi-scraped-ads',
+          public_id: `discovered-${ad.id}-${Date.now()}`,
+          tags: ['discovered', searchTerm, ad.advertiser.toLowerCase()],
+        });
+
+        // Clean up
+        if (require('fs').existsSync(videoPath)) {
+          require('fs').unlinkSync(videoPath);
+        }
+
+        extractedAds.push({
+          advertiser: ad.advertiser,
+          adText: ad.adText,
+          originalUrl: ad.url,
+          videoUrl: uploadResult.secure_url,
+          platform: ad.platform,
+          engagement: ad.engagement,
+        });
+
+        console.log(`   ✅ Extracted: ${ad.advertiser}`);
+
+        // Rate limiting
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      } catch (error: any) {
+        console.error(`   ❌ Failed to extract ${ad.advertiser}:`, error.message);
+        // Continue with next ad
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      searchTerm,
+      totalDiscovered: ads.length,
+      totalExtracted: extractedAds.length,
+      ads: extractedAds,
+      message: `✅ Discovered ${ads.length} ads, successfully extracted ${extractedAds.length} videos!`,
+      nextSteps: [
+        'Download videos from the URLs above',
+        'Analyze the patterns manually',
+        'Or add Anthropic credits for AI analysis',
+      ],
+    });
+  } catch (error: any) {
+    console.error('❌ Discover and extract failed:', error.message);
+    next(error);
+  }
 });
 
 export default router;

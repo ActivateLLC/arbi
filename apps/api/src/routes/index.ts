@@ -14,6 +14,8 @@ import marketplaceRoutes from './marketplace';
 import stripeWebhook from './stripe-webhook';
 import campaignLauncherRoutes from './campaign-launcher';
 import autonomousMarketplaceRoutes from './autonomous-marketplace';
+import googleAdsRoutes from './google-ads';
+import analyzeAdsRoutes from './analyze-ads';
 
 const router = Router();
 
@@ -37,6 +39,12 @@ router.use('/marketplace', marketplaceRoutes);
 
 // Campaign launcher routes (automated Google Ads)
 router.use('/campaigns', campaignLauncherRoutes);
+
+// Google Ads automation routes (NEW - Automated campaign creation)
+router.use('/google-ads', googleAdsRoutes);
+
+// Ad extraction and analysis routes (Extract winning ads from Facebook)
+router.use('/analyze-ads', analyzeAdsRoutes);
 
 // AUTONOMOUS MARKETPLACE - Press "Start" → Make Money 🚀
 router.use('/autonomous-marketplace', autonomousMarketplaceRoutes);

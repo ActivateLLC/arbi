@@ -98,31 +98,18 @@ export async function discoverWinningAds(
         Return an array of the top ${limit} most promising ads.
         Only include ads that have VIDEO content.`,
       schema: {
-        type: 'object',
-        properties: {
-          ads: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                advertiser: { type: 'string' },
-                adText: { type: 'string' },
-                adId: { type: 'string' },
-                platforms: { type: 'array', items: { type: 'string' } },
-                startDate: { type: 'string' },
-                hasVideo: { type: 'boolean' },
-                engagement: {
-                  type: 'object',
-                  properties: {
-                    likes: { type: 'number' },
-                    comments: { type: 'number' },
-                    shares: { type: 'number' },
-                  },
-                },
-              },
-              required: ['advertiser', 'adText', 'adId'],
-            },
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            advertiser: { type: 'string' },
+            adText: { type: 'string' },
+            adId: { type: 'string' },
+            platforms: { type: 'array', items: { type: 'string' } },
+            startDate: { type: 'string' },
+            hasVideo: { type: 'boolean' },
           },
+          required: ['advertiser', 'adText', 'adId'],
         },
       },
     });
@@ -132,8 +119,8 @@ export async function discoverWinningAds(
     const extractedData = result as any;
     const ads: DiscoveredAd[] = [];
 
-    if (extractedData.ads && Array.isArray(extractedData.ads)) {
-      for (const ad of extractedData.ads) {
+    if (Array.isArray(extractedData)) {
+      for (const ad of extractedData) {
         if (!ad.adId) continue;
 
         ads.push({
@@ -145,7 +132,7 @@ export async function discoverWinningAds(
           platform: ad.platforms || ['facebook'],
           startDate: ad.startDate,
           isActive: true,
-          engagement: ad.engagement || {},
+          engagement: {},
         });
       }
     }

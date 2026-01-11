@@ -54,6 +54,26 @@ export async function discoverWinningAdsSimple(
     // Wait for content to load
     await new Promise(resolve => setTimeout(resolve, 10000));
 
+    // Log page title and URL for debugging
+    const pageTitle = await stagehand.page.title();
+    const pageUrl = stagehand.page.url();
+    console.log(`   📄 Page title: "${pageTitle}"`);
+    console.log(`   🌐 Page URL: ${pageUrl}`);
+
+    // Check for login/blocking
+    const pageText = await stagehand.page.evaluate(() => document.body.innerText.substring(0, 500));
+    console.log(`   📝 Page text (first 500 chars): ${pageText}`);
+    if (pageText.includes('Log In') || pageText.includes('Sign Up') || pageText.includes('Log in to Facebook')) {
+      console.warn('   ⚠️  LOGIN WALL DETECTED - Facebook requires authentication');
+    }
+
+    // Save screenshot
+    await stagehand.page.screenshot({
+      path: '/tmp/ad-discovery-page.png',
+      fullPage: false,
+    });
+    console.log('   📸 Screenshot saved: /tmp/ad-discovery-page.png');
+
     console.log('   📊 Scraping page with evaluate...');
 
     // Use direct page.evaluate to scrape ads

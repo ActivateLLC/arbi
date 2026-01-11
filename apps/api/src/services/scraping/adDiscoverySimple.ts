@@ -151,33 +151,79 @@ export async function discoverWinningAdsSimple(
             const hasVideo = video !== null;
             if (!hasVideo) continue; // Skip non-video ads
 
-            // Extract advertiser name (look for headings or specific text)
+            // Extract advertiser name - try multiple strategies
             let advertiser = 'Unknown';
-            const headingEl = card.querySelector('[role="heading"]');
-            if (headingEl) {
-              advertiser = headingEl.textContent?.trim() || 'Unknown';
+            // Strategy 1: Look for role=heading
+            let headingEl = card.querySelector('[role="heading"]');
+            if (headingEl && headingEl.textContent?.trim()) {
+              advertiser = headingEl.textContent.trim();
+            }
+            // Strategy 2: Look for strong/bold text (often advertiser name)
+            if (advertiser === 'Unknown') {
+              const strongEl = card.querySelector('strong');
+              if (strongEl && strongEl.textContent?.trim()) {
+                advertiser = strongEl.textContent.trim();
+              }
+            }
+            // Strategy 3: Look for links (advertiser names often linked)
+            if (advertiser === 'Unknown') {
+              const linkEl = card.querySelector('a[href*="facebook.com"]');
+              if (linkEl && linkEl.textContent?.trim() && linkEl.textContent.length < 50) {
+                advertiser = linkEl.textContent.trim();
+              }
             }
 
-            // Extract ad text
+            // Extract ad text - try multiple strategies
             let adText = '';
+            // Strategy 1: div[dir="auto"] (Facebook's text containers)
             const textEls = card.querySelectorAll('div[dir="auto"]');
             for (const el of Array.from(textEls)) {
               const text = el.textContent?.trim();
-              if (text && text.length > 20 && text.length < 500) {
+              if (text && text.length > 20 && text.length < 500 && !text.includes('http')) {
                 adText = text;
                 break;
               }
             }
+            // Strategy 2: Just get all text if nothing found
+            if (!adText) {
+              const allText = card.textContent?.trim() || '';
+              const sentences = allText.split('.').filter(s => s.length > 20 && s.length < 200);
+              if (sentences.length > 0) {
+                adText = sentences[0].trim();
+              }
+            }
 
-            // Extract ad ID from links or data attributes
+            // Extract ad ID from links or data attributes - try multiple strategies
             let adId = '';
-            const links = card.querySelectorAll('a[href*="ads/library"]');
+            // Strategy 1: Links with ads/library
+            const links = card.querySelectorAll('a');
             for (const link of Array.from(links)) {
               const href = (link as HTMLAnchorElement).href;
               const match = href.match(/[?&]id=(\d+)/);
               if (match) {
                 adId = match[1];
                 break;
+              }
+            }
+            // Strategy 2: Data attributes
+            if (!adId) {
+              const allElements = card.querySelectorAll('*');
+              for (const el of Array.from(allElements)) {
+                const id = el.getAttribute('data-ad-id') ||
+                          el.getAttribute('data-adid') ||
+                          el.getAttribute('data-id');
+                if (id && id.match(/^\d+$/)) {
+                  adId = id;
+                  break;
+                }
+              }
+            }
+            // Strategy 3: Look in entire page HTML for ad ID pattern near video
+            if (!adId && video) {
+              const videoParent = video.parentElement?.parentElement?.innerHTML || '';
+              const idMatch = videoParent.match(/ads\/library\/\?id=(\d+)/);
+              if (idMatch) {
+                adId = idMatch[1];
               }
             }
 

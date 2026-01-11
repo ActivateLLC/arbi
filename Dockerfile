@@ -1,5 +1,6 @@
 # Use official Playwright image with pre-installed browsers
 # This provides a fully autonomous solution with Chromium, Firefox, and WebKit
+# Last updated: 2026-01-11
 FROM mcr.microsoft.com/playwright:v1.57.0-noble
 
 # Set working directory

@@ -16,8 +16,8 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY packages ./packages
 COPY apps/api ./apps/api
 
-# Install dependencies
-RUN pnpm install --frozen-lockfile
+# Install dependencies (no frozen lockfile due to lockfile sync issues)
+RUN pnpm install --no-frozen-lockfile
 
 # Build the API
 RUN pnpm --filter @arbi/api build

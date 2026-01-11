@@ -12,6 +12,10 @@ export interface DiscoveredAd {
   adText: string;
   hasVideo: boolean;
   platform: string[];
+  startDate?: string;
+  isActive: boolean;
+  daysRunning?: number;
+  hasHighEngagement?: boolean;
 }
 
 /**
@@ -240,12 +244,41 @@ export async function discoverWinningAdsSimple(
             const platformText = card.textContent || '';
             if (platformText.includes('Instagram')) platforms.push('instagram');
 
+            // Extract start date (for calculating days running)
+            let startDate = '';
+            const dateRegex = /Started running on (.+?)(?:\.|$)/i;
+            const dateMatch = card.textContent?.match(dateRegex);
+            if (dateMatch) {
+              startDate = dateMatch[1].trim();
+            }
+
+            // Calculate days running (for prioritization)
+            let daysRunning = 0;
+            if (startDate) {
+              try {
+                const start = new Date(startDate);
+                const now = new Date();
+                daysRunning = Math.floor((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+              } catch (err) {
+                console.error('Error parsing date:', err);
+              }
+            }
+
+            // Extract engagement indicators (not always visible, but try)
+            const hasHighEngagement =
+              card.textContent?.includes('reach') ||
+              card.textContent?.includes('impressions') ||
+              card.textContent?.toLowerCase().includes('views');
+
             results.push({
               id: adId,
               advertiser,
               adText,
               hasVideo: true,
               platforms,
+              startDate,
+              daysRunning,
+              hasHighEngagement,
             });
           } catch (cardError) {
             console.error('Error processing card:', cardError);
@@ -270,17 +303,37 @@ export async function discoverWinningAdsSimple(
       adText: ad.adText,
       hasVideo: true,
       platform: ad.platforms,
+      startDate: ad.startDate,
+      isActive: true,
+      daysRunning: ad.daysRunning,
+      hasHighEngagement: ad.hasHighEngagement,
     }));
 
-    // Filter and prioritize big brands
+    // Prioritize highest turnover ads (long-running + big brands + high engagement)
     const bigBrands = ['apple', 'sony', 'gopro', 'samsung', 'canon', 'nikon', 'dyson', 'meta', 'microsoft', 'google'];
     const prioritized = discoveredAds.sort((a, b) => {
+      // Priority 1: Long-running ads (30+ days = proven winners)
+      const aLongRunning = (a.daysRunning || 0) >= 30;
+      const bLongRunning = (b.daysRunning || 0) >= 30;
+      if (aLongRunning && !bLongRunning) return -1;
+      if (!aLongRunning && bLongRunning) return 1;
+
+      // Priority 2: High engagement indicators
+      if (a.hasHighEngagement && !b.hasHighEngagement) return -1;
+      if (!a.hasHighEngagement && b.hasHighEngagement) return 1;
+
+      // Priority 3: Big brands (established advertisers)
       const aIsBig = bigBrands.some(brand => a.advertiser.toLowerCase().includes(brand));
       const bIsBig = bigBrands.some(brand => b.advertiser.toLowerCase().includes(brand));
       if (aIsBig && !bIsBig) return -1;
       if (!aIsBig && bIsBig) return 1;
-      return 0;
+
+      // Priority 4: Sort by days running (more = better)
+      return (b.daysRunning || 0) - (a.daysRunning || 0);
     });
+
+    console.log(`   🎯 Prioritized by: long-running (30+ days), high engagement, big brands`);
+    console.log(`   📊 Top ad: ${prioritized[0]?.advertiser} (${prioritized[0]?.daysRunning || 0} days running)`);
 
     return prioritized;
   } catch (error: any) {

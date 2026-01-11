@@ -200,12 +200,23 @@ router.post('/from-url', async (req: Request, res: Response, next: NextFunction)
       require('fs').unlinkSync(videoPath);
     }
 
-    // Step 4: Analyze with Claude Vision
-    console.log('   🤖 Analyzing with Claude Vision...');
-    const analysis = await analyzeVideoAd(cloudinaryUrl, {
-      productCategory: 'user-provided',
-      platform: 'facebook',
-    });
+    // Step 4: Analyze with Claude Vision (optional - skip if no credits)
+    let analysis = null;
+    let analysisError = null;
+
+    if (process.env.ANTHROPIC_API_KEY) {
+      try {
+        console.log('   🤖 Analyzing with Claude Vision...');
+        analysis = await analyzeVideoAd(cloudinaryUrl, {
+          productCategory: 'user-provided',
+          platform: 'facebook',
+        });
+      } catch (error: any) {
+        console.warn('⚠️  Claude Vision analysis failed:', error.message);
+        analysisError = error.message;
+        // Continue without analysis - video extraction is the main feature
+      }
+    }
 
     res.status(200).json({
       success: true,
@@ -215,14 +226,23 @@ router.post('/from-url', async (req: Request, res: Response, next: NextFunction)
         originalUrl: adUrl,
         videoUrl: cloudinaryUrl,
       },
-      analysis,
-      message: '✅ Ad extracted and analyzed successfully!',
-      replicationGuide: analysis.replicationGuide,
-      nextSteps: [
-        'Review the analysis above',
-        'Use replicationGuide to create similar ads',
-        'Key elements: ' + analysis.replicationGuide.keyElements.join(', '),
-      ],
+      analysis: analysis || undefined,
+      analysisError: analysisError || undefined,
+      message: analysis
+        ? '✅ Ad extracted and analyzed successfully!'
+        : '✅ Ad extracted successfully! (AI analysis skipped - add Anthropic credits for full analysis)',
+      replicationGuide: analysis?.replicationGuide,
+      nextSteps: analysis
+        ? [
+            'Review the analysis above',
+            'Use replicationGuide to create similar ads',
+            'Key elements: ' + analysis.replicationGuide.keyElements.join(', '),
+          ]
+        : [
+            'Video extracted and hosted on Cloudinary',
+            'Download the video from the URL above',
+            'Manually analyze or add Anthropic credits for AI analysis',
+          ],
     });
   } catch (error: any) {
     console.error('❌ URL extraction failed:', error.message);

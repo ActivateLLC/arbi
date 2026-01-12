@@ -1,7 +1,7 @@
 // Seed sample listings to the running API server
+// NOTE: Don't set listingId - let the API generate it
 const listings = [
   {
-    listingId: 'sony-a7-iv',
     opportunityId: 'opp-001',
     productTitle: 'Sony Alpha A7 IV Mirrorless Full-Frame Camera Body',
     productDescription: 'Premium dual-motor standing desk with memory presets. 72 inch wide workspace. Smooth height adjustment, cable management system, anti-collision technology. Transform your workspace with professional-grade ergonomics. Free shipping, 30-day returns.',
@@ -14,7 +14,6 @@ const listings = [
     status: 'active'
   },
   {
-    listingId: 'macbook-air-m2',
     opportunityId: 'opp-002',
     productTitle: 'Apple MacBook Air 13-inch M2 Chip 8GB RAM 256GB SSD',
     productDescription: 'Ultra-portable MacBook Air with Apple M2 chip for incredible performance. 13.6-inch Liquid Retina display, 8GB unified memory, 256GB SSD storage. All-day battery life. Perfect for productivity, creative work, and entertainment. Free shipping, 30-day returns.',
@@ -27,7 +26,6 @@ const listings = [
     status: 'active'
   },
   {
-    listingId: 'garmin-fenix-7x',
     opportunityId: 'opp-003',
     productTitle: 'Garmin Fenix 7X Sapphire Solar GPS Smartwatch',
     productDescription: 'Premium multisport GPS smartwatch with solar charging. Sapphire crystal display, advanced health monitoring, 60+ sport modes. Ultra-rugged design with titanium bezel. 28-day battery life with solar charging. Perfect for athletes and outdoor enthusiasts.',
@@ -40,7 +38,6 @@ const listings = [
     status: 'active'
   },
   {
-    listingId: 'breville-barista',
     opportunityId: 'opp-004',
     productTitle: 'Breville Barista Express Espresso Machine',
     productDescription: 'Professional-grade espresso machine with built-in conical burr grinder. 15 bar Italian pump, precise espresso extraction. Create café-quality espresso, cappuccino, and latte at home. Stainless steel construction. Includes milk frother and tamper.',
@@ -53,7 +50,6 @@ const listings = [
     status: 'active'
   },
   {
-    listingId: 'canon-eos-r50',
     opportunityId: 'opp-005',
     productTitle: 'Canon EOS R50 Mirrorless Camera with RF-S 18-45mm Lens',
     productDescription: 'Compact mirrorless camera perfect for content creators. 24.2MP APS-C sensor, 4K video, advanced autofocus. Includes RF-S 18-45mm versatile zoom lens. Lightweight design, vlogging features, wireless connectivity. Great for photos and video.',
@@ -66,7 +62,6 @@ const listings = [
     status: 'active'
   },
   {
-    listingId: 'macbook-air-m2-alt',
     opportunityId: 'opp-006',
     productTitle: 'Apple MacBook Air 13-inch M2 Chip 256GB',
     productDescription: 'Stunningly thin and light MacBook Air powered by M2 chip. Perfect for students, professionals, and creative work. All-day battery life, fanless design. Includes MagSafe charging, two Thunderbolt ports. macOS Ventura with powerful productivity apps.',
@@ -82,7 +77,6 @@ const listings = [
     status: 'active'
   },
   {
-    listingId: 'standing-desk-pro',
     opportunityId: 'opp-007',
     productTitle: 'Electric Standing Desk Pro 72 inch - Dual Motor',
     productDescription: 'Premium dual-motor standing desk with memory presets. 72 inch wide workspace provides ample room for multiple monitors and equipment. Smooth height adjustment from 28-48 inches. Cable management system keeps workspace organized. Anti-collision technology for safety. Professional-grade ergonomics.',

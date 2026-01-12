@@ -962,7 +962,7 @@ function generateProductLandingPage(listing: any): string {
 
             <!-- Dispense Device Button -->
             <button class="dispense-button" id="dispenseButton">
-                <span class="dispense-text" id="dispenseText">DISPENSE DEVICE</span>
+                <span class="dispense-text" id="dispenseText">SECURE CHECKOUT</span>
                 <div class="dispense-progress" id="dispenseProgress"></div>
             </button>
 
@@ -1178,7 +1178,7 @@ function generateProductLandingPage(listing: any): string {
                 } catch (error) {
                     console.error('Checkout error:', error);
                     alert('Error processing checkout. Please try again.');
-                    dispenseText.textContent = 'DISPENSE DEVICE';
+                    dispenseText.textContent = 'SECURE CHECKOUT';
                     dispenseProgress.style.width = '0%';
                     dispenseButton.disabled = false;
                 }

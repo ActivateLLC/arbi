@@ -370,8 +370,9 @@ function generateProductLandingPage(listing: any): string {
             background-attachment: fixed;
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
+            justify-content: flex-start;
             padding: 40px 20px;
             position: relative;
             overflow-x: hidden;
@@ -404,15 +405,16 @@ function generateProductLandingPage(listing: any): string {
                 inset 0 1px 0 rgba(255, 255, 255, 0.8);
             overflow: hidden;
             position: relative;
+            margin-bottom: 20px;
         }
 
         @media (max-width: 768px) {
             body {
-                padding: 20px 12px;
-                align-items: flex-start;
+                padding: 12px;
             }
             .container {
                 border-radius: 16px;
+                margin-bottom: 12px;
             }
         }
 
@@ -467,10 +469,11 @@ function generateProductLandingPage(listing: any): string {
 
         @media (max-width: 768px) {
             .product-display {
-                padding: 20px 10px;
+                padding: 16px 12px;
             }
             .glass-panel {
-                padding: 20px;
+                padding: 16px;
+                border-radius: 16px;
             }
             .product-image {
                 max-width: 100%;
@@ -486,13 +489,13 @@ function generateProductLandingPage(listing: any): string {
 
         @media (max-width: 768px) {
             .info-section {
-                padding: 20px 16px 30px;
-                gap: 20px;
+                padding: 16px 16px 24px;
+                gap: 16px;
             }
         }
 
         .product-title {
-            font-size: clamp(22px, 4vw, 28px);
+            font-size: clamp(18px, 5vw, 28px);
             font-weight: 600;
             color: #1a202c;
             line-height: 1.3;
@@ -534,6 +537,16 @@ function generateProductLandingPage(listing: any): string {
             white-space: nowrap;
         }
 
+        @media (max-width: 768px) {
+            .chip {
+                padding: 6px 12px;
+                font-size: 12px;
+            }
+            .chip-icon {
+                font-size: 13px;
+            }
+        }
+
         /* Mechanical Price Display */
         .price-display {
             background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
@@ -554,11 +567,22 @@ function generateProductLandingPage(listing: any): string {
 
         .price-value {
             font-family: 'SF Mono', 'Courier New', monospace;
-            font-size: clamp(36px, 8vw, 48px);
+            font-size: clamp(32px, 8vw, 48px);
             font-weight: 700;
             color: #667eea;
             line-height: 1;
             animation: priceGlow 3s ease-in-out infinite;
+        }
+
+        @media (max-width: 768px) {
+            .price-display {
+                padding: 16px;
+            }
+            .price-label {
+                font-size: 10px;
+                letter-spacing: 1px;
+                margin-bottom: 6px;
+            }
         }
 
         .product-description {
@@ -566,6 +590,13 @@ function generateProductLandingPage(listing: any): string {
             color: #4b5563;
             line-height: 1.6;
             margin: 0;
+        }
+
+        @media (max-width: 768px) {
+            .product-description {
+                font-size: 14px;
+                line-height: 1.5;
+            }
         }
 
         /* Inventory Dial (Rotary Selector) */
@@ -636,6 +667,21 @@ function generateProductLandingPage(listing: any): string {
             outline: none;
         }
 
+        @media (max-width: 768px) {
+            .inventory-dial {
+                padding: 16px;
+            }
+            .dial-label {
+                font-size: 10px;
+                letter-spacing: 1px;
+                margin-bottom: 10px;
+            }
+            .dial-display input {
+                height: 48px;
+                font-size: 20px;
+            }
+        }
+
         /* Dispense Device Button */
         .dispense-button {
             position: relative;
@@ -663,7 +709,7 @@ function generateProductLandingPage(listing: any): string {
             position: relative;
             z-index: 2;
             display: block;
-            font-size: 16px;
+            font-size: clamp(14px, 3vw, 16px);
             font-weight: 700;
             letter-spacing: 1.5px;
             color: white;
@@ -725,6 +771,25 @@ function generateProductLandingPage(listing: any): string {
             color: #d1d5db;
         }
 
+        @media (max-width: 768px) {
+            .trust-layer {
+                padding: 12px;
+                font-size: 12px;
+            }
+            .trust-icon {
+                width: 14px;
+                height: 14px;
+            }
+            .stripe-logo {
+                width: 36px;
+                height: auto;
+            }
+            .social-proof {
+                font-size: 12px;
+                padding: 4px 0;
+            }
+        }
+
         /* Control Panel (Footer) */
         .control-panel {
             background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
@@ -732,6 +797,10 @@ function generateProductLandingPage(listing: any): string {
             padding: 24px 20px;
             text-align: center;
             margin-top: 0;
+            width: 100%;
+            max-width: 900px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
         }
 
         .panel-indicator {
@@ -809,6 +878,7 @@ function generateProductLandingPage(listing: any): string {
         @media (max-width: 768px) {
             .control-panel {
                 padding: 20px 16px;
+                border-radius: 12px;
             }
             .panel-links {
                 gap: 8px;
@@ -817,6 +887,12 @@ function generateProductLandingPage(listing: any): string {
                 width: 36px;
                 height: 36px;
                 font-size: 16px;
+            }
+            .panel-brand {
+                font-size: 14px;
+            }
+            .panel-subtitle {
+                font-size: 11px;
             }
         }
     </style>

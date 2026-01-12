@@ -333,36 +333,82 @@ function generateProductLandingPage(listing: any): string {
     </script>
 
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @keyframes gridPulse {
+            0%, 100% { opacity: 0.1; }
+            50% { opacity: 0.2; }
+        }
+
+        @keyframes lightSweep {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(200%) rotate(45deg); }
+        }
+
+        @keyframes priceGlow {
+            0%, 100% { text-shadow: 0 0 20px rgba(102, 126, 234, 0.3); }
+            50% { text-shadow: 0 0 30px rgba(102, 126, 234, 0.6); }
+        }
+
+        @keyframes indicatorBlink {
+            0%, 45%, 55%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: #f8f9fa;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f1624 100%);
+            background-attachment: fixed;
             min-height: 100vh;
-            padding-bottom: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(102, 126, 234, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(102, 126, 234, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridPulse 4s ease-in-out infinite;
+            pointer-events: none;
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 900px;
             width: 100%;
-            background: white;
-            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow:
+                0 30px 90px rgba(0, 0, 0, 0.6),
+                0 0 0 1px rgba(255, 255, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.8);
             overflow: hidden;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0;
-            min-height: 100vh;
+            position: relative;
         }
 
         @media (max-width: 768px) {
             body {
-                background: white;
-                padding: 0;
-                padding-bottom: 160px;
+                padding: 20px 12px;
+                align-items: flex-start;
             }
             .container {
-                grid-template-columns: 1fr;
-                min-height: auto;
+                border-radius: 16px;
             }
         }
 

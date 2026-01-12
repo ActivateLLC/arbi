@@ -252,10 +252,14 @@ function generateProductLandingPage(listing: any): string {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+
+    <!-- GSAP & Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
     <!-- SEO Meta Tags -->
-    <title>${listing.productTitle} - Buy Now | Arbi</title>
+    <title>${listing.productTitle} - Digital Vending Machine | Arbi</title>
     <meta name="description" content="${listing.productDescription} | Free shipping, 30-day returns, secure checkout. Buy now at Arbi.">
     <meta name="keywords" content="${listing.productTitle}, buy ${listing.productTitle.toLowerCase()}, best price, free shipping">
     <link rel="canonical" href="https://api.arbi.creai.dev/product/${listing.listingId}">
@@ -412,529 +416,670 @@ function generateProductLandingPage(listing: any): string {
             }
         }
 
-        .image-section {
-            background: #ffffff;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: flex-start;
-            gap: 15px;
-            position: sticky;
-            top: 0;
-            height: fit-content;
-        }
-
-        @media (max-width: 768px) {
-            .image-section {
-                position: relative;
-                padding: 15px;
-                background: #fff;
-            }
-        }
-
-        .main-image-container {
-            width: 100%;
-            aspect-ratio: 1;
+        /* Product Display - Black Glass Panel */
+        .product-display {
+            padding: 40px 20px;
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #f8f9fa;
-            border-radius: 12px;
+        }
+
+        .glass-panel {
+            position: relative;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            border-radius: 20px;
+            padding: 40px;
             overflow: hidden;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
         }
 
-        .main-image {
+        .light-sweep {
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent 30%,
+                rgba(255, 255, 255, 0.1) 50%,
+                transparent 70%
+            );
+            animation: lightSweep 8s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .product-image {
+            position: relative;
             width: 100%;
-            height: 100%;
+            max-width: 500px;
+            height: auto;
             object-fit: contain;
+            filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
+            transition: transform 0.3s ease;
         }
 
-        .thumbnail-gallery {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            justify-content: center;
-            width: 100%;
-        }
-
-        .thumbnail {
-            width: 60px;
-            height: 60px;
-            min-width: 44px;
-            min-height: 44px;
-            object-fit: cover;
-            border-radius: 8px;
-            cursor: pointer;
-            border: 2px solid transparent;
-            transition: all 0.2s;
-            opacity: 0.7;
+        .glass-panel:hover .product-image {
+            transform: scale(1.02) translateY(-5px);
         }
 
         @media (max-width: 768px) {
-            .thumbnail {
-                width: 70px;
-                height: 70px;
+            .product-display {
+                padding: 20px 10px;
             }
-        }
-
-        .thumbnail:hover, .thumbnail:active {
-            opacity: 1;
-            transform: scale(1.05);
-        }
-
-        .thumbnail.active {
-            border-color: #667eea;
-            opacity: 1;
+            .glass-panel {
+                padding: 20px;
+            }
+            .product-image {
+                max-width: 100%;
+            }
         }
 
         .info-section {
-            padding: 30px 25px;
+            padding: 30px 40px 40px;
             display: flex;
             flex-direction: column;
-            justify-content: flex-start;
-            overflow-y: auto;
+            gap: 24px;
         }
 
         @media (max-width: 768px) {
             .info-section {
-                padding: 20px 16px;
+                padding: 20px 16px 30px;
+                gap: 20px;
             }
         }
 
-        .badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
-            color: white;
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 700;
-            margin-bottom: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.8; }
-        }
-
-        h1 {
-            font-size: clamp(20px, 5vw, 28px);
-            font-weight: 700;
+        .product-title {
+            font-size: clamp(22px, 4vw, 28px);
+            font-weight: 600;
             color: #1a202c;
-            margin-bottom: 12px;
-            line-height: 1.2;
+            line-height: 1.3;
+            margin: 0;
         }
 
-        .rating {
+        /* Status Chips */
+        .status-chips {
             display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 14px;
-            font-size: 14px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
-        .stars {
-            color: #fbbf24;
-            font-size: 16px;
-        }
-
-        .rating-text {
-            color: #6b7280;
-            font-weight: 500;
-        }
-
-        .price-container {
-            margin-bottom: 16px;
-        }
-
-        .price {
-            font-size: clamp(32px, 8vw, 42px);
-            font-weight: 800;
-            color: #667eea;
-            line-height: 1;
-        }
-
-        .urgency {
+        .chip {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            background: #fef3c7;
-            color: #92400e;
-            padding: 8px 12px;
-            border-radius: 8px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            padding: 8px 14px;
+            border-radius: 20px;
             font-size: 13px;
-            font-weight: 600;
-            margin-top: 8px;
+            font-weight: 500;
+            color: #374151;
+            transition: all 0.2s;
+            cursor: pointer;
         }
 
-        .description {
+        .chip:hover {
+            background: rgba(102, 126, 234, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .chip-icon {
+            font-size: 14px;
+        }
+
+        .chip-text {
+            white-space: nowrap;
+        }
+
+        /* Mechanical Price Display */
+        .price-display {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .price-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #6b7280;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .price-value {
+            font-family: 'SF Mono', 'Courier New', monospace;
+            font-size: clamp(36px, 8vw, 48px);
+            font-weight: 700;
+            color: #667eea;
+            line-height: 1;
+            animation: priceGlow 3s ease-in-out infinite;
+        }
+
+        .product-description {
             font-size: 15px;
             color: #4b5563;
             line-height: 1.6;
-            margin-bottom: 20px;
+            margin: 0;
         }
 
-        .quantity-selector {
-            margin-bottom: 24px;
+        /* Inventory Dial (Rotary Selector) */
+        .inventory-dial {
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
         }
 
-        .quantity-selector label {
-            display: block;
-            font-size: 14px;
-            font-weight: 600;
-            color: #374151;
-            margin-bottom: 10px;
+        .dial-label {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            color: #6b7280;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            text-align: center;
         }
 
-        .quantity-controls {
+        .dial-container {
             display: flex;
             align-items: center;
-            gap: 12px;
+            justify-content: center;
+            gap: 20px;
         }
 
-        .qty-btn {
+        .dial-btn {
             width: 48px;
             height: 48px;
             min-width: 44px;
             min-height: 44px;
-            border: 2px solid #e5e7eb;
             background: white;
-            border-radius: 10px;
-            font-size: 22px;
-            font-weight: 600;
-            color: #667eea;
-            cursor: pointer;
-            transition: all 0.2s;
+            border: 2px solid #dee2e6;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #667eea;
         }
 
-        .qty-btn:hover, .qty-btn:active {
+        .dial-btn:hover, .dial-btn:active {
             border-color: #667eea;
             background: #f3f4f6;
+            transform: scale(1.05);
         }
 
-        #quantity {
-            width: 90px;
-            height: 48px;
+        .dial-display {
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
+            padding: 0;
+            min-width: 80px;
+        }
+
+        .dial-display input {
+            width: 100%;
+            height: 52px;
             text-align: center;
-            font-size: 18px;
-            font-weight: 600;
-            border: 2px solid #e5e7eb;
-            border-radius: 10px;
-            color: #1f2937;
-        }
-
-        .features {
-            list-style: none;
-            margin-bottom: 24px;
-            background: #f9fafb;
-            padding: 16px;
-            border-radius: 10px;
-        }
-
-        .features li {
-            padding: 10px 0;
-            color: #374151;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .features li:before {
-            content: "✓";
-            color: #10b981;
-            font-weight: bold;
-            font-size: 18px;
-            flex-shrink: 0;
-        }
-
-        .buy-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 18px;
-            font-size: 17px;
+            font-family: 'SF Mono', 'Courier New', monospace;
+            font-size: 24px;
             font-weight: 700;
+            color: #1a202c;
+            border: none;
+            background: transparent;
+            outline: none;
+        }
+
+        /* Dispense Device Button */
+        .dispense-button {
+            position: relative;
+            width: 100%;
+            height: 64px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
             border-radius: 12px;
             cursor: pointer;
-            transition: all 0.2s;
-            width: 100%;
-            box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
+            overflow: hidden;
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s;
         }
 
-        .buy-button:hover, .buy-button:active {
+        .dispense-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
         }
 
-        .guarantee {
-            margin-top: 16px;
-            padding: 14px;
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
-            border-radius: 10px;
-            text-align: center;
-            font-size: 13px;
-            color: #166534;
+        .dispense-button:active {
+            transform: translateY(0);
         }
 
-        .sticky-cta {
-            display: none;
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: white;
-            padding: 12px 16px;
-            box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.15);
-            z-index: 1000;
-            border-top: 1px solid #e5e7eb;
-        }
-
-        @media (max-width: 768px) {
-            .sticky-cta {
-                display: flex;
-                align-items: center;
-                gap: 12px;
-            }
-
-            .sticky-cta .price-mini {
-                font-size: 24px;
-                font-weight: 800;
-                color: #667eea;
-            }
-
-            .sticky-cta .buy-button-mini {
-                flex: 1;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
-                border: none;
-                padding: 14px 24px;
-                font-size: 16px;
-                font-weight: 700;
-                border-radius: 10px;
-                cursor: pointer;
-                box-shadow: 0 4px 14px rgba(102, 126, 234, 0.4);
-            }
-        }
-
-        .footer {
-            background: #1f2937;
-            color: white;
-            padding: 30px 20px 20px;
-            text-align: center;
-            margin-top: 40px;
-        }
-
-        .footer-brand {
-            font-size: 14px;
-            color: #9ca3af;
-            margin-bottom: 8px;
-            font-weight: 500;
-            letter-spacing: 0.5px;
-        }
-
-        .footer-tagline {
-            font-size: 18px;
+        .dispense-text {
+            position: relative;
+            z-index: 2;
+            display: block;
+            font-size: 16px;
             font-weight: 700;
-            color: #ffffff;
-            margin-bottom: 16px;
+            letter-spacing: 1.5px;
+            color: white;
+            text-transform: uppercase;
         }
 
-        .footer-links {
+        .dispense-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 0%;
+            background: rgba(255, 255, 255, 0.3);
+            transition: width 0.05s linear;
+            pointer-events: none;
+        }
+
+        /* Trust Layer */
+        .trust-layer {
             display: flex;
+            align-items: center;
             justify-content: center;
             flex-wrap: wrap;
-            gap: 20px;
-            margin-bottom: 16px;
-        }
-
-        .footer-links a {
-            color: #9ca3af;
-            font-size: 13px;
-            text-decoration: none;
-            font-weight: 500;
-            transition: color 0.2s;
-        }
-
-        .footer-links a:hover {
-            color: #ffffff;
-        }
-
-        .footer p {
-            margin: 6px 0;
+            gap: 8px;
+            padding: 16px;
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
             font-size: 13px;
             color: #6b7280;
         }
 
-        .footer-company {
-            font-weight: 600;
+        .trust-icon {
             color: #667eea;
-            font-size: 14px;
+        }
+
+        .trust-text {
+            font-weight: 500;
+        }
+
+        .stripe-logo {
+            margin: 0 4px;
+        }
+
+        /* Quiet Social Proof */
+        .social-proof {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 13px;
+            color: #9ca3af;
+            font-weight: 500;
+            padding: 8px 0;
+        }
+
+        .separator {
+            color: #d1d5db;
+        }
+
+        /* Control Panel (Footer) */
+        .control-panel {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            border-top: 2px solid #4a5568;
+            padding: 24px 20px;
+            text-align: center;
+            margin-top: 0;
+        }
+
+        .panel-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .indicator-light {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: indicatorBlink 2s ease-in-out infinite;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+        }
+
+        .indicator-text {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #9ca3af;
+            text-transform: uppercase;
+        }
+
+        .panel-brand {
+            font-size: 16px;
+            font-weight: 700;
+            color: #f3f4f6;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .panel-subtitle {
+            font-size: 12px;
+            color: #9ca3af;
+            margin-bottom: 16px;
+            font-style: italic;
+        }
+
+        .panel-links {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .panel-link {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 18px;
+        }
+
+        .panel-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .panel-footer {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
         }
 
         @media (max-width: 768px) {
-            .footer {
-                padding-bottom: 100px;
+            .control-panel {
+                padding: 20px 16px;
             }
-            .footer-links {
-                gap: 12px;
-                font-size: 12px;
+            .panel-links {
+                gap: 8px;
+            }
+            .panel-link {
+                width: 36px;
+                height: 36px;
+                font-size: 16px;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="image-section">
-            <div class="main-image-container">
-                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="main-image" id="mainImage" loading="eager">
+        <!-- Product Image with Black Glass Background -->
+        <div class="product-display" id="productDisplay">
+            <div class="glass-panel">
+                <div class="light-sweep"></div>
+                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="product-image" id="productImage">
             </div>
-            ${thumbnailsHtml}
         </div>
 
+        <!-- Product Info Section -->
         <div class="info-section">
-            <span class="badge">⚡ Limited Offer</span>
-            <h1>${listing.productTitle}</h1>
+            <h1 class="product-title">${listing.productTitle}</h1>
 
-            <div class="rating">
-                <span class="stars">⭐⭐⭐⭐⭐</span>
-                <span class="rating-text">${randomRating}/5 (${randomReviews} reviews)</span>
-            </div>
-
-            <div class="price-container">
-                <div class="price">$${Number(listing.marketplacePrice).toFixed(2)}</div>
-                <div class="urgency">🔥 Only ${randomStock} left in stock</div>
-            </div>
-
-            <p class="description">${listing.productDescription}</p>
-
-            <div class="quantity-selector">
-                <label for="quantity">Quantity:</label>
-                <div class="quantity-controls">
-                    <button class="qty-btn" id="qty-minus" aria-label="Decrease quantity">−</button>
-                    <input type="number" id="quantity" name="quantity" value="1" min="1" max="99" readonly aria-label="Quantity">
-                    <button class="qty-btn" id="qty-plus" aria-label="Increase quantity">+</button>
+            <!-- Status Chips -->
+            <div class="status-chips">
+                <div class="chip chip-stock">
+                    <span class="chip-icon">🟢</span>
+                    <span class="chip-text">In Stock</span>
+                </div>
+                <div class="chip chip-shipping">
+                    <span class="chip-icon">🚚</span>
+                    <span class="chip-text">48h Dispatch</span>
+                </div>
+                <div class="chip chip-secure">
+                    <span class="chip-icon">🔒</span>
+                    <span class="chip-text">Stripe Secured</span>
+                </div>
+                <div class="chip chip-return">
+                    <span class="chip-icon">↩️</span>
+                    <span class="chip-text">30-Day Return</span>
                 </div>
             </div>
 
-            <ul class="features">
-                <li>Free Fast Shipping</li>
-                <li>30-Day Money-Back Guarantee</li>
-                <li>Secure Payment Processing</li>
-                <li>Ships Within 1-2 Business Days</li>
-                <li>${randomViewers} people viewing this now</li>
-            </ul>
+            <!-- Mechanical Price Display -->
+            <div class="price-display">
+                <div class="price-label">MARKET-VERIFIED PRICE</div>
+                <div class="price-value" id="priceValue">$${Number(listing.marketplacePrice).toFixed(2)}</div>
+            </div>
 
-            <button class="buy-button" id="checkout-button">
-                🛒 Buy Now - Secure Checkout
+            <!-- Product Description -->
+            <p class="product-description">${listing.productDescription}</p>
+
+            <!-- Rotary Dial Quantity Selector -->
+            <div class="inventory-dial">
+                <div class="dial-label">UNITS AVAILABLE: ${randomStock}</div>
+                <div class="dial-container">
+                    <button class="dial-btn dial-minus" id="dialMinus" aria-label="Decrease quantity">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="dial-display">
+                        <input type="number" id="quantity" value="1" min="1" max="${randomStock}" readonly>
+                    </div>
+                    <button class="dial-btn dial-plus" id="dialPlus" aria-label="Increase quantity">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dispense Device Button -->
+            <button class="dispense-button" id="dispenseButton">
+                <span class="dispense-text" id="dispenseText">DISPENSE DEVICE</span>
+                <div class="dispense-progress" id="dispenseProgress"></div>
             </button>
 
-            <div class="guarantee">
-                🔒 Secure payment powered by Stripe<br>
-                💯 100% satisfaction guaranteed
+            <!-- Minimal Trust Layer -->
+            <div class="trust-layer">
+                <svg class="trust-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 1L3 3V7C3 10.3 5.4 13.4 8 14C10.6 13.4 13 10.3 13 7V3L8 1Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                </svg>
+                <span class="trust-text">Payment handled by</span>
+                <svg class="stripe-logo" width="40" height="17" viewBox="0 0 60 25" fill="none">
+                    <path d="M59.64 14.28h-8.06c.19 1.93 1.6 2.55 3.2 2.55 1.64 0 2.96-.37 4.05-.95v3.32a8.33 8.33 0 0 1-4.56 1.1c-4.01 0-6.83-2.5-6.83-7.48 0-4.19 2.39-7.52 6.3-7.52 3.92 0 5.96 3.28 5.96 7.5 0 .4-.04 1.26-.06 1.48zm-5.92-5.62c-1.03 0-2.17.73-2.17 2.58h4.25c0-1.85-1.07-2.58-2.08-2.58zM40.95 20.3c-1.44 0-2.32-.6-2.9-1.04l-.02 4.63-4.12.87V5.57h3.76l.08 1.02a4.7 4.7 0 0 1 3.23-1.29c2.9 0 5.62 2.6 5.62 7.4 0 5.23-2.7 7.6-5.65 7.6zM40 8.95c-.95 0-1.54.34-1.97.81l.02 6.12c.4.44.98.78 1.95.78 1.52 0 2.54-1.65 2.54-3.87 0-2.15-1.04-3.84-2.54-3.84zM28.24 5.57h4.13v14.44h-4.13V5.57zm0-4.7L32.37 0v3.36l-4.13.88V.88zm-4.32 9.35v9.79H19.8V5.57h3.7l.12 1.22c1-1.77 3.07-1.41 3.62-1.22v3.79c-.52-.17-2.29-.43-3.32.86zm-8.55 4.72c0 2.43 2.6 1.68 3.12 1.46v3.36c-.55.3-1.54.54-2.89.54a4.15 4.15 0 0 1-4.27-4.24l.01-13.17 4.02-.86v3.54h3.14V9.1h-3.13v5.85zm-4.91.7c0 2.97-2.31 4.66-5.73 4.66a11.2 11.2 0 0 1-4.46-.93v-3.93c1.38.75 3.1 1.31 4.46 1.31.92 0 1.53-.24 1.53-1C6.26 13.77 0 14.51 0 9.95 0 7.04 2.28 5.3 5.62 5.3c1.36 0 2.72.2 4.09.75v3.88a9.23 9.23 0 0 0-4.1-1.06c-.86 0-1.44.25-1.44.93 0 1.85 6.29.97 6.29 5.88z" fill="#635BFF"/>
+                </svg>
+                <span class="trust-text">• No card data stored</span>
+            </div>
+
+            <!-- Quiet Social Proof -->
+            <div class="social-proof">
+                <span>${randomReviews} verified purchases</span>
+                <span class="separator">•</span>
+                <span>${randomRating} average device rating</span>
             </div>
         </div>
     </div>
 
-    <!-- Sticky CTA for mobile -->
-    <div class="sticky-cta" id="sticky-cta">
-        <div class="price-mini">$${Number(listing.marketplacePrice).toFixed(2)}</div>
-        <button class="buy-button-mini" id="sticky-checkout-button">
-            Buy Now
-        </button>
-    </div>
-
-    <footer class="footer">
-        <div class="footer-brand">POWERED BY</div>
-        <div class="footer-tagline">🤖 Digital Vending Machine</div>
-        <div class="footer-links">
-            <a href="https://api.arbi.creai.dev/contact">Contact</a>
-            <a href="https://api.arbi.creai.dev/returns">Returns & Refunds</a>
-            <a href="https://api.arbi.creai.dev/shipping">Shipping</a>
-            <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
-            <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
+    <!-- Dark Steel Footer / Control Panel -->
+    <footer class="control-panel">
+        <div class="panel-indicator">
+            <div class="indicator-light"></div>
+            <span class="indicator-text">SYSTEM OPERATIONAL</span>
         </div>
-        <p class="footer-company">Arbi Inc. - support@arbi.creai.dev</p>
-        <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
+        <div class="panel-brand">DIGITAL VENDING MACHINE™</div>
+        <div class="panel-subtitle">Autonomous commerce layer</div>
+        <div class="panel-links" id="panelLinks">
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/contact">📧</button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/returns">↩️</button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/shipping">📦</button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/privacy">🔒</button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/terms">📋</button>
+        </div>
+        <div class="panel-footer">Arbi Inc. © 2025 • support@arbi.creai.dev</div>
     </footer>
 
     <script>
-        // Use addEventListener instead of inline onclick for CSP compatibility
         document.addEventListener('DOMContentLoaded', function() {
-            const button = document.getElementById('checkout-button');
-            const stickyButton = document.getElementById('sticky-checkout-button');
-            const stickyCta = document.getElementById('sticky-cta');
+            // Elements
             const quantityInput = document.getElementById('quantity');
-            const minusBtn = document.getElementById('qty-minus');
-            const plusBtn = document.getElementById('qty-plus');
+            const dialMinus = document.getElementById('dialMinus');
+            const dialPlus = document.getElementById('dialPlus');
+            const dispenseButton = document.getElementById('dispenseButton');
+            const dispenseText = document.getElementById('dispenseText');
+            const dispenseProgress = document.getElementById('dispenseProgress');
+            const productImage = document.getElementById('productImage');
+            const panelLinks = document.querySelectorAll('.panel-link');
 
-            if (!button || !quantityInput) {
+            if (!quantityInput || !dispenseButton) {
                 console.error('Required elements not found');
                 return;
             }
 
-            // Show sticky CTA on scroll (mobile only)
-            if (window.innerWidth <= 768) {
-                let lastScroll = 0;
-                window.addEventListener('scroll', function() {
-                    const currentScroll = window.pageYOffset;
-                    if (currentScroll > 300) {
-                        stickyCta.style.display = 'flex';
-                    } else {
-                        stickyCta.style.display = 'none';
-                    }
-                    lastScroll = currentScroll;
-                });
+            const maxQuantity = parseInt(quantityInput.max);
+
+            // Haptic feedback function
+            function hapticTick() {
+                if (navigator.vibrate) {
+                    navigator.vibrate(10);
+                }
             }
 
-            // Quantity controls
-            minusBtn.addEventListener('click', function() {
+            // Rotary dial - decrease quantity
+            dialMinus.addEventListener('click', function() {
                 const currentValue = parseInt(quantityInput.value);
                 if (currentValue > 1) {
                     quantityInput.value = currentValue - 1;
+                    hapticTick();
+                    // GSAP animation for click-stop effect
+                    if (typeof gsap !== 'undefined') {
+                        gsap.fromTo(quantityInput,
+                            { scale: 0.95 },
+                            { scale: 1, duration: 0.2, ease: 'back.out(3)' }
+                        );
+                    }
                 }
             });
 
-            plusBtn.addEventListener('click', function() {
+            // Rotary dial - increase quantity
+            dialPlus.addEventListener('click', function() {
                 const currentValue = parseInt(quantityInput.value);
-                if (currentValue < 99) {
+                if (currentValue < maxQuantity) {
                     quantityInput.value = currentValue + 1;
+                    hapticTick();
+                    // GSAP animation for click-stop effect
+                    if (typeof gsap !== 'undefined') {
+                        gsap.fromTo(quantityInput,
+                            { scale: 0.95 },
+                            { scale: 1, duration: 0.2, ease: 'back.out(3)' }
+                        );
+                    }
                 }
             });
 
-            // Image gallery - thumbnail click handling
-            const thumbnails = document.querySelectorAll('.thumbnail');
-            const mainImage = document.getElementById('mainImage');
+            // Long-press dispense button
+            let longPressTimer = null;
+            let progressInterval = null;
+            let pressStartTime = 0;
+            const LONG_PRESS_DURATION = 300; // milliseconds
 
-            if (thumbnails.length > 0 && mainImage) {
-                thumbnails.forEach(function(thumbnail) {
-                    thumbnail.addEventListener('click', function() {
-                        // Update main image
-                        mainImage.src = thumbnail.src;
+            dispenseButton.addEventListener('mousedown', startLongPress);
+            dispenseButton.addEventListener('touchstart', startLongPress);
+            dispenseButton.addEventListener('mouseup', endLongPress);
+            dispenseButton.addEventListener('mouseleave', endLongPress);
+            dispenseButton.addEventListener('touchend', endLongPress);
+            dispenseButton.addEventListener('touchcancel', endLongPress);
 
-                        // Update active state
-                        thumbnails.forEach(function(t) {
-                            t.classList.remove('active');
-                        });
-                        thumbnail.classList.add('active');
+            function startLongPress(e) {
+                if (e.type === 'touchstart') {
+                    e.preventDefault();
+                }
+
+                pressStartTime = Date.now();
+                dispenseProgress.style.width = '0%';
+                hapticTick();
+
+                // Animate progress bar
+                progressInterval = setInterval(function() {
+                    const elapsed = Date.now() - pressStartTime;
+                    const progress = Math.min((elapsed / LONG_PRESS_DURATION) * 100, 100);
+                    dispenseProgress.style.width = progress + '%';
+
+                    if (progress >= 100) {
+                        clearInterval(progressInterval);
+                    }
+                }, 10);
+
+                // Trigger checkout after long press duration
+                longPressTimer = setTimeout(function() {
+                    handleDispense();
+                }, LONG_PRESS_DURATION);
+            }
+
+            function endLongPress(e) {
+                if (e.type === 'touchend') {
+                    e.preventDefault();
+                }
+
+                clearTimeout(longPressTimer);
+                clearInterval(progressInterval);
+
+                const elapsed = Date.now() - pressStartTime;
+                if (elapsed < LONG_PRESS_DURATION) {
+                    // Reset progress if released too early
+                    dispenseProgress.style.width = '0%';
+                }
+            }
+
+            // Dispense sequence with GSAP timeline
+            async function handleDispense() {
+                dispenseButton.disabled = true;
+                hapticTick();
+
+                if (typeof gsap !== 'undefined') {
+                    const tl = gsap.timeline();
+
+                    // State 1: Authorizing
+                    dispenseText.textContent = 'AUTHORIZING';
+                    tl.to(dispenseProgress, { width: '33%', duration: 0.3 });
+
+                    // State 2: Securing Inventory
+                    tl.call(function() {
+                        dispenseText.textContent = 'SECURING INVENTORY';
+                        hapticTick();
                     });
-                });
+                    tl.to(dispenseProgress, { width: '66%', duration: 0.3 });
+
+                    // State 3: Redirecting
+                    tl.call(function() {
+                        dispenseText.textContent = 'REDIRECTING TO CHECKOUT';
+                        hapticTick();
+                    });
+                    tl.to(dispenseProgress, { width: '100%', duration: 0.3 });
+
+                    // Wait for timeline to complete
+                    await new Promise(resolve => {
+                        tl.call(resolve);
+                    });
+                }
+
+                // Proceed to checkout
+                handleCheckout();
             }
 
             // Checkout function
-            async function handleCheckout(clickedButton) {
+            async function handleCheckout() {
                 const quantity = parseInt(quantityInput.value);
-                const originalText = clickedButton.textContent;
-                clickedButton.textContent = 'Processing...';
-                clickedButton.disabled = true;
 
                 try {
                     const response = await fetch('/product/${listing.listingId}/checkout', {
@@ -957,20 +1102,66 @@ function generateProductLandingPage(listing: any): string {
                 } catch (error) {
                     console.error('Checkout error:', error);
                     alert('Error processing checkout. Please try again.');
-                    clickedButton.textContent = originalText;
-                    clickedButton.disabled = false;
+                    dispenseText.textContent = 'DISPENSE DEVICE';
+                    dispenseProgress.style.width = '0%';
+                    dispenseButton.disabled = false;
                 }
             }
 
-            // Checkout with quantity - main button
-            button.addEventListener('click', function() {
-                handleCheckout(button);
+            // Panel links navigation
+            panelLinks.forEach(function(link) {
+                link.addEventListener('click', function() {
+                    const url = this.getAttribute('data-url');
+                    if (url) {
+                        window.location.href = url;
+                    }
+                });
             });
 
-            // Checkout - sticky button
-            if (stickyButton) {
-                stickyButton.addEventListener('click', function() {
-                    handleCheckout(stickyButton);
+            // Product image parallax tilt (subtle, on hover)
+            if (productImage && typeof gsap !== 'undefined') {
+                const glassPanelEl = productImage.closest('.glass-panel');
+                if (glassPanelEl) {
+                    glassPanelEl.addEventListener('mousemove', function(e) {
+                        const rect = glassPanelEl.getBoundingClientRect();
+                        const x = (e.clientX - rect.left) / rect.width - 0.5;
+                        const y = (e.clientY - rect.top) / rect.height - 0.5;
+
+                        gsap.to(productImage, {
+                            rotateY: x * 5,
+                            rotateX: -y * 5,
+                            duration: 0.5,
+                            ease: 'power2.out'
+                        });
+                    });
+
+                    glassPanelEl.addEventListener('mouseleave', function() {
+                        gsap.to(productImage, {
+                            rotateY: 0,
+                            rotateX: 0,
+                            duration: 0.5,
+                            ease: 'power2.out'
+                        });
+                    });
+                }
+            }
+
+            // Device orientation parallax for mobile
+            if (window.DeviceOrientationEvent && productImage) {
+                window.addEventListener('deviceorientation', function(e) {
+                    if (e.gamma !== null && e.beta !== null) {
+                        const tiltX = Math.max(-15, Math.min(15, e.gamma)) / 15;
+                        const tiltY = Math.max(-15, Math.min(15, e.beta - 45)) / 15;
+
+                        if (typeof gsap !== 'undefined') {
+                            gsap.to(productImage, {
+                                rotateY: tiltX * 3,
+                                rotateX: -tiltY * 3,
+                                duration: 0.3,
+                                ease: 'power1.out'
+                            });
+                        }
+                    }
                 });
             }
         });

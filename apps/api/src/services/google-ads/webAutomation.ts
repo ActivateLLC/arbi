@@ -37,28 +37,40 @@ export async function createCampaignViaWeb(
     await stagehand.init();
     await stagehand.page.setViewportSize({ width: 1920, height: 1080 });
 
-    // Step 1: Navigate to Google Ads
+    // Step 1: Navigate directly to Google Ads with customer ID in URL
+    // This helps bypass account selection screens
     console.log('   📍 Opening Google Ads...');
-    await stagehand.page.goto('https://ads.google.com', {
+    const googleAdsUrl = 'https://ads.google.com/aw/campaigns?ocid=7916628817';
+    await stagehand.page.goto(googleAdsUrl, {
       waitUntil: 'domcontentloaded',
       timeout: 60000,
     });
 
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    await new Promise(resolve => setTimeout(resolve, 5000));
 
     // Screenshot 1
     await stagehand.page.screenshot({ path: '/tmp/ads-1-start.png' });
     console.log('   📸 Saved: /tmp/ads-1-start.png');
 
-    // Step 2: Check if login needed
+    // Step 2: Check if login needed (more flexible detection)
     const needsLogin = await stagehand.page.evaluate(() => {
       const text = document.body.innerText.toLowerCase();
-      return text.includes('sign in') || text.includes('email or phone');
+      const hasEmailInput = document.querySelector('input[type="email"]') !== null;
+      const hasPasswordInput = document.querySelector('input[type="password"]') !== null;
+      return text.includes('sign in') ||
+             text.includes('email or phone') ||
+             text.includes('enter your email') ||
+             hasEmailInput ||
+             hasPasswordInput;
     });
 
+    console.log(`   🔍 Login detection: ${needsLogin ? 'Login required' : 'Already logged in or account selection'}`);
+
     if (needsLogin) {
-      console.log('   🔐 Logging in...');
+      console.log('   🔐 Performing login...');
       await performLogin(stagehand, credentials);
+    } else {
+      console.log('   ✅ Skipping login (already authenticated or different screen)');
     }
 
     // Step 3: Use AI to navigate and create campaign
@@ -188,52 +200,103 @@ export async function createCampaignViaWeb(
 }
 
 /**
- * Perform Google login
+ * Perform Google login (with better error handling)
  */
 async function performLogin(
   stagehand: Stagehand,
   credentials: { email: string; password: string }
 ) {
-  // Wait for email field
-  await stagehand.page.waitForSelector('input[type="email"]', { timeout: 10000 });
+  try {
+    // Wait for email field (with retry)
+    console.log('   📧 Waiting for email field...');
 
-  // Enter email
-  await stagehand.page.fill('input[type="email"]', credentials.email);
-  await new Promise(resolve => setTimeout(resolve, 1000));
+    let emailField = await stagehand.page.$('input[type="email"]');
 
-  // Click Next
-  const nextButtons = await stagehand.page.$$('button');
-  for (const button of nextButtons) {
-    const text = await button.textContent();
-    if (text?.includes('Next')) {
-      await button.click();
-      break;
+    if (!emailField) {
+      // Try alternative selectors
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      emailField = await stagehand.page.$('input[name="identifier"]');
     }
-  }
 
-  await new Promise(resolve => setTimeout(resolve, 3000));
-
-  // Wait for password field
-  await stagehand.page.waitForSelector('input[type="password"]', { timeout: 10000 });
-
-  // Enter password
-  await stagehand.page.fill('input[type="password"]', credentials.password);
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Click Next/Sign in
-  const signInButtons = await stagehand.page.$$('button');
-  for (const button of signInButtons) {
-    const text = await button.textContent();
-    if (text?.includes('Next') || text?.includes('Sign in')) {
-      await button.click();
-      break;
+    if (!emailField) {
+      throw new Error('Could not find email input field');
     }
+
+    // Enter email
+    await stagehand.page.fill('input[type="email"]', credentials.email);
+    console.log('   ✅ Email entered');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Click Next
+    const nextButtons = await stagehand.page.$$('button, div[role="button"]');
+    let clicked = false;
+    for (const button of nextButtons) {
+      const text = await button.textContent();
+      if (text?.includes('Next') || text?.includes('next')) {
+        await button.click();
+        clicked = true;
+        console.log('   ✅ Clicked Next');
+        break;
+      }
+    }
+
+    if (!clicked) {
+      // Try pressing Enter as fallback
+      await stagehand.page.keyboard.press('Enter');
+      console.log('   ⌨️  Pressed Enter');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 4000));
+
+    // Wait for password field
+    console.log('   🔒 Waiting for password field...');
+
+    let passwordField = await stagehand.page.$('input[type="password"]');
+
+    if (!passwordField) {
+      // Try waiting a bit more
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      passwordField = await stagehand.page.$('input[type="password"]');
+    }
+
+    if (!passwordField) {
+      throw new Error('Could not find password input field');
+    }
+
+    // Enter password
+    await stagehand.page.fill('input[type="password"]', credentials.password);
+    console.log('   ✅ Password entered');
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Click Next/Sign in
+    const signInButtons = await stagehand.page.$$('button, div[role="button"]');
+    clicked = false;
+    for (const button of signInButtons) {
+      const text = await button.textContent();
+      if (text?.includes('Next') || text?.includes('Sign in') || text?.includes('next')) {
+        await button.click();
+        clicked = true;
+        console.log('   ✅ Clicked Sign In');
+        break;
+      }
+    }
+
+    if (!clicked) {
+      // Try pressing Enter as fallback
+      await stagehand.page.keyboard.press('Enter');
+      console.log('   ⌨️  Pressed Enter');
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 6000));
+
+    await stagehand.page.screenshot({ path: '/tmp/ads-logged-in.png' });
+    console.log('   ✅ Login complete');
+
+  } catch (error: any) {
+    console.error(`   ❌ Login failed: ${error.message}`);
+    await stagehand.page.screenshot({ path: '/tmp/ads-login-error.png' });
+    throw error;
   }
-
-  await new Promise(resolve => setTimeout(resolve, 5000));
-
-  await stagehand.page.screenshot({ path: '/tmp/ads-logged-in.png' });
-  console.log('   ✅ Logged in');
 }
 
 /**

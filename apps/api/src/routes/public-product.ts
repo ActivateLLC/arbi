@@ -422,13 +422,15 @@ function generateProductLandingPage(listing: any): string {
         .product-display {
             padding: 40px 20px;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
+            gap: 20px;
         }
 
         .glass-panel {
             position: relative;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            background: linear-gradient(135deg, #1a1a2e 0%, #2d3748 100%);
             border-radius: 20px;
             padding: 40px;
             overflow: hidden;
@@ -467,16 +469,58 @@ function generateProductLandingPage(listing: any): string {
             transform: scale(1.02) translateY(-5px);
         }
 
+        /* Thumbnail Gallery */
+        .thumbnail-gallery {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            padding: 0 20px;
+            max-width: 500px;
+        }
+
+        .thumbnail {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.3s ease;
+            opacity: 0.6;
+        }
+
+        .thumbnail:hover {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+
+        .thumbnail.active {
+            opacity: 1;
+            border-color: #667eea;
+            box-shadow: 0 0 0 1px #667eea, 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
         @media (max-width: 768px) {
             .product-display {
                 padding: 16px 12px;
+                gap: 16px;
             }
             .glass-panel {
-                padding: 16px;
+                padding: 20px;
                 border-radius: 16px;
             }
             .product-image {
                 max-width: 100%;
+            }
+            .thumbnail-gallery {
+                padding: 0 12px;
+                gap: 8px;
+            }
+            .thumbnail {
+                width: 60px;
+                height: 60px;
+                border-radius: 8px;
             }
         }
 
@@ -495,10 +539,10 @@ function generateProductLandingPage(listing: any): string {
         }
 
         .product-title {
-            font-size: clamp(18px, 5vw, 28px);
+            font-size: clamp(20px, 5.5vw, 28px);
             font-weight: 600;
             color: #1a202c;
-            line-height: 1.3;
+            line-height: 1.4;
             margin: 0;
         }
 
@@ -517,7 +561,7 @@ function generateProductLandingPage(listing: any): string {
             border: 1px solid rgba(102, 126, 234, 0.2);
             padding: 8px 14px;
             border-radius: 20px;
-            font-size: 13px;
+            font-size: 14px;
             font-weight: 500;
             color: #374151;
             transition: all 0.2s;
@@ -539,11 +583,11 @@ function generateProductLandingPage(listing: any): string {
 
         @media (max-width: 768px) {
             .chip {
-                padding: 6px 12px;
-                font-size: 12px;
+                padding: 7px 12px;
+                font-size: 13px;
             }
             .chip-icon {
-                font-size: 13px;
+                font-size: 14px;
             }
         }
 
@@ -557,7 +601,7 @@ function generateProductLandingPage(listing: any): string {
         }
 
         .price-label {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             letter-spacing: 1.5px;
             color: #6b7280;
@@ -567,7 +611,7 @@ function generateProductLandingPage(listing: any): string {
 
         .price-value {
             font-family: 'SF Mono', 'Courier New', monospace;
-            font-size: clamp(32px, 8vw, 48px);
+            font-size: clamp(36px, 9vw, 48px);
             font-weight: 700;
             color: #667eea;
             line-height: 1;
@@ -579,14 +623,14 @@ function generateProductLandingPage(listing: any): string {
                 padding: 16px;
             }
             .price-label {
-                font-size: 10px;
-                letter-spacing: 1px;
+                font-size: 11px;
+                letter-spacing: 1.2px;
                 margin-bottom: 6px;
             }
         }
 
         .product-description {
-            font-size: 15px;
+            font-size: 16px;
             color: #4b5563;
             line-height: 1.6;
             margin: 0;
@@ -594,8 +638,8 @@ function generateProductLandingPage(listing: any): string {
 
         @media (max-width: 768px) {
             .product-description {
-                font-size: 14px;
-                line-height: 1.5;
+                font-size: 15px;
+                line-height: 1.6;
             }
         }
 
@@ -608,7 +652,7 @@ function generateProductLandingPage(listing: any): string {
         }
 
         .dial-label {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: 700;
             letter-spacing: 1.2px;
             color: #6b7280;
@@ -933,7 +977,6 @@ function generateProductLandingPage(listing: any): string {
 
             <!-- Mechanical Price Display -->
             <div class="price-display">
-                <div class="price-label">MARKET-VERIFIED PRICE</div>
                 <div class="price-value" id="priceValue">$${Number(listing.marketplacePrice).toFixed(2)}</div>
             </div>
 
@@ -1016,6 +1059,7 @@ function generateProductLandingPage(listing: any): string {
             const dispenseProgress = document.getElementById('dispenseProgress');
             const productImage = document.getElementById('productImage');
             const panelLinks = document.querySelectorAll('.panel-link');
+            const thumbnails = document.querySelectorAll('.thumbnail');
 
             if (!quantityInput || !dispenseButton) {
                 console.error('Required elements not found');
@@ -1023,6 +1067,44 @@ function generateProductLandingPage(listing: any): string {
             }
 
             const maxQuantity = parseInt(quantityInput.max);
+
+            // Image Gallery - Thumbnail Click Handler
+            thumbnails.forEach(function(thumbnail, index) {
+                thumbnail.addEventListener('click', function() {
+                    // Update main image
+                    const newImageSrc = this.src;
+                    if (productImage && newImageSrc) {
+                        // Fade out
+                        if (typeof gsap !== 'undefined') {
+                            gsap.to(productImage, {
+                                opacity: 0,
+                                duration: 0.15,
+                                onComplete: function() {
+                                    productImage.src = newImageSrc;
+                                    // Fade in
+                                    gsap.to(productImage, {
+                                        opacity: 1,
+                                        duration: 0.15
+                                    });
+                                }
+                            });
+                        } else {
+                            productImage.src = newImageSrc;
+                        }
+
+                        // Update active thumbnail
+                        thumbnails.forEach(function(t) {
+                            t.classList.remove('active');
+                        });
+                        this.classList.add('active');
+
+                        // Haptic feedback
+                        if (navigator.vibrate) {
+                            navigator.vibrate(10);
+                        }
+                    }
+                });
+            });
 
             // Haptic feedback function
             function hapticTick() {

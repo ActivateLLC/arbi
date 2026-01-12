@@ -10,9 +10,36 @@ import {
   createBulkCampaignsViaWeb,
   CampaignData,
 } from '../services/google-ads/webAutomation';
-import { prisma } from '@arbi/data';
 
 const router = Router();
+
+// Mock product data for testing (TODO: Replace with actual database)
+const MOCK_PRODUCTS = [
+  {
+    id: '1',
+    title: 'Premium Wireless Headphones',
+    price: 79.99,
+    profitMargin: 45,
+    category: 'Electronics',
+    url: 'https://arbi.creai.dev/product/1',
+  },
+  {
+    id: '2',
+    title: 'Smart Fitness Tracker Watch',
+    price: 49.99,
+    profitMargin: 40,
+    category: 'Wearables',
+    url: 'https://arbi.creai.dev/product/2',
+  },
+  {
+    id: '3',
+    title: 'Portable Phone Charger 20000mAh',
+    price: 34.99,
+    profitMargin: 38,
+    category: 'Accessories',
+    url: 'https://arbi.creai.dev/product/3',
+  },
+];
 
 /**
  * POST /api/google-ads-web/create-campaign
@@ -57,27 +84,11 @@ router.post('/quick-start', async (req: Request, res: Response, next: NextFuncti
 
     console.log('🚀 Quick Start - Web Automation Mode');
 
-    // Get top profitable products
-    const products = await prisma.listing.findMany({
-      where: {
-        status: 'active',
-        profitMargin: {
-          gte: minProfitMargin,
-        },
-      },
-      orderBy: {
-        profitMargin: 'desc',
-      },
-      take: limit,
-      select: {
-        id: true,
-        title: true,
-        price: true,
-        profitMargin: true,
-        category: true,
-        url: true,
-      },
-    });
+    // Get top profitable products (using mock data for now)
+    const products = MOCK_PRODUCTS
+      .filter(p => p.profitMargin >= minProfitMargin)
+      .sort((a, b) => b.profitMargin - a.profitMargin)
+      .slice(0, limit);
 
     if (products.length === 0) {
       return res.status(200).json({
@@ -143,19 +154,11 @@ router.post('/create-from-marketplace', async (req: Request, res: Response, next
 
     console.log(`🎯 Creating campaigns for top ${limit} marketplace products...`);
 
-    // Get products
-    const products = await prisma.listing.findMany({
-      where: {
-        status: 'active',
-        profitMargin: {
-          gte: minProfitMargin,
-        },
-      },
-      orderBy: {
-        profitMargin: 'desc',
-      },
-      take: limit,
-    });
+    // Get products (using mock data for now)
+    const products = MOCK_PRODUCTS
+      .filter(p => p.profitMargin >= minProfitMargin)
+      .sort((a, b) => b.profitMargin - a.profitMargin)
+      .slice(0, limit);
 
     if (products.length === 0) {
       return res.status(200).json({

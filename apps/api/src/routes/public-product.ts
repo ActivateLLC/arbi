@@ -1002,7 +1002,7 @@ function generateProductLandingPage(listing: any): string {
             <button class="panel-link" data-url="https://api.arbi.creai.dev/privacy">🔒</button>
             <button class="panel-link" data-url="https://api.arbi.creai.dev/terms">📋</button>
         </div>
-        <div class="panel-footer">Arbi Inc. © 2025 • support@arbi.creai.dev</div>
+        <div class="panel-footer">Arbi Inc. © 2026 • support@arbi.creai.dev</div>
     </footer>
 
     <script>
@@ -1386,7 +1386,7 @@ function generateSuccessPage(session: any): string {
             <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
             <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
         </div>
-        <p>&copy; 2025 Arbi Inc. All rights reserved.</p>
+        <p>&copy; 2026 Arbi Inc. All rights reserved.</p>
     </footer>
 </body>
 </html>

@@ -1,6 +1,6 @@
 /**
- * Google Ads Web Automation
- * Creates campaigns programmatically through Google Ads UI (no API needed!)
+ * Google Ads Web Automation - ROBUST VERSION v2
+ * Creates campaigns using Stagehand AI-powered browser automation
  */
 
 import { Stagehand } from '@browserbasehq/stagehand';
@@ -18,18 +18,18 @@ export interface CampaignData {
 }
 
 /**
- * Create Google Ads campaign via web automation
+ * Create Google Ads campaign via AI-powered web automation
  */
 export async function createCampaignViaWeb(
   campaignData: CampaignData,
   credentials: { email: string; password: string }
-): Promise<{ success: boolean; campaignName: string }> {
-  console.log(`🎯 Creating Google Ads campaign via web automation: ${campaignData.productName}`);
+): Promise<{ success: boolean; campaignName: string; screenshot?: string }> {
+  console.log(`🎯 Creating campaign: ${campaignData.productName}`);
 
   const stagehand = new Stagehand({
     env: 'LOCAL',
     enableCaching: false,
-    headless: true,
+    headless: true, // Keep headless for server
     domSettleTimeoutMs: 5000,
   });
 
@@ -40,362 +40,253 @@ export async function createCampaignViaWeb(
     // Step 1: Navigate to Google Ads
     console.log('   📍 Opening Google Ads...');
     await stagehand.page.goto('https://ads.google.com', {
-      waitUntil: 'networkidle',
+      waitUntil: 'domcontentloaded',
       timeout: 60000,
     });
 
-    // Step 2: Login
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    // Screenshot 1
+    await stagehand.page.screenshot({ path: '/tmp/ads-1-start.png' });
+    console.log('   📸 Saved: /tmp/ads-1-start.png');
+
+    // Step 2: Check if login needed
     const needsLogin = await stagehand.page.evaluate(() => {
-      return document.body.innerText.includes('Sign in') ||
-             document.body.innerText.includes('Email or phone');
+      const text = document.body.innerText.toLowerCase();
+      return text.includes('sign in') || text.includes('email or phone');
     });
 
     if (needsLogin) {
-      console.log('   🔐 Logging in to Google Ads...');
-      await loginToGoogleAds(stagehand, credentials);
-    } else {
-      console.log('   ✅ Already logged in');
+      console.log('   🔐 Logging in...');
+      await performLogin(stagehand, credentials);
     }
 
-    // Step 3: Navigate to campaign creation
-    console.log('   ➕ Starting campaign creation...');
-    await navigateToCampaignCreation(stagehand);
+    // Step 3: Use AI to navigate and create campaign
+    console.log('   🤖 Using AI to create campaign...');
 
-    // Step 4: Select campaign type (Video)
-    console.log('   🎬 Selecting video campaign...');
-    await selectVideoCampaignType(stagehand);
+    // Navigate to campaigns overview
+    await stagehand.page.goto('https://ads.google.com/aw/campaigns', {
+      waitUntil: 'domcontentloaded',
+      timeout: 30000,
+    });
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Step 5: Fill campaign details
-    console.log('   📝 Filling campaign details...');
-    await fillCampaignDetails(stagehand, campaignData);
+    await stagehand.page.screenshot({ path: '/tmp/ads-2-campaigns.png' });
 
-    // Step 6: Create ad
-    console.log('   🎨 Creating ad...');
-    await createVideoAd(stagehand, campaignData);
+    // Use AI to click "New campaign"
+    await stagehand.act({
+      action: 'click the button to create a new campaign'
+    });
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    // Step 7: Review and submit
-    console.log('   ✅ Submitting campaign...');
-    await submitCampaign(stagehand);
+    await stagehand.page.screenshot({ path: '/tmp/ads-3-new-campaign.png' });
 
-    await stagehand.close();
+    // Select goal using AI
+    await stagehand.act({
+      action: 'select the "Sales" or "Website conversions" campaign goal'
+    });
+    await new Promise(resolve => setTimeout(resolve, 2000));
 
+    // Select campaign type
+    await stagehand.act({
+      action: 'select "Video" as the campaign type'
+    });
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // Click Continue
+    await stagehand.act({
+      action: 'click the Continue button'
+    });
+    await new Promise(resolve => setTimeout(resolve, 3000));
+
+    await stagehand.page.screenshot({ path: '/tmp/ads-4-setup.png' });
+
+    // Fill campaign name
     const campaignName = `Arbi - ${campaignData.productName}`;
-    console.log(`   🎉 Campaign created: ${campaignName}`);
+    await stagehand.act({
+      action: `type "${campaignName}" in the campaign name field`
+    });
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
-    return {
-      success: true,
-      campaignName,
-    };
-  } catch (error: any) {
-    console.error('❌ Web automation failed:', error.message);
+    // Set budget
+    await stagehand.act({
+      action: `set the daily budget to ${campaignData.dailyBudget} dollars`
+    });
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Set location
+    await stagehand.act({
+      action: `set the location targeting to ${campaignData.targetCountry}`
+    });
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    await stagehand.page.screenshot({ path: '/tmp/ads-5-details.png' });
+
+    // Create ad
+    console.log('   🎨 Creating ad...');
+
+    // Set final URL
+    await stagehand.act({
+      action: `enter ${campaignData.productUrl} as the final URL or website address`
+    });
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Set headline
+    await stagehand.act({
+      action: `enter "${campaignData.adCopy.headline}" as the ad headline`
+    });
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    // Set description
+    await stagehand.act({
+      action: `enter "${campaignData.adCopy.description}" as the ad description`
+    });
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    await stagehand.page.screenshot({ path: '/tmp/ads-6-ad-filled.png' });
+
+    // Submit campaign
+    console.log('   ✅ Publishing campaign...');
+
+    await stagehand.act({
+      action: 'click the button to publish or create the campaign'
+    });
+    await new Promise(resolve => setTimeout(resolve, 5000));
+
+    await stagehand.page.screenshot({ path: '/tmp/ads-7-submitted.png' });
+
+    // Verify creation
+    const verified = await stagehand.page.evaluate((name) => {
+      const text = document.body.innerText;
+      return text.includes(name) ||
+             text.includes('Campaign created') ||
+             text.includes('successfully') ||
+             text.includes('published');
+    }, campaignName);
+
     await stagehand.close();
-    throw new Error(`Failed to create campaign: ${error.message}`);
+
+    if (verified) {
+      console.log(`   🎉 SUCCESS: ${campaignName}`);
+      return { success: true, campaignName, screenshot: '/tmp/ads-7-submitted.png' };
+    } else {
+      console.log(`   ⚠️  Could not verify: ${campaignName}`);
+      return { success: false, campaignName, screenshot: '/tmp/ads-7-submitted.png' };
+    }
+
+  } catch (error: any) {
+    console.error(`❌ Error: ${error.message}`);
+
+    try {
+      await stagehand.page.screenshot({ path: '/tmp/ads-error.png' });
+      console.log('   📸 Error screenshot: /tmp/ads-error.png');
+    } catch (e) {}
+
+    await stagehand.close();
+    throw error;
   }
 }
 
 /**
- * Login to Google Ads
+ * Perform Google login
  */
-async function loginToGoogleAds(
+async function performLogin(
   stagehand: Stagehand,
   credentials: { email: string; password: string }
 ) {
-  // Enter email
-  await stagehand.page.evaluate((email) => {
-    const emailInput = document.querySelector('input[type="email"]') as HTMLInputElement;
-    if (emailInput) {
-      emailInput.value = email;
-      emailInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, credentials.email);
+  // Wait for email field
+  await stagehand.page.waitForSelector('input[type="email"]', { timeout: 10000 });
 
+  // Enter email
+  await stagehand.page.fill('input[type="email"]', credentials.email);
   await new Promise(resolve => setTimeout(resolve, 1000));
 
   // Click Next
-  await stagehand.page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const nextButton = buttons.find(b => b.textContent?.includes('Next'));
-    if (nextButton) {
-      (nextButton as HTMLButtonElement).click();
+  const nextButtons = await stagehand.page.$$('button');
+  for (const button of nextButtons) {
+    const text = await button.textContent();
+    if (text?.includes('Next')) {
+      await button.click();
+      break;
     }
-  });
+  }
 
   await new Promise(resolve => setTimeout(resolve, 3000));
 
-  // Enter password
-  await stagehand.page.evaluate((password) => {
-    const passwordInput = document.querySelector('input[type="password"]') as HTMLInputElement;
-    if (passwordInput) {
-      passwordInput.value = password;
-      passwordInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, credentials.password);
+  // Wait for password field
+  await stagehand.page.waitForSelector('input[type="password"]', { timeout: 10000 });
 
+  // Enter password
+  await stagehand.page.fill('input[type="password"]', credentials.password);
   await new Promise(resolve => setTimeout(resolve, 1000));
 
   // Click Next/Sign in
-  await stagehand.page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const signInButton = buttons.find(b =>
-      b.textContent?.includes('Next') ||
-      b.textContent?.includes('Sign in')
-    );
-    if (signInButton) {
-      (signInButton as HTMLButtonElement).click();
+  const signInButtons = await stagehand.page.$$('button');
+  for (const button of signInButtons) {
+    const text = await button.textContent();
+    if (text?.includes('Next') || text?.includes('Sign in')) {
+      await button.click();
+      break;
     }
-  });
-
-  await new Promise(resolve => setTimeout(resolve, 5000));
-}
-
-/**
- * Navigate to campaign creation page
- */
-async function navigateToCampaignCreation(stagehand: Stagehand) {
-  // Look for "New campaign" or "+" button
-  await stagehand.page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('button, a'));
-    const newCampaignButton = buttons.find(b =>
-      b.textContent?.toLowerCase().includes('new campaign') ||
-      b.textContent?.includes('+')
-    );
-    if (newCampaignButton) {
-      (newCampaignButton as HTMLElement).click();
-    }
-  });
-
-  await new Promise(resolve => setTimeout(resolve, 3000));
-}
-
-/**
- * Select video campaign type
- */
-async function selectVideoCampaignType(stagehand: Stagehand) {
-  // Click on Video campaign option
-  await stagehand.page.evaluate(() => {
-    const options = Array.from(document.querySelectorAll('div, button'));
-    const videoOption = options.find(o =>
-      o.textContent?.toLowerCase().includes('video') ||
-      o.textContent?.toLowerCase().includes('youtube')
-    );
-    if (videoOption) {
-      (videoOption as HTMLElement).click();
-    }
-  });
-
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Select "Drive conversions" goal
-  await stagehand.page.evaluate(() => {
-    const options = Array.from(document.querySelectorAll('div, button'));
-    const conversionOption = options.find(o =>
-      o.textContent?.toLowerCase().includes('conversion') ||
-      o.textContent?.toLowerCase().includes('sales')
-    );
-    if (conversionOption) {
-      (conversionOption as HTMLElement).click();
-    }
-  });
-
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Click Continue
-  await stagehand.page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const continueButton = buttons.find(b => b.textContent?.includes('Continue'));
-    if (continueButton) {
-      (continueButton as HTMLButtonElement).click();
-    }
-  });
-
-  await new Promise(resolve => setTimeout(resolve, 3000));
-}
-
-/**
- * Fill campaign details
- */
-async function fillCampaignDetails(
-  stagehand: Stagehand,
-  campaignData: CampaignData
-) {
-  // Campaign name
-  await stagehand.page.evaluate((name) => {
-    const inputs = Array.from(document.querySelectorAll('input[type="text"]'));
-    const nameInput = inputs.find(i =>
-      (i as HTMLInputElement).placeholder?.toLowerCase().includes('campaign name')
-    ) as HTMLInputElement;
-    if (nameInput) {
-      nameInput.value = `Arbi - ${name}`;
-      nameInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, campaignData.productName);
-
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Daily budget
-  await stagehand.page.evaluate((budget) => {
-    const inputs = Array.from(document.querySelectorAll('input'));
-    const budgetInput = inputs.find(i =>
-      (i as HTMLInputElement).placeholder?.toLowerCase().includes('budget') ||
-      (i as HTMLInputElement).type === 'number'
-    ) as HTMLInputElement;
-    if (budgetInput) {
-      budgetInput.value = budget.toString();
-      budgetInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, campaignData.dailyBudget);
-
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Location targeting
-  await stagehand.page.evaluate((country) => {
-    const inputs = Array.from(document.querySelectorAll('input'));
-    const locationInput = inputs.find(i =>
-      (i as HTMLInputElement).placeholder?.toLowerCase().includes('location') ||
-      (i as HTMLInputElement).placeholder?.toLowerCase().includes('country')
-    ) as HTMLInputElement;
-    if (locationInput) {
-      locationInput.value = country;
-      locationInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, campaignData.targetCountry);
-
-  await new Promise(resolve => setTimeout(resolve, 2000));
-
-  // Select first location suggestion
-  await stagehand.page.evaluate(() => {
-    const suggestions = Array.from(document.querySelectorAll('div[role="option"]'));
-    if (suggestions.length > 0) {
-      (suggestions[0] as HTMLElement).click();
-    }
-  });
-
-  await new Promise(resolve => setTimeout(resolve, 2000));
-}
-
-/**
- * Create video ad
- */
-async function createVideoAd(
-  stagehand: Stagehand,
-  campaignData: CampaignData
-) {
-  // If video URL provided, enter it
-  if (campaignData.videoUrl) {
-    await stagehand.page.evaluate((url) => {
-      const inputs = Array.from(document.querySelectorAll('input'));
-      const videoInput = inputs.find(i =>
-        (i as HTMLInputElement).placeholder?.toLowerCase().includes('video') ||
-        (i as HTMLInputElement).placeholder?.toLowerCase().includes('youtube')
-      ) as HTMLInputElement;
-      if (videoInput) {
-        videoInput.value = url;
-        videoInput.dispatchEvent(new Event('input', { bubbles: true }));
-      }
-    }, campaignData.videoUrl);
-
-    await new Promise(resolve => setTimeout(resolve, 3000));
   }
 
-  // Ad headline
-  await stagehand.page.evaluate((headline) => {
-    const inputs = Array.from(document.querySelectorAll('input, textarea'));
-    const headlineInput = inputs.find(i =>
-      (i as HTMLInputElement).placeholder?.toLowerCase().includes('headline')
-    ) as HTMLInputElement;
-    if (headlineInput) {
-      headlineInput.value = headline;
-      headlineInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, campaignData.adCopy.headline);
-
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Ad description
-  await stagehand.page.evaluate((description) => {
-    const inputs = Array.from(document.querySelectorAll('textarea'));
-    const descInput = inputs.find(i =>
-      (i as HTMLTextAreaElement).placeholder?.toLowerCase().includes('description')
-    ) as HTMLTextAreaElement;
-    if (descInput) {
-      descInput.value = description;
-      descInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, campaignData.adCopy.description);
-
-  await new Promise(resolve => setTimeout(resolve, 1000));
-
-  // Final URL (landing page)
-  await stagehand.page.evaluate((url) => {
-    const inputs = Array.from(document.querySelectorAll('input'));
-    const urlInput = inputs.find(i =>
-      (i as HTMLInputElement).placeholder?.toLowerCase().includes('url') ||
-      (i as HTMLInputElement).placeholder?.toLowerCase().includes('website')
-    ) as HTMLInputElement;
-    if (urlInput) {
-      urlInput.value = url;
-      urlInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-  }, campaignData.productUrl);
-
-  await new Promise(resolve => setTimeout(resolve, 2000));
-}
-
-/**
- * Submit campaign
- */
-async function submitCampaign(stagehand: Stagehand) {
-  // Click "Create campaign" or "Publish" button
-  await stagehand.page.evaluate(() => {
-    const buttons = Array.from(document.querySelectorAll('button'));
-    const submitButton = buttons.find(b =>
-      b.textContent?.includes('Create campaign') ||
-      b.textContent?.includes('Publish') ||
-      b.textContent?.includes('Done')
-    );
-    if (submitButton) {
-      (submitButton as HTMLButtonElement).click();
-    }
-  });
-
   await new Promise(resolve => setTimeout(resolve, 5000));
 
-  // Take success screenshot
-  await stagehand.page.screenshot({
-    path: '/tmp/google-ads-campaign-created.png',
-  });
-  console.log('   📸 Screenshot saved: /tmp/google-ads-campaign-created.png');
+  await stagehand.page.screenshot({ path: '/tmp/ads-logged-in.png' });
+  console.log('   ✅ Logged in');
 }
 
 /**
- * Bulk create campaigns via web automation
+ * Bulk create campaigns
  */
 export async function createBulkCampaignsViaWeb(
   campaigns: CampaignData[],
   credentials: { email: string; password: string }
 ): Promise<{ success: number; failed: number; results: any[] }> {
-  const results = [];
+  console.log(`🚀 Creating ${campaigns.length} campaigns...`);
+
+  const results: any[] = [];
   let success = 0;
   let failed = 0;
 
-  for (const campaign of campaigns) {
-    try {
-      const result = await createCampaignViaWeb(campaign, credentials);
-      results.push({ ...result, product: campaign.productName });
-      success++;
+  for (let i = 0; i < campaigns.length; i++) {
+    const campaign = campaigns[i];
 
-      // Wait between campaigns to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 5000));
+    try {
+      console.log(`\n📦 [${i + 1}/${campaigns.length}] ${campaign.productName}`);
+
+      const result = await createCampaignViaWeb(campaign, credentials);
+
+      results.push({
+        success: result.success,
+        campaignName: result.campaignName,
+        product: campaign.productName,
+      });
+
+      if (result.success) {
+        success++;
+      } else {
+        failed++;
+      }
+
+      // Wait between campaigns
+      if (i < campaigns.length - 1) {
+        console.log('   ⏳ Waiting 10 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 10000));
+      }
+
     } catch (error: any) {
-      console.error(`❌ Failed to create campaign for ${campaign.productName}:`, error.message);
+      console.error(`   ❌ Failed: ${error.message}`);
       results.push({
         success: false,
         product: campaign.productName,
-        error: error.message
+        error: error.message,
       });
       failed++;
     }
   }
+
+  console.log(`\n✅ Complete: ${success} succeeded, ${failed} failed`);
 
   return { success, failed, results };
 }

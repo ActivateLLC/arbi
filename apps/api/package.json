@@ -6,9 +6,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build": "prisma generate && tsup src/index.ts --format cjs",
-    "postbuild": "prisma db push --skip-generate || true",
     "dev": "tsx watch src/index.ts",
-    "start": "prisma db seed && node dist/index.js",
+    "start": "prisma db push --skip-generate --accept-data-loss && tsx prisma/seed.ts && node dist/index.js",
     "start:prod": "node dist/index.js",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest --passWithNoTests",

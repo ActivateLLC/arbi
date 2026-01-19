@@ -924,12 +924,21 @@ function generateProductLandingPage(listing: any): string {
             justify-content: center;
             cursor: pointer;
             transition: all 0.2s;
-            font-size: 18px;
+        }
+
+        .panel-link svg {
+            color: rgba(255, 255, 255, 0.7);
+            transition: all 0.2s;
         }
 
         .panel-link:hover {
             background: rgba(255, 255, 255, 0.2);
             transform: translateY(-2px);
+        }
+
+        .panel-link:hover svg {
+            color: #667eea;
+            transform: scale(1.1);
         }
 
         .panel-footer {
@@ -949,7 +958,10 @@ function generateProductLandingPage(listing: any): string {
             .panel-link {
                 width: 36px;
                 height: 36px;
-                font-size: 16px;
+            }
+            .panel-link svg {
+                width: 16px;
+                height: 16px;
             }
             .panel-brand {
                 font-size: 14px;
@@ -1058,11 +1070,21 @@ function generateProductLandingPage(listing: any): string {
         <div class="panel-brand">DIGITAL VENDING MACHINE™</div>
         <div class="panel-subtitle">Autonomous commerce layer</div>
         <div class="panel-links" id="panelLinks">
-            <button class="panel-link" data-url="https://api.arbi.creai.dev/contact">📧</button>
-            <button class="panel-link" data-url="https://api.arbi.creai.dev/returns">↩️</button>
-            <button class="panel-link" data-url="https://api.arbi.creai.dev/shipping">📦</button>
-            <button class="panel-link" data-url="https://api.arbi.creai.dev/privacy">🔒</button>
-            <button class="panel-link" data-url="https://api.arbi.creai.dev/terms">📋</button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/contact" aria-label="Contact">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            </button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/returns" aria-label="Returns">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+            </button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/shipping" aria-label="Shipping">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+            </button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/privacy" aria-label="Privacy">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/terms" aria-label="Terms">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+            </button>
         </div>
         <div class="panel-footer">Arbi Inc. © 2026 • support@arbi.creai.dev</div>
     </footer>

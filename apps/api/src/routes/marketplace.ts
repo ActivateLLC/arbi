@@ -275,7 +275,7 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
     if (!sourceImageUrls || sourceImageUrls.length === 0) {
       console.log(`🔍 No images provided - scraping from web sources...`);
       try {
-        const scraped = await imageScraper.scrapeProductImages(productTitle);
+        const scraped = await imageScraper.scrapeProductImages(productTitle, undefined, 8);
         if (scraped.images.length > 0) {
           sourceImageUrls = scraped.images.map(img => img.url);
           console.log(`   ✅ Scraped ${scraped.images.length} images from ${scraped.sources.join(', ')}`);
@@ -306,7 +306,7 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
           if (sourceImageUrls.length === 1 && !imageUrl.includes('cloudinary.com')) {
             console.log(`   🔍 Attempting to find alternative images...`);
             try {
-              const scraped = await imageScraper.scrapeProductImages(productTitle, undefined, 3);
+              const scraped = await imageScraper.scrapeProductImages(productTitle, undefined, 8);
               for (const scrapedImg of scraped.images) {
                 try {
                   const altResult = await cloudinary.uploader.upload(scrapedImg.url, {

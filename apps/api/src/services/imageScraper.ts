@@ -35,7 +35,7 @@ export class ImageScraper {
   async scrapeProductImages(
     productTitle: string,
     asin?: string,
-    maxImages: number = 5
+    maxImages: number = 8
   ): Promise<ImageScraperResult> {
     console.log(`🖼️  Scraping images for: ${productTitle}`);
 

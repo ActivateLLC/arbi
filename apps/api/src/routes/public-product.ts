@@ -574,7 +574,25 @@ function generateProductLandingPage(listing: any): string {
         }
 
         .chip-icon {
-            font-size: 14px;
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .chip-stock .chip-icon {
+            color: #10b981;
+        }
+
+        .chip-shipping .chip-icon {
+            color: #f59e0b;
+        }
+
+        .chip-secure .chip-icon {
+            color: #667eea;
+        }
+
+        .chip-return .chip-icon {
+            color: #8b5cf6;
         }
 
         .chip-text {
@@ -587,7 +605,8 @@ function generateProductLandingPage(listing: any): string {
                 font-size: 13px;
             }
             .chip-icon {
-                font-size: 14px;
+                width: 14px;
+                height: 14px;
             }
         }
 
@@ -958,19 +977,19 @@ function generateProductLandingPage(listing: any): string {
             <!-- Status Chips -->
             <div class="status-chips">
                 <div class="chip chip-stock">
-                    <span class="chip-icon">🟢</span>
+                    <svg class="chip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
                     <span class="chip-text">In Stock</span>
                 </div>
                 <div class="chip chip-shipping">
-                    <span class="chip-icon">🚚</span>
+                    <svg class="chip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
                     <span class="chip-text">48h Dispatch</span>
                 </div>
                 <div class="chip chip-secure">
-                    <span class="chip-icon">🔒</span>
+                    <svg class="chip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                     <span class="chip-text">Stripe Secured</span>
                 </div>
                 <div class="chip chip-return">
-                    <span class="chip-icon">↩️</span>
+                    <svg class="chip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
                     <span class="chip-text">30-Day Return</span>
                 </div>
             </div>

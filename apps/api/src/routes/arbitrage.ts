@@ -3,7 +3,6 @@ import {
   ArbitrageEngine,
   WebScraperScout,
   RainforestScout,
-  SlickdealsScout,
   type UserBudgetSettings,
   type ScoutConfig
 } from '@arbi/arbitrage-engine';
@@ -19,13 +18,13 @@ const arbitrageEngine = new ArbitrageEngine();
 // The ArbitrageEngine comes with ECommerceScout by default, but we'll only use real scouts
 let scoutsEnabled = 0;
 
-console.log('🚀 Initializing PRODUCTION arbitrage engine - 10k Rainforest credits/month...');
+console.log('🚀 Initializing PRODUCTION arbitrage engine with REAL data sources only...');
 
-// Rainforest API Scout (Amazon data) - RE-ENABLED with 10k credits/month
+// Rainforest API Scout (Amazon data without Amazon API)
 if (process.env.RAINFOREST_API_KEY) {
   const rainforestScout = new RainforestScout(process.env.RAINFOREST_API_KEY);
   arbitrageEngine.registerScout(rainforestScout);
-  console.log('✅ Rainforest Scout enabled (Amazon Bestsellers - 10k/month)');
+  console.log('✅ Rainforest Scout enabled (Amazon real-time data)');
   scoutsEnabled++;
 } else {
   console.log('⚠️  RAINFOREST_API_KEY not set - Amazon data unavailable');
@@ -38,12 +37,6 @@ if (process.env.RAINFOREST_API_KEY) {
 const webScraperScout = new WebScraperScout();
 arbitrageEngine.registerScout(webScraperScout);
 console.log('✅ Web Scraper Scout enabled (Playwright/Puppeteer)');
-scoutsEnabled++;
-
-// Slickdeals Scout (NO API KEY NEEDED - scrapes real deals)
-const slickdealsScout = new SlickdealsScout();
-arbitrageEngine.registerScout(slickdealsScout);
-console.log('✅ Slickdeals Scout enabled (Real deals - NO API KEY)');
 scoutsEnabled++;
 
 if (scoutsEnabled === 0) {

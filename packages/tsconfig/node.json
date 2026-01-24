@@ -6,8 +6,12 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "target": "ES2022",
+<<<<<<< HEAD
     "lib": ["ES2022", "DOM"],
     "types": ["node"],
+=======
+    "lib": ["ES2022"],
+>>>>>>> origin/main
     "outDir": "dist",
     "noEmit": false
   }

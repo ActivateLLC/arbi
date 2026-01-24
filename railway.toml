@@ -1,9 +1,17 @@
 [build]
+<<<<<<< HEAD
 builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
 # Use Dockerfile CMD instead (runs from root for workspace resolution)
+=======
+builder = "nixpacks"
+buildCommand = "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright pnpm install --no-frozen-lockfile && PLAYWRIGHT_BROWSERS_PATH=/app/.playwright npx playwright install --with-deps && pnpm build"
+
+[deploy]
+startCommand = "PLAYWRIGHT_BROWSERS_PATH=/app/.playwright PLAYWRIGHT_BROWSERS_PATH=/app/.playwright pnpm --filter @arbi/api start"
+>>>>>>> origin/main
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 healthcheckPath = "/health"

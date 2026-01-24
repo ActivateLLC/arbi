@@ -6,152 +6,27 @@ import morgan from 'morgan';
 
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
-import { initializeDatabase } from './config/database';
-import { apiLimiter, strictLimiter, checkoutLimiter } from './middleware/rateLimiter';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
-import complianceRoutes from './routes/compliance';
-import stripeWebhookRoutes from './routes/stripe-webhooks';
-import testGoogleAdsRoutes from './routes/test-google-ads';
-import testAssetsRoutes from './routes/test-assets';
-import backfillCampaignsRoutes from './routes/backfill-campaigns';
-import redditRoutes from './routes/reddit';
-import validateProductsRoutes from './routes/validate-products';
-import suppliersRoutes from './routes/suppliers';
-import fetchImagesRoutes from './routes/fetch-images';
-import cleanupPlaceholdersRoutes from './routes/cleanup-placeholders';
-import scrapeImagesRoutes from './routes/scrape-images';
-import scrapeImagesSimpleRoutes from './routes/scrape-images-simple';
-import scrapeAmazonBuddyRoutes from './routes/scrape-amazon-buddy';
-import scrapeRainforestRoutes from './routes/scrape-rainforest';
-import generateVideoRoutes from './routes/generate-video';
-import analyzeAdsRoutes from './routes/analyze-ads';
 
 // Initialize logger
 const logger = createLogger();
-
-// Database persistence test: Products should survive this deployment
 
 // Create Express app
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Apply middleware with relaxed CSP for product pages
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'"], // Allow inline scripts for product pages
-      styleSrc: ["'self'", "'unsafe-inline'"], // Allow inline styles
-      imgSrc: [
-        "'self'",
-        "data:",
-        "https://m.media-amazon.com",
-        "https://res.cloudinary.com",
-        "https://placehold.co"
-      ],
-      connectSrc: ["'self'", "https://checkout.stripe.com"],
-      frameSrc: ["'self'", "https://checkout.stripe.com", "https://js.stripe.com"],
-      formAction: ["'self'", "https://checkout.stripe.com"]
-    }
-  }
-}));
-// Configure CORS to allow frontend domains
-app.use(cors({
-  origin: [
-    'https://www.arbi.creai.dev',
-    'https://arbi.creai.dev',
-    'https://dashboard.arbi.creai.dev',
-    'http://localhost:3000',
-    'http://localhost:5173', // Vite dev server
-    'http://localhost:5174',  // Dashboard dev server
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
-
-// Stripe webhooks need raw body - add BEFORE express.json()
-app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
-
+// Apply middleware
+app.use(helmet());
+app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
-// Apply rate limiting to all API routes
-app.use('/api/', apiLimiter);
-
-// Apply strict rate limiting to expensive operations
-app.use('/api/scrape-rainforest/', strictLimiter);
-app.use('/api/scrape-images/', strictLimiter);
-app.use('/api/scrape-amazon-buddy/', strictLimiter);
-app.use('/api/campaigns/launch/', strictLimiter);
-app.use('/api/backfill/', strictLimiter);
-
-// Apply checkout rate limiting
-app.use('/api/marketplace/checkout', checkoutLimiter);
-
-// Health check endpoint (no rate limiting)
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
-
-// Debug endpoint - check configured keys (without exposing values)
-app.get('/debug/config', (req, res) => {
-  res.json({
-    environment: process.env.NODE_ENV,
-    port: process.env.PORT,
-    keys: {
-      stripe: !!process.env.STRIPE_SECRET_KEY,
-      rainforest: !!process.env.RAINFOREST_API_KEY,
-      googleAds: !!process.env.GOOGLE_ADS_CLIENT_ID,
-      database: !!process.env.DATABASE_URL,
-    }
-  });
-});
-
-// Test endpoints
-app.use('/api/test', testGoogleAdsRoutes);
-app.use('/api/test', testAssetsRoutes);
-
-// Backfill endpoints (create campaigns for existing listings)
-app.use('/api/backfill', backfillCampaignsRoutes);
-
-// Reddit automated posting
-app.use('/api/reddit', redditRoutes);
-
-// Product validation (before ad campaigns)
-app.use('/api/validate', validateProductsRoutes);
-
-// Supplier management (multi-supplier fallback system)
-app.use('/api/suppliers', suppliersRoutes);
-
-// Fetch product images from Amazon
-app.use('/api/fetch-images', fetchImagesRoutes);
-
-// Cleanup placeholder images
-app.use('/api/cleanup-placeholders', cleanupPlaceholdersRoutes);
-
-// Scrape product images with Stagehand
-app.use('/api/scrape-images', scrapeImagesRoutes);
-
-// Scrape product images (simple HTTP-based, no browser)
-app.use('/api/scrape-images-simple', scrapeImagesSimpleRoutes);
-
-// Scrape Amazon products with amazon-buddy (open source)
-app.use('/api/scrape-amazon-buddy', scrapeAmazonBuddyRoutes);
-
-// Scrape Amazon products with Rainforest API (premium, bypasses bot detection)
-app.use('/api/scrape-rainforest', scrapeRainforestRoutes);
-
-// Video ad generation for Performance Max campaigns
-app.use('/api/generate-video', generateVideoRoutes);
-
-// Analyze successful ads and extract replication blueprints
-app.use('/api/analyze-ads', analyzeAdsRoutes);
-
-// Compliance pages (required for Google Ads)
-app.use('/', complianceRoutes);
 
 // Direct checkout links (shortest path: ad → checkout)
 app.use('/', directCheckoutRoutes);
@@ -162,48 +37,26 @@ app.use('/', publicProductRoutes);
 // API routes
 app.use('/api', apiRoutes);
 
-// Campaign management routes
-import campaignLauncherRoutes from './routes/campaign-launcher';
-app.use('/api/campaigns', campaignLauncherRoutes);
-
 // Error handling middleware
 app.use(errorHandler);
 
-// Initialize database BEFORE starting server
-async function startServer() {
-  // Initialize database connection first
-  try {
-    await initializeDatabase();
-    logger.info('✅ Database initialized - listings will persist across restarts');
-  } catch (error: any) {
-    logger.warn('⚠️  Database initialization failed - using in-memory storage');
-    logger.warn(`   Error: ${error.message}`);
+// Start server - bind to 0.0.0.0 for Railway/Docker compatibility
+const server = app.listen(port, '0.0.0.0', () => {
+  logger.info(`✅ Server running on http://0.0.0.0:${port}`);
+  logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
+  logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+});
+
+// Handle server errors
+server.on('error', (error: NodeJS.ErrnoException) => {
+  if (error.code === 'EADDRINUSE') {
+    logger.error(`❌ Port ${port} is already in use`);
+  } else if (error.code === 'EACCES') {
+    logger.error(`❌ Port ${port} requires elevated privileges`);
+  } else {
+    logger.error(`❌ Server error:`, error);
   }
-
-  // Start server - bind to 0.0.0.0 for Railway/Docker compatibility
-  const server = app.listen(port, '0.0.0.0', () => {
-    logger.info(`✅ Server running on http://0.0.0.0:${port}`);
-    logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
-    logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
-    logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
-  });
-
-  // Handle server errors
-  server.on('error', (error: NodeJS.ErrnoException) => {
-    if (error.code === 'EADDRINUSE') {
-      logger.error(`❌ Port ${port} is already in use`);
-    } else if (error.code === 'EACCES') {
-      logger.error(`❌ Port ${port} requires elevated privileges`);
-    } else {
-      logger.error(`❌ Server error:`, error);
-    }
-    process.exit(1);
-  });
-}
-
-// Start the server
-startServer().catch((error) => {
-  logger.error('❌ Failed to start server:', error);
   process.exit(1);
 });
 
@@ -219,4 +72,3 @@ process.on('uncaughtException', (error) => {
 });
 
 export default app;
-// Force rebuild Sun Jan  4 06:12:39 UTC 2026

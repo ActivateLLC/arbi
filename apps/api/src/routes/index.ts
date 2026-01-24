@@ -11,12 +11,6 @@ import payoutRoutes from './payout';
 import revenueRoutes from './revenue';
 import dropshippingWebhooks from './dropshipping-webhooks';
 import marketplaceRoutes from './marketplace';
-import stripeWebhook from './stripe-webhook';
-import campaignLauncherRoutes from './campaign-launcher';
-import autonomousMarketplaceRoutes from './autonomous-marketplace';
-import googleAdsRoutes from './google-ads';
-import googleAdsWebRoutes from './google-ads-web';
-import analyzeAdsRoutes from './analyze-ads';
 
 const router = Router();
 
@@ -38,21 +32,6 @@ router.use('/payout', payoutRoutes);
 // Marketplace routes (ZERO-CAPITAL dropshipping - buyer pays first)
 router.use('/marketplace', marketplaceRoutes);
 
-// Campaign launcher routes (automated Google Ads)
-router.use('/campaigns', campaignLauncherRoutes);
-
-// Google Ads automation routes (API-based)
-router.use('/google-ads', googleAdsRoutes);
-
-// Google Ads web automation routes (NO API NEEDED - uses browser automation)
-router.use('/google-ads-web', googleAdsWebRoutes);
-
-// Ad extraction and analysis routes (Extract winning ads from Facebook)
-router.use('/analyze-ads', analyzeAdsRoutes);
-
-// AUTONOMOUS MARKETPLACE - Press "Start" → Make Money 🚀
-router.use('/autonomous-marketplace', autonomousMarketplaceRoutes);
-
 // Arbitrage routes
 router.use('/arbitrage', arbitrageRoutes);
 
@@ -64,6 +43,4 @@ router.use('/autonomous-control', autonomousControlRoutes);
 router.use('/revenue', revenueRoutes);
 // Dropshipping webhooks
 router.use('/webhooks/dropshipping', dropshippingWebhooks);
-// Stripe webhooks (auto-purchase automation)
-router.use('/stripe', stripeWebhook);
 export default router;

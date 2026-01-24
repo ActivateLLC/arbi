@@ -46,13 +46,3 @@ logs/
 # Secrets
 client_secret.json
 oauth2l
-
-# Large binary files and SDKs (prevent repo bloat)
-*.tgz
-*.tar.gz
-*.zip
-*.a
-*.so
-*.dylib
-google-cloud-sdk/
-Arbi/

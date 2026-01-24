@@ -9,15 +9,14 @@ const router = Router();
 // Global instance (in production, use Redis/database for state management)
 const engine = new AutonomousEngine();
 
-// Default configuration - NO ARTIFICIAL LIMITS
-// Any product, any price range - let the profit margin decide
+// Default configuration - AGGRESSIVE MODE (10k in 10 hours strategy)
 const defaultConfig: AutonomousConfig = {
-  minScore: 50, // Low threshold - any decent opportunity
-  minROI: 10, // 10% ROI is still profitable
-  minProfit: 5, // Even $5 profit counts - volume matters
-  maxPrice: 100000, // No ceiling - yachts included
+  minScore: 75,
+  minROI: 25,
+  minProfit: 150,
+  maxPrice: 3000,
   categories: [],
-  scanInterval: 30, // Every 30 mins - balanced
+  scanInterval: 5,
   autoBuyEnabled: false,
   autoBuyScore: 90,
   dailyBudget: 0, // Zero Capital Mode (List first)

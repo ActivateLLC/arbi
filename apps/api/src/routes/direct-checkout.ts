@@ -9,7 +9,6 @@
 
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
-import { getListings } from './marketplace';
 
 const router = Router();
 
@@ -25,8 +24,9 @@ router.get('/checkout/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
 
   try {
-    // Get listing directly from database (no HTTP fetch needed!)
-    const listings = await getListings('active');
+    // Fetch listing
+    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
+    const { listings } = await listingResponse.json();
     const listing = listings.find((l: any) => l.listingId === listingId);
 
     if (!listing || listing.status !== 'active') {
@@ -49,16 +49,9 @@ router.get('/checkout/:listingId', async (req: Request, res: Response) => {
       ? listing.productImages[0]
       : undefined;
 
-    // Create Stripe Checkout Session with multiple payment options
-    // Including Klarna, Afterpay, Affirm for "Buy Now, Pay Later"
+    // Create Stripe Checkout Session
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: [
-        'card',              // Credit/debit cards
-        'klarna',            // Klarna - Pay in 4 installments
-        'afterpay_clearpay', // Afterpay - Pay in 4
-        'affirm',            // Affirm - Monthly financing
-        'cashapp',           // Cash App Pay
-      ],
+      payment_method_types: ['card'],
       line_items: [
         {
           price_data: {

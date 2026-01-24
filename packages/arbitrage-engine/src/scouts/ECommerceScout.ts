@@ -15,13 +15,31 @@ export class ECommerceScout implements OpportunityScout {
   type = 'ecommerce_arbitrage' as const;
 
   async scan(config: ScoutConfig): Promise<Opportunity[]> {
-    // ECommerceScout disabled - no real data sources configured
-    // Real opportunities come from:
-    // - RainforestScout (Amazon API)
-    // - WebScraperScout (Playwright scraping)
-    // - AlibabaScout, DHGateScout, etc.
-    console.log('⚠️  ECommerceScout skipped - use RainforestScout or WebScraperScout for real data');
-    return [];
+    const opportunities: Opportunity[] = [];
+
+    try {
+      console.log('🔍 Scanning for e-commerce arbitrage opportunities...');
+
+      // Strategy 1: Popular products with known demand
+      const popularProducts = this.getPopularProducts();
+
+      for (const product of popularProducts) {
+        const opportunity = this.analyzeProduct(product);
+        if (opportunity && this.meetsFilters(opportunity, config.filters)) {
+          opportunities.push(opportunity);
+          console.log(`✅ Found opportunity: ${opportunity.title} - $${opportunity.estimatedProfit.toFixed(2)} profit`);
+        }
+      }
+
+      // Strategy 2: Seasonal arbitrage (example)
+      const seasonal = this.getSeasonalOpportunities();
+      opportunities.push(...seasonal.filter(opp => this.meetsFilters(opp, config.filters)));
+
+    } catch (error) {
+      console.error('E-Commerce scout error:', error);
+    }
+
+    return opportunities.sort((a, b) => b.estimatedProfit - a.estimatedProfit);
   }
 
   /**

@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/product/:listingId",
+      "destination": "https://api.arbi.creai.dev/product/:listingId"
+    },
+    {
+      "source": "/product/:listingId/checkout",
+      "destination": "https://api.arbi.creai.dev/product/:listingId/checkout"
+    },
+    {
+      "source": "/product/:listingId/success",
+      "destination": "https://api.arbi.creai.dev/product/:listingId/success"
+    }
+  ]
+}

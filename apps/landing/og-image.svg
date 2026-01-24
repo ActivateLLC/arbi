@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <!-- Dark background with gradient -->
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#030014;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a0a0a;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bgGradient)"/>
+
+  <!-- Grid pattern -->
+  <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+    <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" stroke-width="1"/>
+  </pattern>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+
+  <!-- Logo on left -->
+  <g transform="translate(150, 200)">
+    <rect x="0" y="0" width="230" height="230" fill="#00f0ff" transform="rotate(45 115 115)"/>
+    <rect x="0" y="0" width="230" height="230" fill="none" stroke="white" stroke-width="8" transform="rotate(45 115 115)"/>
+    <text x="115" y="165" font-family="Syne, sans-serif" font-size="180" font-weight="bold" fill="#000000" text-anchor="middle">A</text>
+  </g>
+
+  <!-- Text on right -->
+  <text x="480" y="280" font-family="Syne, sans-serif" font-size="120" font-weight="bold" fill="white">ARBI</text>
+  <text x="480" y="380" font-family="Exo 2, sans-serif" font-size="40" fill="#00f0ff">Intelligent Arbitrage</text>
+  <text x="480" y="440" font-family="Exo 2, sans-serif" font-size="28" fill="#94a3b8">AI-Powered Profit Discovery</text>
+</svg>

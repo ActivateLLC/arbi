@@ -1,0 +1,16 @@
+<svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background square with gradient -->
+  <rect width="48" height="48" rx="8" fill="url(#blueGradient)"/>
+  
+  <!-- Angular design -->
+  <path d="M24 12L34 20L24 28L14 20L24 12Z" fill="white" opacity="0.9"/>
+  <path d="M14 24L24 32L34 24L24 16L14 24Z" fill="white" opacity="0.7"/>
+  <path d="M20 32L24 36L28 32L24 28L20 32Z" fill="white" opacity="0.5"/>
+  
+  <defs>
+    <linearGradient id="blueGradient" x1="0" y1="0" x2="48" y2="48" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#3B82F6"/>
+      <stop offset="100%" stop-color="#1D4ED8"/>
+    </linearGradient>
+  </defs>
+</svg>

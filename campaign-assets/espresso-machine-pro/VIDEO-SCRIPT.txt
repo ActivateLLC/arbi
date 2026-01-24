@@ -1,0 +1,86 @@
+
+VIDEO AD SCRIPT FOR: Premium Espresso Machine - Barista Edition 15 Bar
+Duration: 15 seconds
+Format: Horizontal (1920x1080) for YouTube/Google Ads
+
+SCRIPT:
+-------
+[0-3s] HOOK (Text overlay + voiceover):
+"Spending $6 on coffee daily? That is $2,190 per year. Make it at home."
+
+[3-10s] BENEFITS (Quick cuts showing product):
+[3s] 15 bar Italian pump
+[5s] PID temperature control
+[7s] Professional steam wand
+
+[10-13s] PRICE REVEAL:
+"Only $799.99"
+"Limited time offer"
+
+[13-15s] CALL TO ACTION:
+"Shop now at Arbi.com"
+[Show: arbi.creai.dev/product/espresso-machine-pro]
+
+VISUAL STORYBOARD:
+-----------------
+Scene 1 (0-3s):
+- Dark background
+- White text appears with motion blur
+- Hook text: "Spending $6 on coffee daily? That is $2,190 per year. Make it at home."
+
+Scene 2 (3-10s):
+- Product showcase from multiple angles
+- Fast-paced cuts (every 2 seconds)
+- Benefit text overlays in corner
+- Upbeat background music
+
+Scene 3 (10-13s):
+- Close-up of price
+- Animated "flash" effect
+- Savings calculator or comparison
+
+Scene 4 (13-15s):
+- Product with "Shop Now" button
+- Website URL displayed
+- End card with branding
+
+MUSIC:
+- Upbeat, modern electronic
+- No lyrics
+- Build up to climax at price reveal
+
+VOICEOVER (Optional):
+"Spending $6 on coffee daily? That is $2,190 per year. Make it at home. [Pause] 15 bar Italian pump. PID temperature control. Only $799.99. Shop now."
+
+USING REMOTION (Automated):
+---------------------------
+The API server has Remotion installed for FREE automated video generation.
+
+To generate via API:
+curl -X POST https://api.arbi.creai.dev/api/generate-video/[LISTING-ID]/modern \
+  -H "Content-Type: application/json" \
+  -d '{
+    "format": "deal-discovery",
+    "orientation": "horizontal",
+    "duration": 15
+  }'
+
+USING CANVA (Manual):
+---------------------
+1. Create 1920x1080 video project
+2. Add scenes for each timestamp above
+3. Use transitions: "Blur" or "Quick fade"
+4. Add background music from library
+5. Export as MP4 (1080p, 30fps)
+
+USING CAPCUT (Mobile/Desktop):
+------------------------------
+1. Import product images/clips
+2. Add text overlays with animations
+3. Set duration to 15 seconds total
+4. Add transitions between clips
+5. Add trending sound or upbeat music
+6. Export in 1080p
+
+FILE TO CREATE:
+espresso-machine-pro-video.mp4 (1920x1080, 15 seconds, H.264 codec)

@@ -12,24 +12,38 @@ export function getDatabase(): DatabaseManager {
     return dbInstance;
   }
 
-  // Check if database configuration is available
-  const dbConfig = {
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT || '5432'),
-    database: process.env.DB_NAME || 'arbi',
-    username: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    dialect: 'postgres' as const,
-    logging: process.env.NODE_ENV === 'development',
-    ssl: process.env.DB_SSL === 'true'
-  };
-
   console.log('🗄️  Initializing database connection...');
-  console.log(`   Host: ${dbConfig.host}:${dbConfig.port}`);
-  console.log(`   Database: ${dbConfig.database}`);
-  console.log(`   SSL: ${dbConfig.ssl ? 'enabled' : 'disabled'}`);
 
-  dbInstance = new DatabaseManager(dbConfig);
+  // Check for Railway's DATABASE_URL first
+  if (process.env.DATABASE_URL) {
+    console.log('   Using DATABASE_URL (Railway PostgreSQL)');
+    console.log('   SSL: enabled');
+
+    dbInstance = new DatabaseManager({
+      url: process.env.DATABASE_URL,
+      dialect: 'postgres' as const,
+      logging: process.env.NODE_ENV === 'development',
+      ssl: true
+    } as any);
+  } else {
+    // Fall back to individual config parameters
+    const dbConfig = {
+      host: process.env.DB_HOST || 'localhost',
+      port: parseInt(process.env.DB_PORT || '5432'),
+      database: process.env.DB_NAME || 'arbi',
+      username: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || 'postgres',
+      dialect: 'postgres' as const,
+      logging: process.env.NODE_ENV === 'development',
+      ssl: process.env.DB_SSL === 'true'
+    };
+
+    console.log(`   Host: ${dbConfig.host}:${dbConfig.port}`);
+    console.log(`   Database: ${dbConfig.database}`);
+    console.log(`   SSL: ${dbConfig.ssl ? 'enabled' : 'disabled'}`);
+
+    dbInstance = new DatabaseManager(dbConfig);
+  }
 
   // Initialize marketplace models
   initializeMarketplaceModels(dbInstance);

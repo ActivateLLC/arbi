@@ -11,6 +11,7 @@ import payoutRoutes from './payout';
 import revenueRoutes from './revenue';
 import dropshippingWebhooks from './dropshipping-webhooks';
 import marketplaceRoutes from './marketplace';
+import trendsRoutes from './trends';
 
 const router = Router();
 
@@ -43,4 +44,8 @@ router.use('/autonomous-control', autonomousControlRoutes);
 router.use('/revenue', revenueRoutes);
 // Dropshipping webhooks
 router.use('/webhooks/dropshipping', dropshippingWebhooks);
+
+// Trend detection routes (Kalodata TikTok Shop integration)
+router.use('/trends', trendsRoutes);
+
 export default router;

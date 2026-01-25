@@ -3,7 +3,6 @@
 # Ignore node_modules and build artifacts
 node_modules
 **/node_modules
-pnpm-lock.yaml
 npm-debug.log
 
 dist
@@ -31,7 +30,5 @@ logs
 *.spec.js
 Arbi/
 Arbi/google-cloud-sdk
-apps/dashboard
-apps/web
 node_modules
 .idea

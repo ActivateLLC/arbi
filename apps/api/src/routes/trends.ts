@@ -1,7 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { TrendDetectionPipeline } from '@arbi/arbitrage-engine/src/pipelines/TrendDetectionPipeline';
-import { KalodataScout } from '@arbi/arbitrage-engine/src/scouts/KalodataScout';
-import { VideoDownloader } from '@arbi/arbitrage-engine/src/services/VideoDownloader';
+import { TrendDetectionPipeline, KalodataScout, VideoDownloader } from '@arbi/arbitrage-engine';
 
 const router = Router();
 

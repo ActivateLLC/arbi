@@ -1,6 +1,28 @@
-import { Scout, ScoutConfig, Product } from '../types';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+
+// Product type for Kalodata integration
+export interface Product {
+  id: string;
+  title: string;
+  description: string;
+  price: number;
+  buyPrice: number;
+  margin: number;
+  marginPercent: number;
+  images: string[];
+  url: string;
+  platform: string;
+  marketplace: string;
+  category: string;
+  metadata?: Record<string, any>;
+}
+
+export interface ScoutConfig {
+  maxRetries?: number;
+  timeout?: number;
+  rateLimit?: number;
+}
 
 interface KalodataProduct {
   id: string;
@@ -41,7 +63,7 @@ interface KalodataVideo {
  * - Product detail pages
  * - Creator/UGC video content
  */
-export class KalodataScout implements Scout {
+export class KalodataScout {
   name = 'kalodata';
   private baseUrl = 'https://www.kalodata.com';
   private config: ScoutConfig;

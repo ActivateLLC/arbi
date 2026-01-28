@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { TrendDetectionPipeline, KalodataScout, VideoDownloader } from '@arbi/arbitrage-engine';
+import { TrendDetectionPipeline, KalodataScout, VideoDownloader, ProductSourcingScout } from '@arbi/arbitrage-engine';
 
 const router = Router();
 
@@ -213,6 +213,67 @@ router.delete('/schedule', (req: Request, res: Response) => {
     }
   } catch (error: any) {
     console.error('❌ [API] /api/trends/schedule DELETE failed:', error.message);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/trends/source
+ * Find suppliers for a specific product
+ *
+ * Body:
+ * - productTitle: Product name to search for
+ * - tiktokPrice: Current selling price on TikTok
+ */
+router.post('/source', async (req: Request, res: Response) => {
+  try {
+    const { productTitle, tiktokPrice } = req.body;
+
+    if (!productTitle || !tiktokPrice) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: productTitle, tiktokPrice',
+      });
+    }
+
+    console.log(`🔍 [API] /api/trends/source - Finding suppliers for: ${productTitle}`);
+
+    const sourcingScout = new ProductSourcingScout();
+    const result = await sourcingScout.findSuppliers(productTitle, parseFloat(tiktokPrice));
+
+    res.json({
+      success: true,
+      productTitle,
+      tiktokPrice: parseFloat(tiktokPrice),
+      suppliersFound: result.suppliers.length,
+      suppliers: result.suppliers.map(s => ({
+        platform: s.sourcePlatform,
+        title: s.productTitle,
+        price: s.supplierPrice,
+        shippingCost: s.shippingCost,
+        totalCost: s.supplierPrice + s.shippingCost,
+        estimatedDelivery: `${s.estimatedDeliveryDays} days`,
+        moq: s.moq,
+        rating: s.supplierRating,
+        orderCount: s.orderCount,
+        url: s.sourceUrl,
+      })),
+      bestMargin: {
+        supplier: result.bestMargin.supplier.sourcePlatform,
+        supplierPrice: result.bestMargin.supplier.supplierPrice,
+        shippingCost: result.bestMargin.supplier.shippingCost,
+        totalCost: result.bestMargin.supplier.supplierPrice + result.bestMargin.supplier.shippingCost,
+        estimatedMargin: result.bestMargin.estimatedMargin,
+        marginPercent: result.bestMargin.marginPercent,
+        breakEvenPrice: result.bestMargin.breakEvenPrice,
+        url: result.bestMargin.supplier.sourceUrl,
+      },
+    });
+  } catch (error: any) {
+    console.error('❌ [API] /api/trends/source failed:', error.message);
     res.status(500).json({
       success: false,
       error: error.message,

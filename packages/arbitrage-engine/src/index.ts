@@ -7,6 +7,7 @@ export * from './scouts/WebScraperScout';
 export * from './scouts/RainforestScout';
 export * from './scouts/FacebookMarketplaceScout';
 export * from './scouts/KalodataScout';
+export * from './scouts/ProductSourcingScout';
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';

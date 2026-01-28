@@ -1,5 +1,6 @@
 import { KalodataScout } from '../scouts/KalodataScout';
 import { VideoDownloader } from '../services/VideoDownloader';
+import { ProductSourcingScout } from '../scouts/ProductSourcingScout';
 import { Product } from '../types';
 
 interface TrendOpportunity {
@@ -9,6 +10,14 @@ interface TrendOpportunity {
   estimatedProfit: number;
   confidence: 'high' | 'medium' | 'low';
   reasons: string[];
+  supplier?: {
+    platform: string;
+    price: number;
+    shippingCost: number;
+    totalCost: number;
+    marginPercent: number;
+    url: string;
+  };
 }
 
 interface PipelineConfig {
@@ -17,6 +26,7 @@ interface PipelineConfig {
   maxVideos: number;
   enableVideoDownload: boolean;
   autoList: boolean;
+  enableSourcing: boolean; // Enable automatic supplier sourcing
 }
 
 /**
@@ -34,11 +44,13 @@ interface PipelineConfig {
 export class TrendDetectionPipeline {
   private kalodataScout: KalodataScout;
   private videoDownloader: VideoDownloader;
+  private sourcingScout: ProductSourcingScout;
   private config: PipelineConfig;
 
   constructor(config: Partial<PipelineConfig> = {}) {
     this.kalodataScout = new KalodataScout();
     this.videoDownloader = new VideoDownloader();
+    this.sourcingScout = new ProductSourcingScout();
 
     this.config = {
       minMargin: 25, // 25% minimum margin
@@ -46,6 +58,7 @@ export class TrendDetectionPipeline {
       maxVideos: 5, // Max videos to download per product
       enableVideoDownload: true,
       autoList: false, // Safety: don't auto-list by default
+      enableSourcing: true, // Auto-find best suppliers
       ...config,
     };
 
@@ -116,28 +129,67 @@ export class TrendDetectionPipeline {
     console.log(`🔍 [TrendDetectionPipeline] Analyzing: ${product.title}`);
 
     try {
-      // Calculate trend score (0-100)
+      // Step 1: Find best supplier (if enabled)
+      let supplierInfo;
+      let actualMarginPercent = product.marginPercent;
+      let actualProfit = product.margin || (product.price - product.buyPrice);
+
+      if (this.config.enableSourcing) {
+        try {
+          console.log(`   🔎 [Sourcing] Finding suppliers for: ${product.title}`);
+
+          const sourcingResult = await this.sourcingScout.findSuppliers(
+            product.title,
+            product.price
+          );
+
+          if (sourcingResult.suppliers.length > 0) {
+            const bestSupplier = sourcingResult.bestMargin.supplier;
+            const totalCost = bestSupplier.supplierPrice + bestSupplier.shippingCost;
+
+            // Recalculate margins with real supplier cost
+            actualProfit = product.price - totalCost;
+            actualMarginPercent = (actualProfit / product.price) * 100;
+
+            supplierInfo = {
+              platform: bestSupplier.sourcePlatform,
+              price: bestSupplier.supplierPrice,
+              shippingCost: bestSupplier.shippingCost,
+              totalCost,
+              marginPercent: actualMarginPercent,
+              url: bestSupplier.sourceUrl,
+            };
+
+            console.log(`   ✅ [Sourcing] Best supplier: ${bestSupplier.sourcePlatform} - $${totalCost.toFixed(2)} (${actualMarginPercent.toFixed(1)}% margin)`);
+          } else {
+            console.log(`   ⚠️  [Sourcing] No suppliers found, using original margin`);
+          }
+        } catch (error: any) {
+          console.error(`   ❌ [Sourcing] Failed: ${error.message}`);
+          // Continue with original margin if sourcing fails
+        }
+      }
+
+      // Step 2: Calculate trend score (0-100)
       const trendScore = this.calculateTrendScore(product);
 
-      // Get confidence level
-      const confidence = this.getConfidenceLevel(trendScore, product.marginPercent);
+      // Step 3: Get confidence level (use actual margin)
+      const confidence = this.getConfidenceLevel(trendScore, actualMarginPercent);
 
-      // Generate reasons
-      const reasons = this.generateReasons(product, trendScore);
+      // Step 4: Generate reasons (use actual margin)
+      const reasons = this.generateReasons(product, trendScore, actualMarginPercent);
 
-      // Calculate estimated profit (per unit)
-      const estimatedProfit = product.margin || (product.price - product.buyPrice);
-
-      // Get video URLs for this product
+      // Step 5: Get video URLs for this product
       const videoUrls = await this.getProductVideoUrls(product);
 
       return {
         product,
         trendScore,
         videoUrls,
-        estimatedProfit,
+        estimatedProfit: actualProfit,
         confidence,
         reasons,
+        supplier: supplierInfo,
       };
     } catch (error: any) {
       console.error(`❌ [TrendDetectionPipeline] Analysis failed:`, error.message);
@@ -189,15 +241,16 @@ export class TrendDetectionPipeline {
   /**
    * Generate reasons for the opportunity
    */
-  private generateReasons(product: Product, trendScore: number): string[] {
+  private generateReasons(product: Product, trendScore: number, actualMarginPercent?: number): string[] {
     const reasons: string[] = [];
 
     if (product.metadata?.trending) {
       reasons.push('Currently trending on TikTok Shop');
     }
 
-    if (product.marginPercent >= 30) {
-      reasons.push(`High profit margin: ${product.marginPercent.toFixed(1)}%`);
+    const marginToUse = actualMarginPercent ?? product.marginPercent;
+    if (marginToUse >= 30) {
+      reasons.push(`High profit margin: ${marginToUse.toFixed(1)}%`);
     }
 
     const salesCount = product.metadata?.salesCount;

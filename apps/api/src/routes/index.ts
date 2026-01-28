@@ -12,6 +12,8 @@ import revenueRoutes from './revenue';
 import dropshippingWebhooks from './dropshipping-webhooks';
 import marketplaceRoutes from './marketplace';
 import trendsRoutes from './trends';
+import testGoogleAdsRoutes from './test-google-ads';
+import campaignLauncherRoutes from './campaign-launcher';
 
 const router = Router();
 
@@ -47,5 +49,11 @@ router.use('/webhooks/dropshipping', dropshippingWebhooks);
 
 // Trend detection routes (Kalodata TikTok Shop integration)
 router.use('/trends', trendsRoutes);
+
+// Test routes
+router.use('/test', testGoogleAdsRoutes);
+
+// Campaign management
+router.use('/campaigns', campaignLauncherRoutes);
 
 export default router;

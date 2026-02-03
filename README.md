@@ -18,6 +18,7 @@ Arbi is a **production-ready autonomous arbitrage system** that uses AI to:
 
 ### AI-Powered Intelligence
 - **Opportunity Analyzer** - Scores each opportunity 0-100 points
+- **VIX Market Monitoring** - Adjusts risk based on real-time market volatility
 - **Risk Manager** - Enforces budget limits and spending controls
 - **Confidence Scoring** - Filters low-quality opportunities automatically
 - **Multi-Strategy System** - eBay arbitrage, retail arbitrage, seasonal deals
@@ -28,16 +29,19 @@ Arbi is a **production-ready autonomous arbitrage system** that uses AI to:
 3. **Rainforest Scout** - Gets Amazon data without Amazon API ($49/mo)
 
 ### Risk Management
+- **VIX-Adjusted Scoring** - Automatically adapts to market volatility
 - Per-opportunity spending limits ($400 default)
 - Daily spending limits ($1,000 default)
 - Monthly budget caps ($10,000 default)
 - Risk tolerance settings (conservative/moderate/aggressive)
 - Real-time spending tracking
+- Market condition warnings during high volatility
 
 ### Complete REST API
 ```
 GET  /api/arbitrage/opportunities       - Find current opportunities
 GET  /api/arbitrage/opportunities?minProfit=10&minROI=15
+GET  /api/arbitrage/market-conditions   - Get VIX and market volatility data
 GET  /api/arbitrage/health              - System health check
 POST /api/arbitrage/execute             - Execute an opportunity
 GET  /api/arbitrage/settings            - Get user settings
@@ -92,6 +96,12 @@ curl "http://localhost:3000/api/arbitrage/opportunities?minProfit=20&minROI=15"
 {
   "totalFound": 15,
   "recommended": 8,
+  "marketCondition": {
+    "vixLevel": "normal",
+    "vixValue": 18.5,
+    "description": "Normal market volatility",
+    "recommendation": "Market conditions are normal. Proceed with standard caution."
+  },
   "opportunities": [
     {
       "opportunity": {
@@ -106,11 +116,17 @@ curl "http://localhost:3000/api/arbitrage/opportunities?minProfit=20&minROI=15"
       "analysis": {
         "score": 72,
         "shouldExecute": true,
-        "reasons": ["High confidence based on historical data"]
+        "reasons": ["High confidence based on historical data"],
+        "marketCondition": {
+          "vixLevel": "normal",
+          "vixValue": 18.5,
+          "description": "Normal market volatility"
+        }
       },
       "riskAssessment": {
         "approved": true,
-        "budgetCheck": { "passed": true }
+        "budgetCheck": { "passed": true },
+        "marketVolatilityFactor": 1.0
       },
       "recommended": true
     }
@@ -203,6 +219,7 @@ EBAY_APP_ID=your_ebay_app_id        # Get at developer.ebay.com/join (FREE)
 
 # Optional (for additional data sources)
 RAINFOREST_API_KEY=your_key         # Amazon data API ($49/mo, 1000 free)
+ALPHA_VANTAGE_API_KEY=your_key      # VIX market data (FREE - alphavantage.co)
 OPENAI_API_KEY=your_key             # For voice features
 
 # Server
@@ -230,6 +247,7 @@ Configure in code or via API:
 
 ## 📚 Documentation
 
+- **[VIX_INTEGRATION.md](VIX_INTEGRATION.md)** - VIX market volatility integration guide
 - **[DEPLOY_NOW.md](DEPLOY_NOW.md)** - Deploy in 2-5 minutes (Railway/Render/VPS)
 - **[LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)** - Complete setup walkthrough
 - **[AMAZON_API_ALTERNATIVES.md](AMAZON_API_ALTERNATIVES.md)** - 3 solutions without Amazon API
@@ -269,18 +287,21 @@ pnpm type-check
 ### 2. Opportunity Analysis
 ```typescript
 // AI Scoring Algorithm (0-100 points)
+// Now includes VIX-based market condition adjustments
 score =
   + profitPotential (0-30 points)  // ROI-based
-  + confidence (0-25 points)        // Historical data
+  + confidence (0-25 points)        // Historical data * VIX adjustment
   + speedToProfit (0-20 points)     // Time to sell
   + riskLevel (0-15 points)         // Low/medium/high
-  + volatility (0-10 points)        // Price stability
+  + volatility (0-10 points)        // Price stability / VIX adjustment
 ```
 
 ### 3. Risk Assessment
+- **Monitor market volatility** (VIX index integration)
+- Adjust risk scores based on market conditions
 - Check budget limits (daily, monthly, per-opportunity)
 - Verify spending capacity
-- Calculate risk score
+- Calculate risk score with market volatility factor
 - Approve or reject opportunity
 
 ### 4. Execution (Manual or Auto)

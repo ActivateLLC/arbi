@@ -329,6 +329,7 @@ Profit: $1,700 (567% ROI)
 │                                      │
 │  • Opportunity Scoring (0-100)      │
 │  • Risk Assessment                   │
+│  • VIX Market Volatility Monitoring │
 │  • Profitability Calculation        │
 │  • Pattern Recognition              │
 │  • Historical Success Rate          │
@@ -340,6 +341,7 @@ Profit: $1,700 (567% ROI)
 │                                      │
 │  • Budget Constraints               │
 │  • Position Limits                  │
+│  • Market Condition Adjustments     │
 │  • Diversification Rules            │
 │  • Stop Losses                      │
 │  • Daily Loss Limits                │
@@ -410,6 +412,33 @@ function scoreOpportunity(opp: Opportunity): Score {
   };
 }
 ```
+
+### VIX Market Volatility Integration
+
+The system integrates the **VIX (CBOE Volatility Index)** to dynamically adjust risk assessments based on broader market conditions:
+
+**How it works:**
+- Fetches real-time VIX data (market "fear index")
+- Adjusts confidence scores during high volatility periods
+- Increases risk weighting when markets are unstable
+- Adds market condition warnings to opportunity analysis
+
+**VIX Impact Levels:**
+```
+VIX < 15  (Low):     Confidence 1.0x  | Risk 0.8x  | Normal operations
+VIX 15-20 (Normal):  Confidence 0.95x | Risk 1.0x  | Standard caution
+VIX 20-30 (High):    Confidence 0.85x | Risk 1.4x  | Increased caution
+VIX > 30  (Extreme): Confidence 0.7x  | Risk 2.0x  | High selectivity
+```
+
+**Example:**
+During market crisis (VIX = 35):
+- Opportunity score reduced by ~30%
+- Risk scores doubled
+- Automatic warnings: "⚠️ EXTREME market volatility - High risk environment"
+- Recommendation: "Consider reducing position sizes and being highly selective"
+
+See [VIX_INTEGRATION.md](VIX_INTEGRATION.md) for complete documentation.
 
 ### Safety Features
 

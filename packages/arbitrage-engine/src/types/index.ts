@@ -78,6 +78,12 @@ export interface OpportunityAnalysis {
     worstCase: number;
     likelyCase: number;
   };
+  marketCondition?: {
+    vixLevel: 'low' | 'normal' | 'high' | 'extreme';
+    vixValue: number;
+    description: string;
+    recommendation: string;
+  };
 }
 
 export interface UserBudgetSettings {
@@ -98,6 +104,7 @@ export interface RiskAssessment {
   };
   riskScore: number; // 0-100
   reasons: string[];
+  marketVolatilityFactor?: number; // VIX-based adjustment (0.8 - 2.0)
 }
 
 export interface TradeExecution {

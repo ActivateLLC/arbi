@@ -17,10 +17,11 @@ Arbi is a **production-ready autonomous arbitrage system** that uses AI to:
 ## ✨ Key Features
 
 ### AI-Powered Intelligence
-- **Opportunity Analyzer** - Scores each opportunity 0-100 points
+- **Opportunity Analyzer** - Scores each opportunity 0-100 points with market-aware algorithms
 - **Risk Manager** - Enforces budget limits and spending controls
 - **Confidence Scoring** - Filters low-quality opportunities automatically
 - **Multi-Strategy System** - eBay arbitrage, retail arbitrage, seasonal deals
+- **Volatility Strategies** - Bearish and volatility strategies (short condors, spreads) for high VIX periods
 
 ### Data Sources (3 Scouts)
 1. **eBay Scout** - Finds items listed below sold price average (FREE)
@@ -33,6 +34,8 @@ Arbi is a **production-ready autonomous arbitrage system** that uses AI to:
 - Monthly budget caps ($10,000 default)
 - Risk tolerance settings (conservative/moderate/aggressive)
 - Real-time spending tracking
+- VIX-aware risk assessment for volatility strategies
+- Market condition monitoring with automatic strategy enablement
 
 ### Complete REST API
 ```
@@ -223,8 +226,15 @@ Configure in code or via API:
   enabledStrategies: [
     'ecommerce_arbitrage',
     'seasonal_arbitrage',
-    'clearance_arbitrage'
-  ]
+    'clearance_arbitrage',
+    'short_condor',           // Volatility strategy (enabled when VIX > 25)
+    'bearish_spread'          // Bearish strategy (enabled during high volatility)
+  ],
+  volatilityConfig: {
+    enabledDuringHighVix: true,  // Enable volatility strategies when VIX elevated
+    vixThreshold: 25,            // Minimum VIX level to enable
+    maxVolatilityExposure: 0.3   // Max 30% of budget for volatility strategies
+  }
 }
 ```
 
@@ -234,6 +244,7 @@ Configure in code or via API:
 - **[LAUNCH_CHECKLIST.md](LAUNCH_CHECKLIST.md)** - Complete setup walkthrough
 - **[AMAZON_API_ALTERNATIVES.md](AMAZON_API_ALTERNATIVES.md)** - 3 solutions without Amazon API
 - **[QUICKSTART_EBAY.md](QUICKSTART_EBAY.md)** - Get eBay API key in 5 minutes
+- **[VOLATILITY_STRATEGIES.md](VOLATILITY_STRATEGIES.md)** - Bearish/volatility strategies guide
 - **[ENHANCEMENT_ROADMAP.md](ENHANCEMENT_ROADMAP.md)** - ML/RL improvements (3-5x profit)
 
 ## 🛠️ Development

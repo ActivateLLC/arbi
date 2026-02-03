@@ -1,6 +1,15 @@
-import type { Opportunity, OpportunityAnalysis } from '../types';
+import type { Opportunity, OpportunityAnalysis, MarketConditions } from '../types';
 
 export class OpportunityAnalyzer {
+  private marketConditions?: MarketConditions;
+
+  /**
+   * Set current market conditions for volatility-aware analysis
+   */
+  setMarketConditions(conditions: MarketConditions): void {
+    this.marketConditions = conditions;
+  }
+
   analyzeOpportunity(opportunity: Opportunity): OpportunityAnalysis {
     const score = this.calculateScore(opportunity);
     const reasons = this.getReasons(opportunity, score);
@@ -20,6 +29,9 @@ export class OpportunityAnalyzer {
   private calculateScore(opp: Opportunity): number {
     let score = 0;
 
+    // Check if this is a volatility strategy
+    const isVolatilityStrategy = this.isVolatilityStrategy(opp.type);
+
     // Profit potential (0-30 points)
     const profitScore = Math.min((opp.roi / 100) * 30, 30);
     score += profitScore;
@@ -36,15 +48,44 @@ export class OpportunityAnalyzer {
     const riskScore = opp.riskLevel === 'low' ? 15 : opp.riskLevel === 'medium' ? 10 : 5;
     score += riskScore;
 
-    // Volatility (0-10 points, inverted)
-    const volatilityScore = Math.max(0, 10 - (opp.volatility / 10));
+    // Volatility (0-10 points)
+    // For volatility strategies, HIGH volatility is GOOD - for others, low is better
+    let volatilityScore;
+    if (isVolatilityStrategy) {
+      // Reward high volatility for bearish/volatility strategies
+      volatilityScore = Math.min(opp.volatility / 10, 10);
+    } else {
+      // Penalize high volatility for standard strategies
+      volatilityScore = Math.max(0, 10 - (opp.volatility / 10));
+    }
     score += volatilityScore;
+
+    // Market conditions bonus for volatility strategies (0-10 bonus points)
+    if (isVolatilityStrategy && this.marketConditions) {
+      if (this.marketConditions.volatilityState === 'extreme') {
+        score += 10; // High volatility = great for volatility strategies
+      } else if (this.marketConditions.volatilityState === 'high') {
+        score += 5;
+      }
+    }
 
     return Math.round(score);
   }
 
+  private isVolatilityStrategy(type: string): boolean {
+    const volatilityStrategies = [
+      'short_condor',
+      'short_strangle', 
+      'short_straddle',
+      'bearish_spread',
+      'volatility_arbitrage'
+    ];
+    return volatilityStrategies.includes(type);
+  }
+
   private getReasons(opp: Opportunity, score: number): string[] {
     const reasons: string[] = [];
+    const isVolatilityStrategy = this.isVolatilityStrategy(opp.type);
 
     if (opp.roi > 50) {
       reasons.push(`Excellent ROI of ${opp.roi.toFixed(1)}%`);
@@ -66,6 +107,19 @@ export class OpportunityAnalyzer {
 
     if (opp.riskLevel === 'low') {
       reasons.push('Low risk opportunity');
+    }
+
+    // Volatility strategy specific reasons
+    if (isVolatilityStrategy) {
+      if (opp.volatility > 70) {
+        reasons.push('High volatility environment - ideal for volatility strategies');
+      }
+      if (this.marketConditions && this.marketConditions.vixLevel > 30) {
+        reasons.push(`Elevated VIX (${this.marketConditions.vixLevel.toFixed(1)}) - favorable for bearish/volatility plays`);
+      }
+      if (this.marketConditions && this.marketConditions.trend === 'bearish') {
+        reasons.push('Bearish market trend supports strategy');
+      }
     }
 
     if (score >= 80) {

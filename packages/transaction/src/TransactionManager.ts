@@ -1,3 +1,6 @@
+import { HyperswitchPaymentManager } from './payment/HyperswitchPaymentManager';
+import { SecurityManager } from './security/SecurityManager';
+
 import type {
   PaymentConfig,
   PaymentProcessorConfig,
@@ -7,9 +10,6 @@ import type {
   RefundResponse,
   SecurityConfig,
 } from './types';
-
-import { SecurityManager } from './security/SecurityManager';
-import { HyperswitchPaymentManager } from './payment/HyperswitchPaymentManager';
 
 export class TransactionManager {
   private securityManager: SecurityManager;

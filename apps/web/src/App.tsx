@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
 import axios from 'axios';
+import React, { useState } from 'react';
 
 interface AIResponse {
   result: {
@@ -27,8 +27,9 @@ function App() {
       });
 
       setResponse(result.data.result.content);
-    } catch (err: any) {
-      setError(err.response?.data?.message || 'An error occurred. Please try again.');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { message?: string } } };
+      setError(error.response?.data?.message || 'An error occurred. Please try again.');
     } finally {
       setLoading(false);
     }

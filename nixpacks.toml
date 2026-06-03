@@ -3,7 +3,8 @@ nixPkgs = ["nodejs_18", "pnpm"]
 
 [phases.install]
 cmds = [
-  "pnpm install --no-frozen-lockfile"
+  "pnpm install --no-frozen-lockfile",
+  "npx playwright install --with-deps"
 ]
 
 [phases.build]
@@ -12,7 +13,8 @@ cmds = [
 ]
 
 [start]
-cmd = "cd apps/api && node dist/index.js"
+cmd = "pnpm --filter @arbi/api start"
 
 [variables]
 NODE_ENV = "production"
+PLAYWRIGHT_BROWSERS_PATH = "/app/.playwright"

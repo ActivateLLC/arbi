@@ -1,47 +1,51 @@
-# Multi-stage build for optimized production image
-FROM node:18-alpine AS base
-
-# Install pnpm
-RUN npm install -g pnpm@8
+# Use official Playwright image with pre-installed browsers
+# This provides a fully autonomous solution with Chromium, Firefox, and WebKit
+# Last updated: 2026-01-11
+FROM mcr.microsoft.com/playwright:v1.57.0-noble
 
 # Set working directory
 WORKDIR /app
 
-# Copy all source code (pnpm workspaces need full structure)
-COPY . .
+# Install pnpm globally
+RUN npm install -g pnpm@8.14.0
 
-# Install dependencies (use --no-frozen-lockfile for Railway compatibility)
+# Copy package files and workspace configuration
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY tsconfig.json ./
+
+# Copy all workspace packages and apps
+COPY packages ./packages
+COPY apps ./apps
+
+# Install dependencies (no frozen lockfile due to lockfile sync issues)
 RUN pnpm install --no-frozen-lockfile
 
-# Build all packages
-RUN pnpm build
+# Build workspace packages first (dependencies of API)
+RUN pnpm --filter "@arbi/data" build || true
+RUN pnpm --filter "@arbi/arbitrage-engine" build || true
+RUN pnpm --filter "@arbi/ai-engine" build || true
+RUN pnpm --filter "@arbi/transaction" build || true
+RUN pnpm --filter "@arbi/voice-interface" build || true
+RUN pnpm --filter "@arbi/web-automation" build || true
 
-# Production stage
-FROM node:18-alpine AS production
-
-# Install pnpm
-RUN npm install -g pnpm@8
-
-WORKDIR /app
-
-# Copy built artifacts from base stage
-COPY --from=base /app/node_modules ./node_modules
-COPY --from=base /app/packages ./packages
-COPY --from=base /app/apps/api/dist ./apps/api/dist
-COPY --from=base /app/apps/api/package.json ./apps/api/package.json
-COPY --from=base /app/package.json ./package.json
-COPY --from=base /app/pnpm-workspace.yaml ./pnpm-workspace.yaml
+# Build the API
+RUN pnpm --filter "@arbi/api" build
 
 # Set environment variables
 ENV NODE_ENV=production
 ENV PORT=3000
 
+# Playwright browsers are already installed in the image
+# Skip browser download to save time and space
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
 # Expose port
 EXPOSE 3000
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:3000/api/arbitrage/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
 
-# Start the API server
+# Start the API server from root (workspace symlinks require root context)
+WORKDIR /app
 CMD ["node", "apps/api/dist/index.js"]

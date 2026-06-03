@@ -1,8 +1,9 @@
 import axios from 'axios';
 
-import { SecurityManager } from '../security/SecurityManager';
+import type { SecurityManager } from '../security/SecurityManager';
 import type {
   PaymentConfig,
+  PaymentMethod,
   PaymentProcessor,
   PaymentProcessorConfig,
   PaymentRequest,
@@ -10,6 +11,27 @@ import type {
   RefundRequest,
   RefundResponse,
 } from '../types';
+
+interface HyperswitchPaymentMethodCard {
+  number: string;
+  exp_month: number;
+  exp_year: number;
+  cvc: string;
+  name: string;
+}
+
+interface HyperswitchPaymentMethodBankTransfer {
+  account_number: string;
+  routing_number: string;
+  account_type: string;
+  bank_name: string;
+}
+
+interface HyperswitchPaymentMethod {
+  type: string;
+  card?: HyperswitchPaymentMethodCard;
+  bank_transfer?: HyperswitchPaymentMethodBankTransfer;
+}
 
 export class HyperswitchPaymentManager {
   private config: PaymentConfig;
@@ -55,7 +77,7 @@ export class HyperswitchPaymentManager {
         return this.processRefund(config, request);
       },
       
-      validateWebhook: (payload: any, signature: string) => {
+      validateWebhook: (payload: unknown, signature: string) => {
         if (!config.webhookSecret) {
           throw new Error('Webhook secret is required for validation');
         }
@@ -133,9 +155,10 @@ export class HyperswitchPaymentManager {
         createdAt: new Date(response.data.created_at),
         updatedAt: new Date(response.data.updated_at),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle and standardize errors
       console.error('Payment processing error:', error);
+      const axiosError = error as { response?: { data?: { error?: { code?: string; message?: string; details?: unknown } } }; message?: string };
       
       return {
         id: '',
@@ -143,9 +166,9 @@ export class HyperswitchPaymentManager {
         amount: request.amount,
         processor: processorConfig.name,
         error: {
-          code: error.response?.data?.error?.code || 'unknown_error',
-          message: error.response?.data?.error?.message || error.message || 'Unknown error occurred',
-          details: error.response?.data?.error?.details,
+          code: axiosError.response?.data?.error?.code || 'unknown_error',
+          message: axiosError.response?.data?.error?.message || axiosError.message || 'Unknown error occurred',
+          details: axiosError.response?.data?.error?.details,
         },
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -198,9 +221,10 @@ export class HyperswitchPaymentManager {
         createdAt: new Date(response.data.created_at),
         updatedAt: new Date(response.data.updated_at),
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Handle and standardize errors
       console.error('Refund processing error:', error);
+      const axiosError = error as { response?: { data?: { error?: { code?: string; message?: string; details?: unknown } } }; message?: string };
       
       return {
         id: '',
@@ -208,9 +232,9 @@ export class HyperswitchPaymentManager {
         status: 'failed',
         amount: request.amount || { value: 0, currency: this.config.defaultCurrency || 'USD' },
         error: {
-          code: error.response?.data?.error?.code || 'unknown_error',
-          message: error.response?.data?.error?.message || error.message || 'Unknown error occurred',
-          details: error.response?.data?.error?.details,
+          code: axiosError.response?.data?.error?.code || 'unknown_error',
+          message: axiosError.response?.data?.error?.message || axiosError.message || 'Unknown error occurred',
+          details: axiosError.response?.data?.error?.details,
         },
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -221,28 +245,30 @@ export class HyperswitchPaymentManager {
   /**
    * Map payment method to Hyperswitch format
    */
-  private mapPaymentMethod(paymentMethod: any): any {
+  private mapPaymentMethod(paymentMethod: PaymentMethod): HyperswitchPaymentMethod {
     // Map payment method details based on type
-    const mappedMethod: any = {
+    const mappedMethod: HyperswitchPaymentMethod = {
       type: paymentMethod.type,
     };
+    
+    const details = paymentMethod.details;
 
     switch (paymentMethod.type) {
       case 'card':
         mappedMethod.card = {
-          number: paymentMethod.details.number,
-          exp_month: paymentMethod.details.expMonth,
-          exp_year: paymentMethod.details.expYear,
-          cvc: paymentMethod.details.cvc,
-          name: paymentMethod.details.name,
+          number: String(details.number || ''),
+          exp_month: Number(details.expMonth) || 0,
+          exp_year: Number(details.expYear) || 0,
+          cvc: String(details.cvc || ''),
+          name: String(details.name || ''),
         };
         break;
       case 'bank_transfer':
         mappedMethod.bank_transfer = {
-          account_number: paymentMethod.details.accountNumber,
-          routing_number: paymentMethod.details.routingNumber,
-          account_type: paymentMethod.details.accountType,
-          bank_name: paymentMethod.details.bankName,
+          account_number: String(details.accountNumber || ''),
+          routing_number: String(details.routingNumber || ''),
+          account_type: String(details.accountType || ''),
+          bank_name: String(details.bankName || ''),
         };
         break;
       // Add other payment methods as needed

@@ -1,0 +1,71 @@
+
+IMAGE SPECIFICATIONS FOR: 4K Smart Home Security System (8 Cameras + NVR)
+Size: 1200x628 (landscape)
+
+DESIGN REQUIREMENTS:
+- Background: Clean gradient (white to light gray, or brand colors)
+- Product image: High-quality photo of 4K Smart Home Security System (8 Cameras + NVR)
+- Price tag: $899.99 in bold, prominent position
+- Headline: "Complete 4K Security System"
+- Call-to-action: "Shop Now" button
+- Trust badges: Free shipping, warranty, secure checkout
+
+LAYOUT:
+
+- Left 50%: Product image
+- Right 50%:
+  - Headline (top)
+  - Key benefits (3-4 bullet points)
+  - Price + CTA (bottom)
+
+
+KEY BENEFITS TO HIGHLIGHT:
+- 8 weatherproof 4K cameras
+- Network Video Recorder included
+- Night vision up to 100ft
+- Mobile app monitoring
+- Motion detection alerts
+
+COLOR SCHEME:
+- Primary: Deep blue or brand color
+- Accent: Orange/red for CTA
+- Text: Dark gray on white background
+- Price: Green (savings emphasis)
+
+FONTS:
+- Heading: Bold, modern sans-serif (e.g., Montserrat Bold)
+- Body: Clean sans-serif (e.g., Open Sans)
+- Price: Extra bold
+
+TOOLS TO USE:
+1. Canva Pro (recommended):
+   - Use "Ad" template
+   - Select 1200x628 custom size
+   - Upload product image or use stock photos
+   - Add text overlays and CTA button
+
+2. Adobe Express:
+   - Choose "Social media post" template
+   - Resize to 1200x628
+   - Add layers for text and product image
+
+3. Photoshop/Figma:
+   - Create canvas 1200x628
+   - Layer 1: Background gradient
+   - Layer 2: Product image (with clipping mask if needed)
+   - Layer 3: Text overlays
+   - Layer 4: CTA button
+   - Export as JPG (quality: 90)
+
+EXAMPLE TEXT PLACEMENT:
+
+┌─────────────────────────────┬─────────────────────────────┐
+│                             │  Complete 4K Security...│
+│                             │                             │
+│    [PRODUCT IMAGE]          │  ✓ 8 weatherproof 4K cameras│
+│                             │  ✓ Network Video Recorder in│
+│                             │  ✓ Night vision up to 100ft│
+│                             │                             │
+│                             │  $899.99   [Shop Now]    │
+└─────────────────────────────┴─────────────────────────────┘
+

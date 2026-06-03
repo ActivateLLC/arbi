@@ -1,1 +1,1 @@
-web: cd apps/api && node dist/index.js
+web: pnpm --filter @arbi/api start

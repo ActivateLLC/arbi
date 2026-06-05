@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { LogEntry } from "../types";
 import { v4 as uuidv4 } from 'uuid';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 // Generates a batch of technical sounding logs based on current system state
 export const generateSystemLogs = async (count: number = 3): Promise<LogEntry[]> => {

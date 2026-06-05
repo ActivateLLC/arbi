@@ -24,8 +24,9 @@ router.get('/checkout/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
 
   try {
-    // Fetch listing
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
+    // Fetch listing - use internal API URL
+    const baseUrl = process.env.API_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const listingResponse = await fetch(`${baseUrl}/api/marketplace/listings`);
     const { listings } = await listingResponse.json();
     const listing = listings.find((l: any) => l.listingId === listingId);
 

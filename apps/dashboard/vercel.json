@@ -1,6 +1,6 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "npm run build",
+  "framework": null,
+  "buildCommand": "cd ../.. && pnpm install && pnpm --filter @arbi/dashboard build",
   "outputDirectory": "dist",
-  "framework": null
+  "installCommand": "npm install -g pnpm@8"
 }

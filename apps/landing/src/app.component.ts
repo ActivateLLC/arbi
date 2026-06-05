@@ -258,15 +258,35 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit() {
+    // Optimize ScrollTrigger with scrub for smooth performance
     ScrollTrigger.create({
       start: 'top -100',
-      onUpdate: (self) => {
-        if (self.scroll() > 100) {
-          gsap.to(this.nav.nativeElement, { y: -10, scale: 0.98, duration: 0.3 });
-        } else {
-          gsap.to(this.nav.nativeElement, { y: 0, scale: 1, duration: 0.3 });
-        }
+      end: 'top -200',
+      scrub: 0.5, // Add scrub for smoother, GPU-accelerated animation
+      onEnter: () => {
+        gsap.to(this.nav.nativeElement, {
+          y: -10,
+          scale: 0.98,
+          duration: 0.3,
+          force3D: true, // Force GPU acceleration
+          ease: 'power2.out'
+        });
+      },
+      onLeaveBack: () => {
+        gsap.to(this.nav.nativeElement, {
+          y: 0,
+          scale: 1,
+          duration: 0.3,
+          force3D: true,
+          ease: 'power2.out'
+        });
       }
+    });
+
+    // Smooth scroll configuration
+    ScrollTrigger.config({
+      autoRefreshEvents: 'visibilitychange,DOMContentLoaded,load',
+      ignoreMobileResize: true
     });
   }
 

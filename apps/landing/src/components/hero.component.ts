@@ -108,19 +108,31 @@ export class HeroComponent implements AfterViewInit, OnDestroy {
   intervalId: any;
 
   ngAfterViewInit() {
-    const tl = gsap.timeline({ defaults: { ease: 'power4.out' } });
+    const tl = gsap.timeline({
+      defaults: {
+        ease: 'power4.out',
+        force3D: true // Force GPU acceleration for all animations
+      }
+    });
 
     // 1. Badge
     tl.to(this.badge.nativeElement, { opacity: 1, y: 0, duration: 1 });
 
-    // 2. Headline
+    // 2. Headline - optimize with force3D
     const spans = this.headline.nativeElement.querySelectorAll('span.block');
-    tl.from(spans, { y: 150, opacity: 0, duration: 1.5, stagger: 0.1, skewY: 5 }, "-=0.5");
+    tl.from(spans, {
+      y: 150,
+      opacity: 0,
+      duration: 1.5,
+      stagger: 0.1,
+      skewY: 5,
+      force3D: true
+    }, "-=0.5");
 
     // 3. Subtext
     tl.to(this.subtext.nativeElement, { opacity: 1, y: 0, duration: 1 }, "-=1");
-    
-    // 3.5 Subtext 2 (New)
+
+    // 3.5 Subtext 2
     tl.to(this.subtext2.nativeElement, { opacity: 1, y: 0, duration: 1 }, "-=0.8");
 
     // 4. Buttons
@@ -144,6 +156,7 @@ export class HeroComponent implements AfterViewInit, OnDestroy {
         y: -nextIndex * itemHeight,
         duration: 0.6,
         ease: 'power2.inOut',
+        force3D: true, // GPU acceleration for smooth ticker
         onComplete: () => {
           currentIndex = nextIndex;
         }

@@ -1,0 +1,15 @@
+{
+  "name": "arbi-test-suite",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test:e2e": "tsx test-e2e.ts",
+    "test:e2e:prod": "API_URL=https://your-api.railway.app tsx test-e2e.ts",
+    "test:api": "tsx test-e2e.ts --api-only",
+    "test:build": "pnpm build && echo 'Build test passed'"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.6",
+    "typescript": "^5.3.3"
+  }
+}

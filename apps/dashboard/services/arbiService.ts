@@ -33,7 +33,9 @@ export interface MarketplaceStats {
 export const getMarketplaceListings = async (): Promise<ArbiListing[]> => {
   try {
     // Use relative path - Vite proxy will route to https://api.arbi.creai.dev
-    const response = await fetch('/api/marketplace');
+    // Listings live at /api/marketplace/listings (the bare /api/marketplace root
+    // has no route and 404s).
+    const response = await fetch('/api/marketplace/listings?status=active');
     
     if (!response.ok) {
       throw new Error(`API error: ${response.status}`);

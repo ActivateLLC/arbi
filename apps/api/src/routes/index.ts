@@ -18,6 +18,7 @@ import googleAdsRoutes from './google-ads';
 import productImageRoutes from './product-image';
 import fulfillmentRoutes from './fulfillment';
 import cjRoutes from './cj';
+import tiktokRoutes from './tiktok';
 
 const router = Router();
 
@@ -71,5 +72,8 @@ router.use('/fulfillment', fulfillmentRoutes);
 
 // CJ Dropshipping sourcing + account (creates fulfillable, CJ-sourced listings)
 router.use('/cj', cjRoutes);
+
+// TikTok Ads automation (campaigns created PAUSED)
+router.use('/tiktok', tiktokRoutes);
 
 export default router;

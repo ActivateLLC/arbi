@@ -6,6 +6,7 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { getDatabase } from '../config/database';
+import { recordTrade } from './revenue';
 // NOTE: supplierFulfillment is imported lazily inside the auto-fulfillment
 // branch below — it pulls in the optional @browserbasehq/stagehand dependency,
 // so we must not load it at module init (it would crash boot if not installed).
@@ -139,6 +140,18 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
     await db.create('BuyerOrder', order);
     console.log('   ✅ Order saved to database:', order.orderId);
+
+    // Record the sale into the live revenue tracker so the dashboard's revenue
+    // metric reflects real income (decoupled before this).
+    try {
+      recordTrade({
+        tradeId: order.orderId,
+        productTitle: listingId,
+        grossProfit: isNaN(estimatedProfit) ? 0 : estimatedProfit,
+      });
+    } catch (e: any) {
+      console.error('   ⚠️  Failed to record revenue for order:', e.message);
+    }
 
     // 🤖 AUTO-PURCHASE FROM ANY SUPPLIER (Amazon, Walmart, Target, eBay, etc.)
     if (process.env.ENABLE_AUTO_FULFILLMENT === 'true' && supplierUrl) {

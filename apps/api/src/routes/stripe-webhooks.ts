@@ -163,8 +163,24 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       console.error('   ⚠️  Failed to record revenue for order:', e.message);
     }
 
+    // 💰 FUNDING GATE: never front our own cash for a high-ticket item. If the
+    // supplier cost exceeds the float limit, hold the purchase until the
+    // customer's money is available in our Stripe balance (released later by
+    // POST /api/fulfillment/release-funded). Cheap items still ship immediately.
+    const supplierCost = (isNaN(supplierPrice) ? 0 : supplierPrice) * (isNaN(quantity) ? 1 : quantity);
+    const { decideFulfillment } = await import('../services/fulfillmentPolicy');
+    const fundingDecision = decideFulfillment(supplierCost);
+    console.log(`   💰 Funding gate: ${fundingDecision.reason}`);
+
+    if (fundingDecision.action === 'hold_for_funds') {
+      await db.update('BuyerOrder', {
+        status: 'awaiting_funds',
+        supplierPurchaseStatus: 'awaiting_funds',
+      }, { where: { orderId: order.orderId } });
+      console.log('   ⏸️  Held for funds — will fulfill once the customer payment settles. No money fronted.');
+    }
     // 🤖 AUTO-PURCHASE FROM ANY SUPPLIER (Amazon, Walmart, Target, eBay, etc.)
-    if (process.env.ENABLE_AUTO_FULFILLMENT === 'true' && supplierUrl) {
+    else if (process.env.ENABLE_AUTO_FULFILLMENT === 'true' && supplierUrl) {
       console.log('\n🤖 INITIATING AUTOMATED MULTI-VENDOR FULFILLMENT...');
 
       try {

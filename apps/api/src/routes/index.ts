@@ -16,6 +16,7 @@ import testGoogleAdsRoutes from './test-google-ads';
 import campaignLauncherRoutes from './campaign-launcher';
 import googleAdsRoutes from './google-ads';
 import productImageRoutes from './product-image';
+import fulfillmentRoutes from './fulfillment';
 
 const router = Router();
 
@@ -63,5 +64,8 @@ router.use('/google-ads', googleAdsRoutes);
 
 // Product image resolver (guarantees a real product photo per listing)
 router.use('/product-image', productImageRoutes);
+
+// Fulfillment release (never front cash for high-ticket; wait for settled funds)
+router.use('/fulfillment', fulfillmentRoutes);
 
 export default router;

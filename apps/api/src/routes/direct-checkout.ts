@@ -9,6 +9,7 @@
 
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
+import { getListings } from './marketplace';
 
 const router = Router();
 
@@ -24,9 +25,9 @@ router.get('/checkout/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
 
   try {
-    // Fetch listing
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
-    const { listings } = await listingResponse.json();
+    // Fetch listing directly from the data layer (no internal HTTP call — the
+    // old hardcoded http://localhost:3000 broke on Railway's dynamic PORT).
+    const listings = await getListings('active');
     const listing = listings.find((l: any) => l.listingId === listingId);
 
     if (!listing || listing.status !== 'active') {

@@ -1,4 +1,0 @@
-# Railway deployment trigger
-# This file change will trigger Railway to redeploy with updated SVG icons
-Deploy timestamp: 2026-01-19T04:35:00Z
-Commit: 924e85975 - Modern Lucide SVG icons replacing outdated emojis

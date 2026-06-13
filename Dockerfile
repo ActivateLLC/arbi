@@ -1,7 +1,11 @@
 # Use official Playwright image with pre-installed browsers
-# This provides a fully autonomous solution with Chromium, Firefox, and WebKit
-# Last updated: 2026-01-11
-FROM mcr.microsoft.com/playwright:v1.57.0-noble
+# This provides a fully autonomous solution with Chromium, Firefox, and WebKit.
+# IMPORTANT: keep this image tag in lockstep with the `playwright`/`playwright-core`
+# version in pnpm-lock.yaml — a mismatch means the preinstalled browsers won't
+# match the runtime and chromium.launch() fails (we set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1).
+# Locked at playwright 1.58.0.
+# Last updated: 2026-06-13
+FROM mcr.microsoft.com/playwright:v1.58.0-noble
 
 # Set working directory
 WORKDIR /app

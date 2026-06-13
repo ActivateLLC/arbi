@@ -223,8 +223,9 @@ export class TrendDetectionPipeline {
     else if (rating >= 4.0) score += 10;
     else if (rating >= 3.5) score += 5;
 
-    // Factor 5: Price point (sweet spot: $20-$100)
-    if (product.price >= 20 && product.price <= 100) score += 10;
+    // Note: price is intentionally NOT a scoring factor. Selection is driven by
+    // demand (trend, sales, rating, margin), not by absolute price — the model
+    // connects customers to in-demand products for a premium at ANY price point.
 
     return Math.min(score, 100); // Cap at 100
   }
@@ -265,10 +266,6 @@ export class TrendDetectionPipeline {
 
     if (trendScore >= 80) {
       reasons.push('Very high trend score - act fast!');
-    }
-
-    if (product.price >= 20 && product.price <= 100) {
-      reasons.push('Optimal price point for conversions');
     }
 
     return reasons;

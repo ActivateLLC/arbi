@@ -188,8 +188,8 @@ export class OpportunityScorer {
     if (product.seller.feedbackPercentage < 95) risk += 3;
     if (product.seller.feedbackScore < 50) risk += 2;
 
-    // Very cheap items = higher fraud risk
-    if (product.price < 10) risk += 2;
+    // (Absolute price is intentionally not a risk/selection factor — demand and
+    // seller/condition signals drive scoring, not how cheap or expensive an item is.)
 
     // Used/refurbished = risk
     if (product.condition !== 'New') risk += 2;

@@ -219,23 +219,21 @@ function generateProductLandingPage(listing: any): string {
     ? listing.productImages.filter((img: string) => typeof img === 'string' && /^https?:\/\//.test(img))
     : [];
 
-  // Guaranteed fallback so a picture ALWAYS renders, even if the product has no
-  // image or its URL 404s. This is an inline SVG data URI — it needs no network
-  // request, so it cannot fail to load (unlike an external placeholder service;
-  // the old source.unsplash.com endpoint was shut down and returned nothing).
-  const safeTitle = String(listing.productTitle || 'Product').replace(/[<>&"']/g, ' ').slice(0, 60);
-  const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><rect width="100%" height="100%" fill="#1e293b"/><text x="400" y="400" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${safeTitle}</text></svg>`;
-  const fallbackImage = `data:image/svg+xml,${encodeURIComponent(fallbackSvg)}`;
+  // When a product has no usable image, fall back to a server-side resolver that
+  // fetches a REAL product photo (scraped from the web, cached to Cloudinary) —
+  // never a placeholder or SVG. The same resolver is used as the onerror target
+  // so a broken image URL is replaced by a real one too.
+  const resolverUrl = `/api/product-image/${encodeURIComponent(listing.listingId)}`;
 
   const mainImageUrl = productImages.length > 0
     ? productImages[0]
-    : fallbackImage;
+    : resolverUrl;
 
   // Only show gallery if we have 2+ REAL images
   const thumbnailsHtml = productImages.length > 1
     ? `<div class="thumbnail-gallery">
         ${productImages.map((img: string, idx: number) =>
-          `<img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="thumbnail${idx === 0 ? ' active' : ''}" data-index="${idx}" loading="lazy" onerror="this.onerror=null;this.src='${fallbackImage}'">`
+          `<img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="thumbnail${idx === 0 ? ' active' : ''}" data-index="${idx}" loading="lazy" onerror="this.onerror=null;this.src='${resolverUrl}'">`
         ).join('\n        ')}
        </div>`
     : '';
@@ -979,7 +977,7 @@ function generateProductLandingPage(listing: any): string {
         <div class="product-display" id="productDisplay">
             <div class="glass-panel">
                 <div class="light-sweep"></div>
-                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="product-image" id="productImage" onerror="this.onerror=null;this.src='${fallbackImage}'">
+                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="product-image" id="productImage" onerror="this.onerror=null;this.src='${resolverUrl}'">
             </div>
         </div>
 

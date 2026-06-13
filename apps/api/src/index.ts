@@ -18,8 +18,29 @@ const logger = createLogger();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Apply middleware
-app.use(helmet());
+// Apply middleware.
+// The public product/checkout pages are server-rendered HTML that legitimately
+// loads product images from external CDNs (Cloudinary and scraped retailer/CDN
+// hosts), Google Fonts, and a charting/animation CDN, and uses inline scripts
+// and inline handlers. Helmet's DEFAULT Content-Security-Policy sets
+// `img-src 'self' data:` and `script-src-attr 'none'`, which silently BLOCKS
+// every cross-origin product image and every inline onerror/onclick handler —
+// that was leaving product images as empty boxes. Relax the CSP to permit
+// https images/styles/scripts while keeping helmet's other protections.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'img-src': ["'self'", 'data:', 'https:', 'blob:'],
+      'script-src': ["'self'", "'unsafe-inline'", 'https:'],
+      'script-src-attr': ["'unsafe-inline'"],
+      'style-src': ["'self'", "'unsafe-inline'", 'https:'],
+      'font-src': ["'self'", 'https:', 'data:'],
+      'connect-src': ["'self'", 'https:'],
+      'frame-src': ["'self'", 'https://js.stripe.com', 'https://checkout.stripe.com'],
+    },
+  },
+}));
 app.use(cors());
 
 // Stripe webhook signature verification requires the raw, unparsed request

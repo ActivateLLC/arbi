@@ -15,6 +15,7 @@ import trendsRoutes from './trends';
 import testGoogleAdsRoutes from './test-google-ads';
 import campaignLauncherRoutes from './campaign-launcher';
 import googleAdsRoutes from './google-ads';
+import productImageRoutes from './product-image';
 
 const router = Router();
 
@@ -59,5 +60,8 @@ router.use('/campaigns', campaignLauncherRoutes);
 
 // Google Ads campaign automation (real google-ads-api; campaigns created PAUSED)
 router.use('/google-ads', googleAdsRoutes);
+
+// Product image resolver (guarantees a real product photo per listing)
+router.use('/product-image', productImageRoutes);
 
 export default router;

@@ -17,12 +17,20 @@ function canUseAIContent(countryCode: string): boolean {
   return AI_CONTENT_ALLOWED.includes(countryCode);
 }
 
-// Initialize Google Ads API
-const client = new GoogleAdsApi({
-  client_id: process.env.GOOGLE_ADS_CLIENT_ID!,
-  client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET!,
-  developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN!,
-});
+// Initialize Google Ads API lazily — constructing the client at module load
+// would crash boot wherever the GOOGLE_ADS_* env vars aren't set. Build it on
+// first use instead.
+let _client: GoogleAdsApi | null = null;
+function getClient(): GoogleAdsApi {
+  if (!_client) {
+    _client = new GoogleAdsApi({
+      client_id: process.env.GOOGLE_ADS_CLIENT_ID!,
+      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET!,
+      developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN!,
+    });
+  }
+  return _client;
+}
 
 export interface ProductAdData {
   productId: string;
@@ -56,7 +64,7 @@ export async function createAutomatedCampaign(
     throw new Error(`Automated ads not allowed in ${product.targetCountry}. Manual creation required.`);
   }
 
-  const customer = client.Customer({
+  const customer = getClient().Customer({
     customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!,
     refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
   });
@@ -249,7 +257,7 @@ export async function createBulkCampaigns(
  * Get campaign performance metrics
  */
 export async function getCampaignMetrics(campaignId: string) {
-  const customer = client.Customer({
+  const customer = getClient().Customer({
     customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!,
     refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
   });

@@ -254,12 +254,16 @@ router.get('/quick-start-now', async (req: Request, res: Response, next: NextFun
  * directly exchanges the refresh token with Google so we get the exact error.
  * Remove after debugging. Secrets are masked.
  */
-router.get('/debug-auth', async (_req: Request, res: Response) => {
-  const clientId = (process.env.GOOGLE_ADS_CLIENT_ID || '').trim();
-  const clientSecret = (process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim();
-  const refreshToken = (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim();
+router.get('/debug-auth', async (req: Request, res: Response) => {
+  // Optional query overrides let you test a freshly-minted token directly,
+  // bypassing Railway env entirely: ?rt=<refresh_token>[&cid=...&cs=...]
+  const clientId = (String(req.query.cid || '') || process.env.GOOGLE_ADS_CLIENT_ID || '').trim();
+  const clientSecret = (String(req.query.cs || '') || process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim();
+  const refreshToken = (String(req.query.rt || '') || process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim();
+  const source = req.query.rt ? 'QUERY OVERRIDE (bypassing Railway env)' : 'Railway env';
 
   const env = {
+    source,
     clientId: clientId ? `${clientId.slice(0, 30)}… (len ${clientId.length})` : '(MISSING)',
     clientSecretPresent: !!clientSecret,
     clientSecretLen: clientSecret.length,

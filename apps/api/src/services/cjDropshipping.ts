@@ -207,8 +207,9 @@ export class CJDropshippingClient {
       if (!cjOrderId) return { success: false, error: 'CJ order created but no order id returned', logisticName, shippingCost };
 
       // 3. Optionally pay from balance (gated — safe default is create-only).
+      // Accept common truthy values (true/yes/1/on), case-insensitive.
       let paid = false;
-      if (process.env.CJ_AUTO_PAY === 'true') {
+      if (/^(true|yes|1|on)$/i.test(String(process.env.CJ_AUTO_PAY || '').trim())) {
         await this.call('POST', ENDPOINTS.payBalanceV2, { orderIds: [cjOrderId] });
         paid = true;
       }

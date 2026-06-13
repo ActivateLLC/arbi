@@ -1,196 +1,113 @@
-/**
- * Autonomous Listing Job
- *
- * Automatically scans for opportunities and lists them on the marketplace
- * Runs continuously to ensure profitable products are always available
- */
+import { AutonomousEngine, AutonomousConfig } from '@arbi/arbitrage-engine';
+import { AdCampaignManager } from '../services/adCampaigns';
+import { saveListing, MarketplaceListing } from '../routes/marketplace';
 
-import { ArbitrageEngine } from '@arbi/arbitrage-engine';
-
-interface AutoListingConfig {
-  scanIntervalMinutes: number;
-  minScore: number;
-  minProfit: number;
-  minROI: number;
-  markupPercentage: number;
-  maxListingsPerRun: number;
-}
-
-export class AutonomousListingJob {
-  private engine: ArbitrageEngine;
-  private isRunning: boolean = false;
-  private intervalId?: NodeJS.Timeout;
+class AutonomousListingJob {
+  private running = false;
+  private intervalId: NodeJS.Timeout | null = null;
+  private engine: AutonomousEngine;
+  private adManager: AdCampaignManager;
 
   constructor() {
-    this.engine = new ArbitrageEngine();
+    this.engine = new AutonomousEngine();
+    this.adManager = new AdCampaignManager();
   }
 
-  /**
-   * Start autonomous listing job
-   */
-  async start(config: AutoListingConfig): Promise<void> {
-    if (this.isRunning) {
-      console.log('⚠️  Autonomous listing already running');
-      return;
+  async start(config: any) {
+    if (this.running) {
+      return { started: false, message: 'Job already running' };
     }
 
-    console.log('🤖 Starting autonomous listing job...');
-    console.log(`   Scan interval: ${config.scanIntervalMinutes} minutes`);
-    console.log(`   Min score: ${config.minScore}`);
-    console.log(`   Min profit: $${config.minProfit}`);
-    console.log(`   Markup: ${config.markupPercentage}%`);
-
-    this.isRunning = true;
+    this.running = true;
+    console.log('🚀 Starting Autonomous Listing Job...');
+    console.log('   Config:', config);
 
     // Run immediately
-    await this.runListing(config);
+    this.runCycle(config);
 
-    // Then run on interval
-    this.intervalId = setInterval(async () => {
-      await this.runListing(config);
-    }, config.scanIntervalMinutes * 60 * 1000);
+    // Schedule periodic runs
+    const intervalMinutes = config.scanIntervalMinutes || 60;
+    this.intervalId = setInterval(() => {
+      this.runCycle(config);
+    }, intervalMinutes * 60 * 1000);
+
+    return { started: true, config };
   }
 
-  /**
-   * Stop autonomous listing job
-   */
-  stop(): void {
+  async stop() {
+    this.running = false;
     if (this.intervalId) {
       clearInterval(this.intervalId);
-      this.intervalId = undefined;
+      this.intervalId = null;
     }
-    this.isRunning = false;
-    console.log('🛑 Autonomous listing stopped');
+    console.log('🛑 Autonomous Listing Job stopped');
+    return { stopped: true };
   }
 
-  /**
-   * Run a single listing cycle
-   */
-  private async runListing(config: AutoListingConfig): Promise<void> {
-    try {
-      console.log('🔍 Scanning for opportunities to list...');
-
-      // Find high-quality opportunities
-      const opportunities = await this.engine.findOpportunities({
-        filters: {
-          minProfit: config.minProfit,
-          minROI: config.minROI,
-        },
-      });
-
-      if (opportunities.length === 0) {
-        console.log('   No opportunities found this cycle');
-        return;
-      }
-
-      console.log(`   Found ${opportunities.length} potential opportunities`);
-
-      // Filter and score opportunities
-      const scoredOpportunities = [];
-      for (const opp of opportunities) {
-        const analysis = this.engine.analyzeOpportunity(opp);
-
-        if (analysis.score >= config.minScore) {
-          scoredOpportunities.push({
-            opportunity: opp,
-            analysis,
-          });
-        }
-      }
-
-      console.log(`   ${scoredOpportunities.length} opportunities meet score threshold`);
-
-      if (scoredOpportunities.length === 0) {
-        return;
-      }
-
-      // Sort by score (highest first)
-      scoredOpportunities.sort((a, b) => b.analysis.score - a.analysis.score);
-
-      // Limit number of listings per run
-      const toList = scoredOpportunities.slice(0, config.maxListingsPerRun);
-
-      console.log(`   Auto-listing top ${toList.length} opportunities...`);
-
-      // List each opportunity on marketplace
-      for (const { opportunity, analysis } of toList) {
-        await this.listOnMarketplace(opportunity, config.markupPercentage);
-      }
-
-      console.log(`✅ Autonomous listing cycle complete: ${toList.length} products listed`);
-    } catch (error) {
-      console.error('❌ Error in autonomous listing:', error);
-    }
-  }
-
-  /**
-   * List a single opportunity on marketplace
-   */
-  private async listOnMarketplace(
-    opportunity: any,
-    markupPercentage: number
-  ): Promise<void> {
-    try {
-      // Call marketplace listing API
-      const response = await fetch('http://localhost:3000/api/marketplace/list', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          opportunityId: opportunity.id,
-          productTitle: opportunity.title,
-          productDescription: this.generateDescription(opportunity),
-          productImageUrls: opportunity.images || [],
-          supplierPrice: opportunity.buyPrice,
-          supplierUrl: opportunity.buyUrl,
-          supplierPlatform: opportunity.buyPlatform?.toLowerCase() || 'unknown',
-          markupPercentage,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log(`   ✅ Listed: ${opportunity.title.substring(0, 50)}...`);
-        console.log(`      Price: $${data.listing.marketplacePrice} | Profit: $${data.listing.estimatedProfit}`);
-      } else {
-        console.error(`   ❌ Failed to list: ${opportunity.title.substring(0, 50)}...`);
-      }
-    } catch (error) {
-      console.error(`   ❌ Error listing ${opportunity.title}:`, error);
-    }
-  }
-
-  /**
-   * Generate product description
-   */
-  private generateDescription(opportunity: any): string {
-    return `
-${opportunity.title}
-
-🚀 Fast Shipping | 📦 Brand New | ✅ Authentic
-
-${opportunity.description || 'High-quality product at a great price!'}
-
-• Free shipping on orders over $50
-• 30-day money-back guarantee
-• Secure payment processing
-• Ships within 1-2 business days
-
-Order now and get your item delivered quickly!
-    `.trim();
-  }
-
-  /**
-   * Get job status
-   */
   getStatus() {
-    return {
-      running: this.isRunning,
-      hasInterval: !!this.intervalId,
-    };
+    return { running: this.running };
+  }
+
+  private async runCycle(config: any) {
+    try {
+      console.log('🔄 Running autonomous listing cycle...');
+      
+      // 1. Scan for opportunities
+      const scanConfig: AutonomousConfig = {
+        minScore: config.minScore || 75,
+        minROI: config.minROI || 15,
+        minProfit: config.minProfit || 20,
+        maxPrice: 1000,
+        categories: [],
+        scanInterval: 15,
+        autoBuyEnabled: false,
+        autoBuyScore: 95,
+        dailyBudget: 1000,
+        enabledPlatforms: [],
+        remoteOnly: true
+      };
+
+      const opportunities = await this.engine.runScan(scanConfig);
+      console.log(`   Found ${opportunities.length} opportunities`);
+
+      // 2. Process each opportunity
+      for (const opp of opportunities) {
+        // TODO: Check if already listed
+
+        // 3. Create Listing and save to marketplace storage
+        const listingId = `auto-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        const listing: MarketplaceListing = {
+          listingId,
+          opportunityId: opp.id,
+          productTitle: opp.product.title,
+          productDescription: opp.product.description || opp.product.title,
+          productImages: opp.product.images || [],
+          supplierPrice: opp.product.price,
+          supplierUrl: opp.metadata?.buyUrl || '',
+          supplierPlatform: opp.metadata?.dataSource || 'unknown',
+          marketplacePrice: opp.profit.targetPrice,
+          estimatedProfit: opp.profit.netProfit,
+          status: 'active',
+          listedAt: new Date(),
+          expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
+        };
+
+        console.log(`   📝 Creating listing for: ${listing.productTitle}`);
+        console.log(`      Supplier: ${listing.supplierPlatform} - $${listing.supplierPrice}`);
+        console.log(`      Marketplace: $${listing.marketplacePrice} (profit: $${listing.estimatedProfit})`);
+
+        // Save to shared marketplace storage
+        await saveListing(listing);
+        console.log(`      ✅ Saved to marketplace storage`);
+
+        // 4. Create Ad Campaigns
+        await this.adManager.createCampaignsForListing(listing);
+      }
+
+    } catch (error) {
+      console.error('❌ Error in autonomous listing cycle:', error);
+    }
   }
 }
 
-// Export singleton instance
 export const autonomousListing = new AutonomousListingJob();

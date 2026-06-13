@@ -2,24 +2,20 @@
   "name": "arbi",
   "version": "0.1.0",
   "private": true,
-  "description": "AI orchestration platform with agent management, web automation, voice interface, and secure transactions",
+  "description": "ARBI - Autonomous arbitrage backend API and CLI for zero-capital dropshipping across eBay, Amazon, and Walmart",
   "engines": {
     "node": ">=18.0.0",
     "pnpm": ">=8.0.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "19.0.1",
-      "@types/react-dom": "19.0.2"
-    }
   },
   "scripts": {
     "build": "turbo run build",
     "build:api": "pnpm --filter @arbi/api build",
     "build:dashboard": "pnpm --filter @arbi/dashboard build",
+    "build:landing": "pnpm --filter @arbi/landing build",
     "dev": "turbo run dev",
     "dev:api": "pnpm --filter @arbi/api dev",
     "dev:dashboard": "pnpm --filter @arbi/dashboard dev",
+    "dev:landing": "pnpm --filter @arbi/landing dev",
     "start:api": "pnpm --filter @arbi/api start",
     "start:dashboard": "pnpm --filter @arbi/dashboard start",
     "test": "turbo run test",
@@ -31,7 +27,8 @@
   "devDependencies": {
     "@commitlint/cli": "^18.6.0",
     "@commitlint/config-conventional": "^18.6.0",
-    "@types/node": "^20.19.24",
+    "@types/axios": "^0.14.4",
+    "@types/node": "^20.19.27",
     "@typescript-eslint/eslint-plugin": "^6.19.1",
     "@typescript-eslint/parser": "^6.19.1",
     "eslint": "^8.56.0",
@@ -52,7 +49,9 @@
   ],
   "dependencies": {
     "@babel/runtime": "^7.28.4",
+    "axios": "^1.13.2",
     "babel-runtime": "^6.26.0",
-    "cheerio": "^1.1.2"
+    "cheerio": "^1.1.2",
+    "googleapis": "^167.0.0"
   }
 }

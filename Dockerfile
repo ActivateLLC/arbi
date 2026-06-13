@@ -1,0 +1,55 @@
+# Use official Playwright image with pre-installed browsers
+# This provides a fully autonomous solution with Chromium, Firefox, and WebKit.
+# IMPORTANT: keep this image tag in lockstep with the `playwright`/`playwright-core`
+# version in pnpm-lock.yaml — a mismatch means the preinstalled browsers won't
+# match the runtime and chromium.launch() fails (we set PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1).
+# Locked at playwright 1.58.0.
+# Last updated: 2026-06-13
+FROM mcr.microsoft.com/playwright:v1.58.0-noble
+
+# Set working directory
+WORKDIR /app
+
+# Install pnpm globally
+RUN npm install -g pnpm@8.14.0
+
+# Copy package files and workspace configuration
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY tsconfig.json ./
+
+# Copy all workspace packages and apps
+COPY packages ./packages
+COPY apps ./apps
+
+# Install dependencies (no frozen lockfile due to lockfile sync issues)
+RUN pnpm install --no-frozen-lockfile
+
+# Build workspace packages first (dependencies of API)
+RUN pnpm --filter "@arbi/data" build || true
+RUN pnpm --filter "@arbi/arbitrage-engine" build || true
+RUN pnpm --filter "@arbi/ai-engine" build || true
+RUN pnpm --filter "@arbi/transaction" build || true
+RUN pnpm --filter "@arbi/voice-interface" build || true
+RUN pnpm --filter "@arbi/web-automation" build || true
+
+# Build the API
+RUN pnpm --filter "@arbi/api" build
+
+# Set environment variables
+ENV NODE_ENV=production
+ENV PORT=3000
+
+# Playwright browsers are already installed in the image
+# Skip browser download to save time and space
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
+
+# Expose port
+EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# Start the API server from root (workspace symlinks require root context)
+WORKDIR /app
+CMD ["node", "apps/api/dist/index.js"]

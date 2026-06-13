@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Rotated cyan square background - larger, fills more space -->
+  <rect x="10" y="10" width="80" height="80" fill="#00f0ff" transform="rotate(45 50 50)"/>
+  <!-- Rotated white border -->
+  <rect x="10" y="10" width="80" height="80" fill="none" stroke="white" stroke-width="3" transform="rotate(45 50 50)"/>
+  <!-- Letter A - larger -->
+  <text x="50" y="72" font-family="Syne, sans-serif" font-size="60" font-weight="bold" fill="#000000" text-anchor="middle">A</text>
+</svg>

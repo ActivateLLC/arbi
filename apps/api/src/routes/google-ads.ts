@@ -3,6 +3,7 @@
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
+import axios from 'axios';
 import { ApiError } from '../middleware/errorHandler';
 import {
   createAutomatedCampaign,
@@ -245,6 +246,50 @@ router.get('/quick-start-now', async (req: Request, res: Response, next: NextFun
   } catch (error: any) {
     next(error);
   }
+});
+
+/**
+ * GET /api/google-ads/debug-auth
+ * Diagnostic: shows the (masked) credentials the SERVICE actually sees, and
+ * directly exchanges the refresh token with Google so we get the exact error.
+ * Remove after debugging. Secrets are masked.
+ */
+router.get('/debug-auth', async (_req: Request, res: Response) => {
+  const clientId = process.env.GOOGLE_ADS_CLIENT_ID || '';
+  const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET || '';
+  const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN || '';
+
+  const env = {
+    clientId: clientId ? `${clientId.slice(0, 30)}… (len ${clientId.length})` : '(MISSING)',
+    clientSecretPresent: !!clientSecret,
+    clientSecretLen: clientSecret.length,
+    refreshTokenMasked: refreshToken ? `${refreshToken.slice(0, 6)}…${refreshToken.slice(-6)} (len ${refreshToken.length})` : '(MISSING)',
+    refreshTokenStartsWith1Slash: refreshToken.startsWith('1//'),
+    customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || '(MISSING)',
+    developerTokenPresent: !!process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
+  };
+
+  let googleTokenExchange: any;
+  try {
+    const body = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }).toString();
+    const r = await axios.post('https://oauth2.googleapis.com/token', body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      validateStatus: () => true,
+      timeout: 15000,
+    });
+    googleTokenExchange = r.status === 200
+      ? { status: 200, ok: true, hasAccessToken: !!r.data.access_token }
+      : { status: r.status, error: r.data?.error, error_description: r.data?.error_description };
+  } catch (e: any) {
+    googleTokenExchange = { error: e.message };
+  }
+
+  res.json({ env, googleTokenExchange });
 });
 
 export default router;

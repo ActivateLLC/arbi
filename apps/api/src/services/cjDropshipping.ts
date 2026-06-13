@@ -127,11 +127,13 @@ export class CJDropshippingClient {
       page: String(opts.page || 1),
       size: String(Math.min(opts.size || 20, 100)),
       startWarehouseInventory: '1', // in-stock only
-      productFlag: String(opts.productFlag ?? 0), // 0 = Trending/hot
       // Order by listed-count (demand proxy), NOT price. orderBy: 1=listed count.
       orderBy: String(opts.orderBy ?? 1),
       sort: 'desc',
     };
+    // Only constrain to a product flag (e.g. 0=Trending) when one is explicitly
+    // requested. Forcing Trending AND a keyword intersects to ~nothing.
+    if (opts.productFlag != null) params.productFlag = String(opts.productFlag);
     if (opts.keyword) params.keyWord = opts.keyword;
     if (opts.categoryId) params.categoryId = opts.categoryId;
 

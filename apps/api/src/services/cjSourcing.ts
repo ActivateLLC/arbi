@@ -40,7 +40,9 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   const pool = await cjClient.searchProducts({
     keyword: opts.keyword,
     categoryId: opts.categoryId,
-    productFlag: 0, // Trending
+    // Trending only for generic discovery; a keyword/category searches the full
+    // catalog (otherwise Trending ∩ keyword returns almost nothing).
+    productFlag: (opts.keyword || opts.categoryId) ? undefined : 0,
     size: Math.min(Math.max(count * 4, 20), 100),
   });
 

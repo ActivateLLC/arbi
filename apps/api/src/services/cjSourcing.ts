@@ -10,6 +10,7 @@
 
 import { cjClient, isCJConfigured } from './cjDropshipping';
 import { saveListing, MarketplaceListing } from '../routes/marketplace';
+import { scoreExpectedValue } from '@arbi/arbitrage-engine';
 
 export interface CJSourceOptions {
   keyword?: string;
@@ -34,17 +35,38 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   const count = Math.min(Math.max(opts.count || 5, 1), 20);
   const markup = opts.markupPercentage ?? 100;
 
-  const products = await cjClient.searchProducts({
+  // Over-fetch a real pool so selection is by expected value, not by whatever
+  // CJ returns first (which trends cheap). Ordered by listed-count (demand), not price.
+  const pool = await cjClient.searchProducts({
     keyword: opts.keyword,
     categoryId: opts.categoryId,
-    productFlag: 0, // Trending — demand-first
-    size: count * 2, // over-fetch; some may lack a usable variant
+    productFlag: 0, // Trending
+    size: Math.min(Math.max(count * 4, 20), 100),
   });
+
+  // Rank price-agnostically by expected value (demand × premium). listedNum is
+  // the demand proxy; profit-per-unit scales with the product's own price, so a
+  // higher-priced high-demand item can outrank a cheap one — no price bias.
+  const ranked = pool
+    .map((p) => {
+      const price = num(p.sellPrice, p.nowPrice);
+      const marketplacePrice = price * (1 + markup / 100);
+      const marginPercent = marketplacePrice > 0 ? ((marketplacePrice - price) / marketplacePrice) * 100 : 0;
+      const ev = scoreExpectedValue({
+        profitPerUnit: marketplacePrice - price,
+        marginPercent,
+        monthlySalesProxy: num(p.listedNum, p.listedCount, p.listedNum),
+        trending: true,
+      });
+      return { p, score: ev.lucrativeScore, expectedMonthlyProfit: ev.expectedMonthlyProfit };
+    })
+    .filter((x) => num(x.p.sellPrice, x.p.nowPrice) > 0)
+    .sort((a, b) => b.score - a.score);
 
   const created: any[] = [];
   const skipped: any[] = [];
 
-  for (const p of products) {
+  for (const { p } of ranked) {
     if (created.length >= count) break;
 
     const pid = str(p.pid, p.id);
@@ -110,7 +132,8 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     sourced: created.length,
     created,
     skippedCount: skipped.length,
+    poolSize: pool.length,
     // a raw sample helps confirm CJ field names on first live run
-    sample: products[0] ? { keys: Object.keys(products[0]) } : null,
+    sample: pool[0] ? { keys: Object.keys(pool[0]) } : null,
   };
 }

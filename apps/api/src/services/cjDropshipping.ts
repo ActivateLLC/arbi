@@ -122,12 +122,15 @@ export class CJDropshippingClient {
    * default to productFlag=0 (Trending) and never apply a price filter.
    * Returns the flattened product list items.
    */
-  async searchProducts(opts: { keyword?: string; categoryId?: string; productFlag?: number; page?: number; size?: number } = {}): Promise<any[]> {
+  async searchProducts(opts: { keyword?: string; categoryId?: string; productFlag?: number; page?: number; size?: number; orderBy?: number } = {}): Promise<any[]> {
     const params: Record<string, string> = {
       page: String(opts.page || 1),
       size: String(Math.min(opts.size || 20, 100)),
       startWarehouseInventory: '1', // in-stock only
       productFlag: String(opts.productFlag ?? 0), // 0 = Trending/hot
+      // Order by listed-count (demand proxy), NOT price. orderBy: 1=listed count.
+      orderBy: String(opts.orderBy ?? 1),
+      sort: 'desc',
     };
     if (opts.keyword) params.keyWord = opts.keyword;
     if (opts.categoryId) params.categoryId = opts.categoryId;

@@ -6,7 +6,10 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { getDatabase } from '../config/database';
-import { supplierFulfillment } from '../services/supplierFulfillment';
+import { recordTrade } from './revenue';
+// NOTE: supplierFulfillment is imported lazily inside the auto-fulfillment
+// branch below — it pulls in the optional @browserbasehq/stagehand dependency,
+// so we must not load it at module init (it would crash boot if not installed).
 
 const router = Router();
 
@@ -18,9 +21,11 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
 /**
  * POST /api/webhooks/stripe
- * Handle Stripe webhook events
+ * Handle Stripe webhook events.
+ * Mounted at '/api/webhooks/stripe' in index.ts with a raw body parser, so the
+ * route path here is the mount root ('/').
  */
-router.post('/stripe', async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const sig = req.headers['stripe-signature'];
 
   if (!sig || !stripe || !webhookSecret) {
@@ -73,11 +78,10 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   console.log('   Amount Paid:', `$${(session.amount_total! / 100).toFixed(2)}`);
 
   try {
-    // Extract order details from metadata
-    const metadata = session.metadata;
-    if (!metadata) {
-      throw new Error('No metadata in session');
-    }
+    // Extract order details from metadata. Never hard-fail on partial data:
+    // a completed payment must always be recorded so revenue is never silently
+    // dropped. Missing fields fall back to safe defaults.
+    const metadata = session.metadata || {};
 
     const listingId = metadata.listingId;
     const quantity = parseInt(metadata.quantity || '1');
@@ -91,18 +95,29 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     console.log('      Supplier Price:', `$${supplierPrice}`);
     console.log('      Your Profit:', `$${estimatedProfit}`);
 
-    // Get customer shipping address from Stripe
-    const shippingAddress = session.shipping_details?.address;
-    if (!shippingAddress) {
-      throw new Error('No shipping address provided');
-    }
+    // Get customer shipping address from Stripe. Stripe moved/renamed this
+    // field across API versions, so fall back to the customer's billing address
+    // and never drop the order if it's absent — fulfillment can be completed
+    // manually, but the sale and revenue must still be recorded.
+    const shippingDetails: any = (session as any).shipping_details
+      ?? (session as any).collected_information?.shipping_details
+      ?? null;
+    const shippingAddress: any = shippingDetails?.address
+      ?? session.customer_details?.address
+      ?? {};
+    const shippingName: string =
+      shippingDetails?.name ?? session.customer_details?.name ?? '';
 
-    console.log('   📫 Shipping To:');
-    console.log('      Name:', session.shipping_details?.name);
-    console.log('      Address:', shippingAddress.line1);
-    console.log('      City:', shippingAddress.city);
-    console.log('      State:', shippingAddress.state);
-    console.log('      ZIP:', shippingAddress.postal_code);
+    if (!shippingDetails?.address) {
+      console.warn('   ⚠️  No shipping address on session — recording sale anyway (manual fulfillment).');
+    } else {
+      console.log('   📫 Shipping To:');
+      console.log('      Name:', shippingName);
+      console.log('      Address:', shippingAddress.line1);
+      console.log('      City:', shippingAddress.city);
+      console.log('      State:', shippingAddress.state);
+      console.log('      ZIP:', shippingAddress.postal_code);
+    }
 
     // Save order to database
     const db = getDatabase();
@@ -111,13 +126,13 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       listingId,
       buyerEmail: session.customer_details?.email || 'unknown@email.com',
       buyerShippingAddress: {
-        name: session.shipping_details?.name || '',
-        line1: shippingAddress.line1,
+        name: shippingName,
+        line1: shippingAddress.line1 || '',
         line2: shippingAddress.line2 || '',
-        city: shippingAddress.city,
-        state: shippingAddress.state,
-        postalCode: shippingAddress.postal_code,
-        country: shippingAddress.country,
+        city: shippingAddress.city || '',
+        state: shippingAddress.state || '',
+        postalCode: shippingAddress.postal_code || '',
+        country: shippingAddress.country || '',
       },
       paymentIntentId: session.payment_intent?.toString() || session.id,
       amountPaid: session.amount_total! / 100,
@@ -136,17 +151,33 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     await db.create('BuyerOrder', order);
     console.log('   ✅ Order saved to database:', order.orderId);
 
+    // Record the sale into the live revenue tracker so the dashboard's revenue
+    // metric reflects real income (decoupled before this).
+    try {
+      recordTrade({
+        tradeId: order.orderId,
+        productTitle: listingId,
+        grossProfit: isNaN(estimatedProfit) ? 0 : estimatedProfit,
+      });
+    } catch (e: any) {
+      console.error('   ⚠️  Failed to record revenue for order:', e.message);
+    }
+
     // 🤖 AUTO-PURCHASE FROM ANY SUPPLIER (Amazon, Walmart, Target, eBay, etc.)
     if (process.env.ENABLE_AUTO_FULFILLMENT === 'true' && supplierUrl) {
       console.log('\n🤖 INITIATING AUTOMATED MULTI-VENDOR FULFILLMENT...');
 
       try {
+        // Lazy-load: only pulls in @browserbasehq/stagehand when auto-fulfillment
+        // is actually enabled. If the package isn't installed this throws and is
+        // caught below, leaving the order saved for manual fulfillment.
+        const { supplierFulfillment } = await import('../services/supplierFulfillment');
         const fulfillmentResult = await supplierFulfillment.fulfillOrder({
           orderId: order.orderId,
           productUrl: supplierUrl,
           quantity,
           shippingAddress: {
-            name: session.shipping_details?.name || '',
+            name: shippingName,
             line1: shippingAddress.line1,
             line2: shippingAddress.line2 || '',
             city: shippingAddress.city,
@@ -187,7 +218,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       console.log('   🛒 Purchase from:', supplierUrl);
       console.log('   📦 Quantity:', quantity);
       console.log('   💵 Using buyer\'s money: $', session.amount_total! / 100);
-      console.log('   📬 Ship to:', session.shipping_details?.name);
+      console.log('   📬 Ship to:', shippingName);
       console.log('      ', `${shippingAddress.line1}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postal_code}`);
     }
 

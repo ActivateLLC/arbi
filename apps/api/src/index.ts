@@ -9,6 +9,7 @@ import { errorHandler } from './middleware/errorHandler';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
+import stripeWebhookRoutes from './routes/stripe-webhooks';
 
 // Initialize logger
 const logger = createLogger();
@@ -20,6 +21,13 @@ const port = process.env.PORT || 3000;
 // Apply middleware
 app.use(helmet());
 app.use(cors());
+
+// Stripe webhook signature verification requires the raw, unparsed request
+// body, so this route must be mounted BEFORE express.json(). This closes the
+// fulfillment loop: on checkout.session.completed it saves the BuyerOrder and
+// (when ENABLE_AUTO_FULFILLMENT=true) triggers supplier purchase.
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
+
 app.use(express.json());
 app.use(morgan('dev'));
 

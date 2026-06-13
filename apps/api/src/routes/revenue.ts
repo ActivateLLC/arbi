@@ -226,57 +226,61 @@ router.post('/set-target', (req: Request, res: Response, next: NextFunction) => 
 });
 
 /**
+ * Record a completed trade/sale toward the revenue target.
+ * Exported so other modules (e.g. the Stripe webhook on a real paid order) can
+ * update the live revenue tracker directly, not just the HTTP route.
+ */
+export function recordTrade(params: { tradeId?: string; productTitle?: string; grossProfit: number }) {
+  const { tradeId, productTitle, grossProfit } = params;
+
+  if (typeof grossProfit !== 'number' || isNaN(grossProfit) || grossProfit < 0) {
+    throw new ApiError(400, 'grossProfit must be a positive number');
+  }
+
+  // Calculate commission split using constants
+  const platformCommission = grossProfit * PLATFORM_COMMISSION_RATE;
+  const netUserProfit = grossProfit * USER_SHARE_RATE;
+  const id = tradeId || `trade_${Date.now()}`;
+
+  // Update state
+  revenueState.currentRevenue += grossProfit;
+  revenueState.platformCommission += platformCommission;
+  revenueState.tradesExecuted += 1;
+  revenueState.avgProfitPerTrade = revenueState.currentRevenue / revenueState.tradesExecuted;
+
+  // Add to history
+  revenueState.history.push({
+    timestamp: new Date(),
+    tradeId: id,
+    productTitle: productTitle || 'Unknown Product',
+    grossProfit,
+    platformCommission,
+    netUserProfit
+  });
+
+  const progressPercent = (revenueState.currentRevenue / revenueState.targetAmount) * 100;
+  console.log(`💰 Trade recorded: $${grossProfit.toFixed(2)} profit (${progressPercent.toFixed(1)}% of target)`);
+
+  return {
+    trade: { tradeId: id, productTitle, grossProfit, platformCommission, netUserProfit },
+    progress: {
+      totalRevenue: parseFloat(revenueState.currentRevenue.toFixed(2)),
+      targetAmount: revenueState.targetAmount,
+      percentComplete: parseFloat(progressPercent.toFixed(2)),
+      tradesExecuted: revenueState.tradesExecuted
+    }
+  };
+}
+
+/**
  * POST /api/revenue/record-trade
  * Record a completed trade toward the revenue target
  */
 router.post('/record-trade', (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { tradeId, productTitle, grossProfit, buyPrice, sellPrice } = req.body;
-    
-    if (!grossProfit || grossProfit < 0) {
-      throw new ApiError(400, 'grossProfit must be a positive number');
-    }
-    
-    // Calculate commission split using constants
-    const platformCommission = grossProfit * PLATFORM_COMMISSION_RATE;
-    const netUserProfit = grossProfit * USER_SHARE_RATE;
-    
-    // Update state
-    revenueState.currentRevenue += grossProfit;
-    revenueState.platformCommission += platformCommission;
-    revenueState.tradesExecuted += 1;
-    revenueState.avgProfitPerTrade = revenueState.currentRevenue / revenueState.tradesExecuted;
-    
-    // Add to history
-    revenueState.history.push({
-      timestamp: new Date(),
-      tradeId: tradeId || `trade_${Date.now()}`,
-      productTitle: productTitle || 'Unknown Product',
-      grossProfit,
-      platformCommission,
-      netUserProfit
-    });
-    
-    const progressPercent = (revenueState.currentRevenue / revenueState.targetAmount) * 100;
-    
-    console.log(`💰 Trade recorded: $${grossProfit.toFixed(2)} profit (${progressPercent.toFixed(1)}% of target)`);
-    
-    res.status(200).json({
-      success: true,
-      trade: {
-        tradeId: tradeId || `trade_${Date.now()}`,
-        productTitle,
-        grossProfit,
-        platformCommission,
-        netUserProfit
-      },
-      progress: {
-        totalRevenue: parseFloat(revenueState.currentRevenue.toFixed(2)),
-        targetAmount: revenueState.targetAmount,
-        percentComplete: parseFloat(progressPercent.toFixed(2)),
-        tradesExecuted: revenueState.tradesExecuted
-      }
-    });
+    const { tradeId, productTitle, grossProfit } = req.body;
+    const result = recordTrade({ tradeId, productTitle, grossProfit });
+    res.status(200).json({ success: true, ...result });
   } catch (error) {
     next(error);
   }

@@ -14,6 +14,7 @@ import marketplaceRoutes from './marketplace';
 import trendsRoutes from './trends';
 import testGoogleAdsRoutes from './test-google-ads';
 import campaignLauncherRoutes from './campaign-launcher';
+import googleAdsRoutes from './google-ads';
 
 const router = Router();
 
@@ -55,5 +56,8 @@ router.use('/test', testGoogleAdsRoutes);
 
 // Campaign management
 router.use('/campaigns', campaignLauncherRoutes);
+
+// Google Ads campaign automation (real google-ads-api; campaigns created PAUSED)
+router.use('/google-ads', googleAdsRoutes);
 
 export default router;

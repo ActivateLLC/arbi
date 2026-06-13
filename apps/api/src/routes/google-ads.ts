@@ -11,9 +11,38 @@ import {
   ProductAdData,
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
-import { prisma } from '@arbi/data';
+import { getListings } from './marketplace';
 
 const router = Router();
+
+/**
+ * Fetch active marketplace listings (via getListings, which handles the DB +
+ * in-memory fallback) and map them into the ProductAdData shape the campaign
+ * automation expects. Optionally filter by a minimum profit margin (%).
+ */
+async function getActiveProductsForAds(limit: number, minProfitMargin = 0): Promise<ProductAdData[]> {
+  const listings = await getListings('active');
+
+  return (listings as any[])
+    .map((l) => {
+      const price = Number(l.marketplacePrice) || 0;
+      const profit = Number(l.estimatedProfit) || 0;
+      const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
+      return {
+        productId: l.listingId,
+        productName: l.productTitle,
+        productPrice: price,
+        profitMargin,
+        category: l.supplierPlatform || 'general',
+        targetCountry: 'US',
+        landingPageUrl: `https://www.arbi.creai.dev/product/${l.listingId}`,
+        videoUrl: undefined,
+      } as ProductAdData;
+    })
+    .filter((p) => p.profitMargin >= minProfitMargin)
+    .sort((a, b) => b.profitMargin - a.profitMargin)
+    .slice(0, limit);
+}
 
 /**
  * POST /api/google-ads/create-campaign
@@ -83,30 +112,10 @@ router.post('/auto-campaign-from-marketplace', async (req: Request, res: Respons
 
     console.log(`🎯 Fetching top ${limit} products with ${minProfitMargin}% minimum profit margin...`);
 
-    // Get top profitable products from marketplace
-    const products = await prisma.listing.findMany({
-      where: {
-        status: 'active',
-        profitMargin: {
-          gte: minProfitMargin,
-        },
-      },
-      orderBy: {
-        profitMargin: 'desc',
-      },
-      take: limit,
-      select: {
-        id: true,
-        title: true,
-        price: true,
-        profitMargin: true,
-        category: true,
-        imageUrl: true,
-        url: true,
-      },
-    });
+    // Get top profitable active listings from the marketplace data store
+    const productAdData = await getActiveProductsForAds(limit, minProfitMargin);
 
-    if (products.length === 0) {
+    if (productAdData.length === 0) {
       return res.status(200).json({
         success: true,
         message: `No products found with minimum ${minProfitMargin}% profit margin`,
@@ -114,19 +123,7 @@ router.post('/auto-campaign-from-marketplace', async (req: Request, res: Respons
       });
     }
 
-    console.log(`✅ Found ${products.length} products. Creating campaigns...`);
-
-    // Transform to ProductAdData format
-    const productAdData: ProductAdData[] = products.map(p => ({
-      productId: p.id,
-      productName: p.title,
-      productPrice: p.price,
-      profitMargin: p.profitMargin,
-      category: p.category,
-      targetCountry: 'US', // Default to US, can be made dynamic
-      landingPageUrl: `https://arbi.creai.dev/product/${p.id}`,
-      videoUrl: undefined, // Can be populated if we have extracted winning ads
-    }));
+    console.log(`✅ Found ${productAdData.length} products. Creating campaigns...`);
 
     // Create campaigns
     const config: CampaignConfig = {
@@ -141,10 +138,10 @@ router.post('/auto-campaign-from-marketplace', async (req: Request, res: Respons
     res.status(201).json({
       success: true,
       message: `Created ${result.success} campaigns for top marketplace products`,
-      totalProducts: products.length,
+      totalProducts: productAdData.length,
       ...result,
-      totalBudget: products.length * dailyBudgetPerProduct,
-      estimatedMonthlySpend: products.length * dailyBudgetPerProduct * 30,
+      totalBudget: productAdData.length * dailyBudgetPerProduct,
+      estimatedMonthlySpend: productAdData.length * dailyBudgetPerProduct * 30,
     });
   } catch (error: any) {
     console.error('❌ Auto-campaign creation failed:', error.message);
@@ -185,49 +182,19 @@ router.post('/quick-start', async (req: Request, res: Response, next: NextFuncti
   try {
     console.log('🚀 Google Ads Quick Start - Automated Campaign Creation');
 
-    // Step 1: Get top 5 highest profit margin products
-    const topProducts = await prisma.listing.findMany({
-      where: {
-        status: 'active',
-        profitMargin: {
-          gte: 30, // Only products with 30%+ margin
-        },
-      },
-      orderBy: {
-        profitMargin: 'desc',
-      },
-      take: 5,
-      select: {
-        id: true,
-        title: true,
-        price: true,
-        profitMargin: true,
-        category: true,
-        url: true,
-      },
-    });
+    // Step 1: Get top 5 highest-margin active listings (30%+ margin)
+    const products = await getActiveProductsForAds(5, 30);
 
-    if (topProducts.length === 0) {
+    if (products.length === 0) {
       return res.status(200).json({
         success: false,
         message: 'No products with 30%+ profit margin found. Add products first.',
       });
     }
 
-    console.log(`✅ Found ${topProducts.length} high-margin products`);
+    console.log(`✅ Found ${products.length} high-margin products`);
 
-    // Step 2: Transform to campaign format
-    const products: ProductAdData[] = topProducts.map(p => ({
-      productId: p.id,
-      productName: p.title,
-      productPrice: p.price,
-      profitMargin: p.profitMargin,
-      category: p.category,
-      targetCountry: 'US',
-      landingPageUrl: `https://arbi.creai.dev/product/${p.id}`,
-    }));
-
-    // Step 3: Create campaigns with conservative budget
+    // Step 2: Create campaigns with conservative budget
     const config: CampaignConfig = {
       dailyBudget: 20, // Start conservative at $20/day per product
       targetROAS: 4.0, // Target $4 revenue per $1 spent (aggressive)
@@ -242,9 +209,9 @@ router.post('/quick-start', async (req: Request, res: Response, next: NextFuncti
       message: `🎉 Quick Start Complete! Created ${result.success} campaigns`,
       campaigns: result.results,
       budget: {
-        dailyBudget: topProducts.length * 20,
-        estimatedMonthlySpend: topProducts.length * 20 * 30,
-        projectedMonthlyRevenue: topProducts.length * 20 * 30 * 4, // 4x ROAS target
+        dailyBudget: products.length * 20,
+        estimatedMonthlySpend: products.length * 20 * 30,
+        projectedMonthlyRevenue: products.length * 20 * 30 * 4, // 4x ROAS target
       },
       nextSteps: [
         'Review campaigns in Google Ads dashboard',

@@ -56,6 +56,19 @@
       background-color: var(--bg-dark);
       color: #e2e8f0;
       overflow-x: hidden;
+      /* Smooth scrolling optimizations */
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      scroll-behavior: smooth;
+    }
+
+    /* Hardware acceleration for smooth animations */
+    nav, main, .fixed, .absolute {
+      will-change: transform;
+      transform: translateZ(0);
+      -webkit-transform: translateZ(0);
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
     }
     h1, h2, h3, h4, h5, h6 {
       font-family: 'Syne', sans-serif;
@@ -95,8 +108,18 @@
     /* Custom Scrollbar */
     ::-webkit-scrollbar { width: 6px; }
     ::-webkit-scrollbar-track { background: #000; }
-    ::-webkit-scrollbar-thumb { background: #333; }
-    ::-webkit-scrollbar-thumb:hover { background: #00f0ff; }
+    ::-webkit-scrollbar-thumb {
+      background: #333;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #00f0ff;
+    }
+
+    /* Smooth scroll for all elements */
+    * {
+      -webkit-overflow-scrolling: touch;
+    }
     
     .text-glow { text-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
     .text-glow-purple { text-shadow: 0 0 20px rgba(112, 0, 255, 0.5); }

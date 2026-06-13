@@ -255,9 +255,9 @@ router.get('/quick-start-now', async (req: Request, res: Response, next: NextFun
  * Remove after debugging. Secrets are masked.
  */
 router.get('/debug-auth', async (_req: Request, res: Response) => {
-  const clientId = process.env.GOOGLE_ADS_CLIENT_ID || '';
-  const clientSecret = process.env.GOOGLE_ADS_CLIENT_SECRET || '';
-  const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN || '';
+  const clientId = (process.env.GOOGLE_ADS_CLIENT_ID || '').trim();
+  const clientSecret = (process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim();
+  const refreshToken = (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim();
 
   const env = {
     clientId: clientId ? `${clientId.slice(0, 30)}… (len ${clientId.length})` : '(MISSING)',

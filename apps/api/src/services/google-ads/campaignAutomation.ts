@@ -24,9 +24,11 @@ let _client: GoogleAdsApi | null = null;
 function getClient(): GoogleAdsApi {
   if (!_client) {
     _client = new GoogleAdsApi({
-      client_id: process.env.GOOGLE_ADS_CLIENT_ID!,
-      client_secret: process.env.GOOGLE_ADS_CLIENT_SECRET!,
-      developer_token: process.env.GOOGLE_ADS_DEVELOPER_TOKEN!,
+      // .trim() — env values pasted via dashboards often carry a trailing
+      // newline, which silently breaks OAuth (invalid_grant) and customer ids.
+      client_id: (process.env.GOOGLE_ADS_CLIENT_ID || '').trim(),
+      client_secret: (process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim(),
+      developer_token: (process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '').trim(),
     });
   }
   return _client;
@@ -78,8 +80,8 @@ export async function createAutomatedCampaign(
   }
 
   const customer = getClient().Customer({
-    customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!,
-    refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
+    customer_id: (process.env.GOOGLE_ADS_CUSTOMER_ID || '').trim(),
+    refresh_token: (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim(),
   });
 
   console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
@@ -251,8 +253,8 @@ export async function createBulkCampaigns(
  */
 export async function getCampaignMetrics(campaignId: string) {
   const customer = getClient().Customer({
-    customer_id: process.env.GOOGLE_ADS_CUSTOMER_ID!,
-    refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
+    customer_id: (process.env.GOOGLE_ADS_CUSTOMER_ID || '').trim(),
+    refresh_token: (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim(),
   });
 
   const query = `

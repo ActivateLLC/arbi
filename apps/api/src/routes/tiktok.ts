@@ -34,7 +34,7 @@ async function getActiveProductsForTikTok(limit: number, minProfitMargin = 0, da
         productTitle: l.productTitle,
         productDescription: l.productDescription || l.productTitle,
         productImage: Array.isArray(l.productImages) && l.productImages[0] ? l.productImages[0] : '',
-        landingPageUrl: `https://www.arbi.creai.dev/product/${l.listingId}`,
+        landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
         marketplacePrice: price,
         dailyBudget,
       };

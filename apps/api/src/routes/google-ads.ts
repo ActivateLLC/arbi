@@ -36,7 +36,7 @@ async function getActiveProductsForAds(limit: number, minProfitMargin = 0): Prom
         profitMargin,
         category: l.supplierPlatform || 'general',
         targetCountry: 'US',
-        landingPageUrl: `https://www.arbi.creai.dev/product/${l.listingId}`,
+        landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
         videoUrl: undefined,
       } as ProductAdData;
     })

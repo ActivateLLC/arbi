@@ -383,7 +383,10 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       console.error(`   ⚠️  Ad campaign creation failed: ${error.message}`);
     }
 
-    const baseUrl = process.env.PUBLIC_URL || 'https://www.arbi.creai.dev';
+    // Default to the API domain, which serves the product pages and has a valid
+    // cert. (www.arbi.creai.dev currently has no valid TLS cert.) Set PUBLIC_URL
+    // to the storefront domain once its certificate is provisioned.
+    const baseUrl = process.env.PUBLIC_URL || 'https://api.arbi.creai.dev';
     const publicUrl = `${baseUrl}/product/${listingId}`;
 
     res.status(201).json({

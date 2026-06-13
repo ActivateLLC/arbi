@@ -33,6 +33,8 @@ const ENDPOINTS = {
   payBalanceV2: '/shopping/pay/payBalanceV2',
   getOrderDetail: '/shopping/order/getOrderDetail',
   getBalance: '/shopping/pay/getBalance',
+  listV2: '/product/listV2',
+  productQuery: '/product/query',
 };
 
 export interface CJShippingAddress {
@@ -113,6 +115,38 @@ export class CJDropshippingClient {
 
   getBalance() {
     return this.call('GET', ENDPOINTS.getBalance);
+  }
+
+  /**
+   * Search CJ's catalog (GET /product/listV2). Demand-first, price-agnostic:
+   * default to productFlag=0 (Trending) and never apply a price filter.
+   * Returns the flattened product list items.
+   */
+  async searchProducts(opts: { keyword?: string; categoryId?: string; productFlag?: number; page?: number; size?: number } = {}): Promise<any[]> {
+    const params: Record<string, string> = {
+      page: String(opts.page || 1),
+      size: String(Math.min(opts.size || 20, 100)),
+      startWarehouseInventory: '1', // in-stock only
+      productFlag: String(opts.productFlag ?? 0), // 0 = Trending/hot
+    };
+    if (opts.keyword) params.keyWord = opts.keyword;
+    if (opts.categoryId) params.categoryId = opts.categoryId;
+
+    const data = await this.call<any>('GET', ENDPOINTS.listV2, params);
+    // Response shape is data.content[].productList[] (with id/nameEn), but be
+    // defensive about variants seen in the wild (data.list[], flat arrays).
+    const out: any[] = [];
+    const content = data?.content ?? data?.list ?? data ?? [];
+    for (const c of (Array.isArray(content) ? content : [])) {
+      if (Array.isArray(c?.productList)) out.push(...c.productList);
+      else if (c && (c.pid || c.id)) out.push(c);
+    }
+    return out;
+  }
+
+  /** Full product detail incl. variants (GET /product/query). */
+  getProductDetail(pid: string): Promise<any> {
+    return this.call<any>('GET', ENDPOINTS.productQuery, { pid });
   }
 
   /** Cheapest available logistic for a variant to a destination. */

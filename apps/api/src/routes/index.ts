@@ -17,6 +17,7 @@ import campaignLauncherRoutes from './campaign-launcher';
 import googleAdsRoutes from './google-ads';
 import productImageRoutes from './product-image';
 import fulfillmentRoutes from './fulfillment';
+import cjRoutes from './cj';
 
 const router = Router();
 
@@ -67,5 +68,8 @@ router.use('/product-image', productImageRoutes);
 
 // Fulfillment release (never front cash for high-ticket; wait for settled funds)
 router.use('/fulfillment', fulfillmentRoutes);
+
+// CJ Dropshipping sourcing + account (creates fulfillable, CJ-sourced listings)
+router.use('/cj', cjRoutes);
 
 export default router;

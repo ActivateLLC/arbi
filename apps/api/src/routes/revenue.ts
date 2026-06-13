@@ -68,7 +68,7 @@ const AGGRESSIVE_MODE_MULTIPLIER = 5;
 const turboModeConfig = {
   // More aggressive thresholds
   minScore: 60, // Lower score threshold to capture more opportunities
-  minProfit: 15, // Lower minimum profit to increase volume
+  minProfit: 3, // tiny fee-cover floor only; ROI% gates the premium (price-neutral)
   minROI: 12, // Lower ROI threshold
   
   // Faster scanning

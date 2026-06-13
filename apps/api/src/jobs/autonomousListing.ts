@@ -56,8 +56,8 @@ class AutonomousListingJob {
       const scanConfig: AutonomousConfig = {
         minScore: config.minScore || 75,
         minROI: config.minROI || 15,
-        minProfit: config.minProfit || 20,
-        maxPrice: 1000,
+        minProfit: config.minProfit || 3, // tiny fee-cover floor; ROI% is the real gate
+        maxPrice: 0, // 0 = no price ceiling; selection is demand-driven, not price-bounded
         categories: [],
         scanInterval: 15,
         autoBuyEnabled: false,

@@ -20,7 +20,7 @@ router.post('/start-listing', async (req: Request, res: Response) => {
   const {
     scanIntervalMinutes = 60,
     minScore = 75,
-    minProfit = 20,
+    minProfit = 3, // tiny fee-cover floor; ROI% is the real gate (price-neutral)
     minROI = 15,
     markupPercentage = 30,
     maxListingsPerRun = 10,

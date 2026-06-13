@@ -123,7 +123,7 @@ export class SlickdealsScout implements OpportunityScout {
               const price = parseFloat(priceMatch[1]);
               const title = $el.find('a').first().text().trim().substring(0, 200) || 'Deal Item';
               
-              if (price > 20 && title.length > 5) {
+              if (price > 0 && title.length > 5) { // $20 floor removed; selection is demand-driven, not price-bounded
                 deals.push({
                   title,
                   price,

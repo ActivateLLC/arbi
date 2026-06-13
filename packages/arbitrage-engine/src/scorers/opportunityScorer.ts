@@ -135,12 +135,13 @@ export class OpportunityScorer {
   }
 
   private scoreNetProfit(profit: number): number {
-    if (profit >= 50) return 15;
-    if (profit >= 30) return 12;
-    if (profit >= 20) return 10;
-    if (profit >= 10) return 7;
-    if (profit >= 5) return 5;
-    return 0;
+    // Price-neutral viability gate: the premium just has to clear payment +
+    // handling fees. We deliberately do NOT reward larger absolute dollars,
+    // which would bias selection toward high-ticket items. The *premium* is
+    // captured by scoreProfitMargin (margin %) and scoreROI (ROI %); demand
+    // drives the rest. So this is full marks once an item is viable, else 0.
+    const MIN_VIABLE_PROFIT = 3; // covers Stripe (~2.9% + $0.30) + handling
+    return profit >= MIN_VIABLE_PROFIT ? 15 : 0;
   }
 
   private scoreSellerRating(seller: {

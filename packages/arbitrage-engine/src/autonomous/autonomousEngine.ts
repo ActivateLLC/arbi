@@ -25,8 +25,8 @@ export interface ArbitrageOpportunity {
 export interface AutonomousConfig {
   minScore: number; // Minimum score to alert (default: 70)
   minROI: number; // Minimum ROI percentage (default: 20)
-  minProfit: number; // Minimum profit in dollars (default: 5)
-  maxPrice: number; // Maximum purchase price (default: 100)
+  minProfit: number; // Tiny fee-cover floor in dollars; ROI% is the real gate
+  maxPrice: number; // 0 = no price ceiling (selection is demand-driven, price-agnostic)
   categories: string[]; // eBay category IDs to monitor
   scanInterval: number; // Minutes between scans (default: 15)
   autoBuyEnabled: boolean; // Enable autonomous purchases (default: false)

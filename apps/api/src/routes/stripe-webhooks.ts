@@ -179,7 +179,12 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       }, { where: { orderId: order.orderId } });
       console.log('   ⏸️  Held for funds — will fulfill once the customer payment settles. No money fronted.');
     }
-    // 🤖 AUTO-PURCHASE FROM ANY SUPPLIER (Amazon, Walmart, Target, eBay, etc.)
+    // ✅ Funded now (within float). Prefer CJ Dropshipping (supplier → customer)
+    // when the listing is CJ-sourced.
+    else if (await attemptCjFulfillment(order.orderId)) {
+      // CJ placed the order — supplier ships directly to the customer.
+    }
+    // 🤖 Otherwise auto-purchase from the supplier URL via browser automation.
     else if (process.env.ENABLE_AUTO_FULFILLMENT === 'true' && supplierUrl) {
       console.log('\n🤖 INITIATING AUTOMATED MULTI-VENDOR FULFILLMENT...');
 
@@ -250,6 +255,26 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     console.error('\n❌ Error processing checkout:', error.message);
     console.error('   Stack:', error.stack);
   }
+}
+
+/**
+ * Attempt CJ Dropshipping fulfillment (supplier → customer). Returns true only
+ * if CJ actually placed the order, so the caller can fall through to other
+ * fulfillment paths otherwise. Never throws.
+ */
+async function attemptCjFulfillment(orderId: string): Promise<boolean> {
+  try {
+    const { fulfillBuyerOrderViaCJ } = await import('../services/cjFulfillment');
+    const cj = await fulfillBuyerOrderViaCJ(orderId);
+    if (cj.attempted && cj.success) {
+      console.log('   ✅ Fulfilled via CJ Dropshipping (supplier → customer)');
+      return true;
+    }
+    if (cj.attempted) console.warn(`   ⚠️  CJ fulfillment failed: ${cj.reason}`);
+  } catch (e: any) {
+    console.error('   ❌ CJ fulfillment error:', e?.message);
+  }
+  return false;
 }
 
 export default router;

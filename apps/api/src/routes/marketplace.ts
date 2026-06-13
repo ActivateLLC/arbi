@@ -63,7 +63,9 @@ export interface MarketplaceListing {
   productImages: string[]; // Cloudinary URLs
   supplierPrice: number;
   supplierUrl: string;
-  supplierPlatform: string; // "amazon" | "walmart" | "target" | "ebay"
+  supplierPlatform: string; // "amazon" | "walmart" | "target" | "ebay" | "cj"
+  cjVariantId?: string; // CJ Dropshipping variant id (vid) — enables supplier->customer auto-fulfillment
+  cjProductId?: string; // CJ Dropshipping product id (pid), optional
   marketplacePrice: number;
   estimatedProfit: number;
   status: 'active' | 'sold' | 'expired';
@@ -346,6 +348,9 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       supplierPrice,
       supplierUrl,
       supplierPlatform,
+      // CJ variant/product ids (read raw — enables supplier->customer auto-fulfillment)
+      cjVariantId: req.body?.cjVariantId || undefined,
+      cjProductId: req.body?.cjProductId || undefined,
       marketplacePrice: parseFloat(marketplacePrice.toFixed(2)),
       estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
       status: 'active',

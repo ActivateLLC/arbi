@@ -40,7 +40,7 @@ export const createListingSchema = Joi.object({
     .description('Direct link to supplier product page'),
 
   supplierPlatform: Joi.string()
-    .valid('amazon', 'walmart', 'target', 'ebay', 'aliexpress', 'other')
+    .valid('amazon', 'walmart', 'target', 'ebay', 'aliexpress', 'cj', 'other')
     .optional()
     .default('amazon')
     .description('Supplier platform name'),
@@ -50,6 +50,16 @@ export const createListingSchema = Joi.object({
     .max(1000)
     .default(30)
     .description('Markup percentage (e.g., 30 = 30% markup)'),
+
+  cjVariantId: Joi.string()
+    .optional()
+    .max(100)
+    .description('CJ Dropshipping variant id (vid) — enables supplier→customer auto-fulfillment'),
+
+  cjProductId: Joi.string()
+    .optional()
+    .max(100)
+    .description('CJ Dropshipping product id (pid)'),
 });
 
 /**

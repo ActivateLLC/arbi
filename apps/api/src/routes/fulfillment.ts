@@ -65,12 +65,16 @@ router.post('/release-funded', async (_req: Request, res: Response) => {
       }
 
       // Customer's money is in hand — safe to fulfill (no capital fronted).
-      // Mark ready; CJ auto-fulfillment fires here once listings carry a CJ
-      // variant id (see cjDropshipping.ts wiring).
       await db.update('BuyerOrder', {
         status: 'funds_available',
         supplierPurchaseStatus: 'ready',
       }, { where: { orderId: o.orderId } });
+
+      // Ship supplier->customer via CJ when the listing is CJ-sourced; otherwise
+      // it's left 'ready' for manual fulfillment.
+      const { fulfillBuyerOrderViaCJ } = await import('../services/cjFulfillment');
+      const cj = await fulfillBuyerOrderViaCJ(o.orderId);
+      if (cj.attempted && !cj.success) console.warn(`   CJ fulfill failed for ${o.orderId}: ${cj.reason}`);
       released.push(o.orderId);
     }
 

@@ -3,7 +3,7 @@
  * Automatically creates and manages Google Ads campaigns for Arbi products
  */
 
-import { GoogleAdsApi, Customer, Campaign, AdGroup, Ad } from 'google-ads-api';
+import { GoogleAdsApi, Customer, enums } from 'google-ads-api';
 
 // Google Ads Compliance - Inline for build compatibility
 const ALLOWED_COUNTRIES = ['US', 'CA', 'GB', 'AU', 'JP', 'KR', 'SG', 'AE', 'BR', 'MX', 'IN'];
@@ -52,8 +52,21 @@ export interface CampaignConfig {
   gender?: 'MALE' | 'FEMALE' | 'ALL';
 }
 
+// Google Ads text limits
+const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
+const HEADLINE_MAX = 30;
+const DESC_MAX = 90;
+
 /**
- * Create automated Google Ads campaign for a product
+ * Create an automated Google Ads SEARCH campaign for a product.
+ *
+ * SEARCH + Responsive Search Ad is intentional: it's text-only (no image/video
+ * asset uploads or YouTube linkage), uses new-account-safe MAXIMIZE_CONVERSIONS
+ * bidding, and drives intent traffic straight to the product landing page.
+ * Video (YouTube) campaigns require uploaded YouTube assets and are handled by
+ * the Performance Max path instead.
+ *
+ * Everything is created PAUSED — nothing spends until enabled in Google Ads.
  */
 export async function createAutomatedCampaign(
   product: ProductAdData,
@@ -69,159 +82,138 @@ export async function createAutomatedCampaign(
     refresh_token: process.env.GOOGLE_ADS_REFRESH_TOKEN!,
   });
 
-  console.log(`🎯 Creating campaign for: ${product.productName}`);
+  console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
 
-  // Step 1: Create Campaign
-  const campaign = await createCampaign(customer, product, config);
-  console.log(`✅ Campaign created: ${campaign.id}`);
+  // Step 1: Budget (a campaign references a budget resource, it can't inline one)
+  const budgetResource = await createBudget(customer, product, config);
+  console.log(`✅ Budget created: ${budgetResource}`);
 
-  // Step 2: Create Ad Group
-  const adGroup = await createAdGroup(customer, campaign.id, product, config);
-  console.log(`✅ Ad Group created: ${adGroup.id}`);
+  // Step 2: Campaign (PAUSED, MAXIMIZE_CONVERSIONS)
+  const campaignResource = await createCampaign(customer, budgetResource, product);
+  console.log(`✅ Campaign created: ${campaignResource}`);
 
-  // Step 3: Create Video Ad (if video available)
-  let ad;
-  if (product.videoUrl) {
-    ad = await createVideoAd(customer, adGroup.id, product);
-    console.log(`✅ Video Ad created: ${ad.id}`);
-  } else {
-    ad = await createResponsiveAd(customer, adGroup.id, product);
-    console.log(`✅ Responsive Ad created: ${ad.id}`);
-  }
+  // Step 3: Ad Group
+  const adGroupResource = await createAdGroup(customer, campaignResource, product, config);
+  console.log(`✅ Ad Group created: ${adGroupResource}`);
+
+  // Step 4: Keywords (so the search campaign can actually serve)
+  await createKeywords(customer, adGroupResource, product);
+
+  // Step 5: Responsive Search Ad
+  const adResource = await createResponsiveSearchAd(customer, adGroupResource, product);
+  console.log(`✅ Responsive Search Ad created: ${adResource}`);
 
   return {
-    campaignId: campaign.id,
-    adGroupId: adGroup.id,
-    adId: ad.id,
+    campaignId: campaignResource,
+    adGroupId: adGroupResource,
+    adId: adResource,
   };
 }
 
 /**
- * Create Campaign
+ * Create campaign budget resource, returns its resource name.
  */
-async function createCampaign(
-  customer: Customer,
-  product: ProductAdData,
-  config: CampaignConfig
-) {
-  const campaign = {
-    name: `Arbi - ${product.productName} - ${product.targetCountry}`,
-    advertising_channel_type: 'VIDEO', // YouTube ads
-    status: 'PAUSED', // Start paused for review
-    bidding_strategy_type: config.targetROAS ? 'TARGET_ROAS' : 'MAXIMIZE_CONVERSIONS',
-    campaign_budget: {
-      amount_micros: config.dailyBudget * 1_000_000, // Convert to micros
-      delivery_method: 'STANDARD',
-    },
-    target_roas: config.targetROAS,
+async function createBudget(customer: Customer, product: ProductAdData, config: CampaignConfig): Promise<string> {
+  const results = await customer.campaignBudgets.create([{
+    name: `Budget - ${product.productName} - ${Date.now()}`,
+    amount_micros: Math.round(config.dailyBudget * 1_000_000),
+    delivery_method: enums.BudgetDeliveryMethod.STANDARD,
+    explicitly_shared: false,
+  }]);
+  return results[0].resource_name;
+}
+
+/**
+ * Create a PAUSED Search campaign with automated (Maximize Conversions) bidding.
+ */
+async function createCampaign(customer: Customer, budgetResource: string, product: ProductAdData): Promise<string> {
+  const results = await customer.campaigns.create([{
+    name: `Arbi - ${product.productName} - ${product.targetCountry} - ${Date.now()}`,
+    advertising_channel_type: enums.AdvertisingChannelType.SEARCH,
+    status: enums.CampaignStatus.PAUSED, // never auto-spend
+    campaign_budget: budgetResource,
+    // Maximize Conversions is valid for brand-new campaigns (Target ROAS needs
+    // conversion history, so it would be rejected here).
+    maximize_conversions: {},
     network_settings: {
-      target_google_search: false,
-      target_search_network: false,
-      target_content_network: true, // YouTube
+      target_google_search: true,
+      target_search_network: true,
+      target_content_network: false,
       target_partner_search_network: false,
     },
-    geo_target_type_setting: {
-      positive_geo_target_type: 'PRESENCE',
-    },
-  };
-
-  const response = await customer.campaigns.create([campaign]);
-  return response.results[0];
+  }]);
+  return results[0].resource_name;
 }
 
 /**
- * Create Ad Group
+ * Create the ad group.
  */
 async function createAdGroup(
   customer: Customer,
-  campaignId: string,
+  campaignResource: string,
   product: ProductAdData,
   config: CampaignConfig
-) {
-  const adGroup = {
-    name: `AG - ${product.productName}`,
-    campaign: campaignId,
-    status: 'ENABLED',
-    type: 'VIDEO_TRUE_VIEW_IN_STREAM', // Skippable in-stream ads
-    cpc_bid_micros: config.maxCPC ? config.maxCPC * 1_000_000 : 500000, // Default $0.50
-    targeting_setting: {
-      target_restrictions: [],
-    },
-  };
-
-  const response = await customer.adGroups.create([adGroup]);
-  return response.results[0];
+): Promise<string> {
+  const results = await customer.adGroups.create([{
+    name: `AG - ${truncate(product.productName, 120)}`,
+    campaign: campaignResource,
+    status: enums.AdGroupStatus.ENABLED,
+    type: enums.AdGroupType.SEARCH_STANDARD,
+    cpc_bid_micros: Math.round((config.maxCPC ?? 0.5) * 1_000_000),
+  }]);
+  return results[0].resource_name;
 }
 
 /**
- * Create Video Ad (using extracted winning ad video)
+ * Add phrase-match keywords derived from the product name so the campaign serves.
  */
-async function createVideoAd(
-  customer: Customer,
-  adGroupId: string,
-  product: ProductAdData
-) {
-  const ad = {
-    ad_group: adGroupId,
-    status: 'ENABLED',
-    ad: {
-      type: 'VIDEO_AD',
-      name: `Video Ad - ${product.productName}`,
-      video_ad: {
-        video: {
-          asset: product.videoUrl, // Cloudinary URL
-        },
-        in_stream: {
-          action_button_label: 'SHOP_NOW',
-          action_headline: `Get ${product.productName}`,
-          companion_banner: {
-            headline: product.productName,
-            description: `$${product.productPrice} - Limited Time Offer`,
-          },
-        },
-      },
-      final_urls: [product.landingPageUrl],
-      display_url: 'arbi.creai.dev',
-    },
-  };
+async function createKeywords(customer: Customer, adGroupResource: string, product: ProductAdData): Promise<void> {
+  const base = product.productName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  const terms = Array.from(new Set([
+    base,
+    `buy ${base}`,
+    `${base} online`,
+  ].filter(t => t.length >= 2 && t.length <= 80))).slice(0, 10);
 
-  const response = await customer.ads.create([ad]);
-  return response.results[0];
+  if (terms.length === 0) return;
+
+  await customer.adGroupCriteria.create(terms.map(text => ({
+    ad_group: adGroupResource,
+    status: enums.AdGroupCriterionStatus.ENABLED,
+    keyword: {
+      text,
+      match_type: enums.KeywordMatchType.PHRASE,
+    },
+  })));
 }
 
 /**
- * Create Responsive Display Ad (fallback if no video)
+ * Create a Responsive Search Ad (text-only; no asset uploads needed).
  */
-async function createResponsiveAd(
-  customer: Customer,
-  adGroupId: string,
-  product: ProductAdData
-) {
-  const ad = {
-    ad_group: adGroupId,
-    status: 'ENABLED',
-    ad: {
-      type: 'RESPONSIVE_DISPLAY_AD',
-      name: `Display Ad - ${product.productName}`,
-      responsive_display_ad: {
-        headlines: [
-          { text: product.productName },
-          { text: `${product.productName} - Best Price` },
-          { text: `Limited Time Offer` },
-        ],
-        descriptions: [
-          { text: `Premium ${product.category} at $${product.productPrice}` },
-          { text: `Fast Shipping - Money Back Guarantee` },
-        ],
-        business_name: 'Arbi Marketplace',
-        call_to_action_text: 'SHOP_NOW',
-      },
-      final_urls: [product.landingPageUrl],
-    },
-  };
+async function createResponsiveSearchAd(customer: Customer, adGroupResource: string, product: ProductAdData): Promise<string> {
+  const name = product.productName;
+  const headlines = [
+    truncate(name, HEADLINE_MAX),
+    truncate(`Buy ${name}`, HEADLINE_MAX),
+    truncate(`${name} Online`, HEADLINE_MAX),
+    'Free Shipping',
+    'Limited Time Offer',
+  ].map(text => ({ text }));
 
-  const response = await customer.ads.create([ad]);
-  return response.results[0];
+  const descriptions = [
+    truncate(`Shop ${name} at a great price. Fast, secure checkout.`, DESC_MAX),
+    truncate(`Order ${name} today. Free shipping and easy returns.`, DESC_MAX),
+  ].map(text => ({ text }));
+
+  const results = await customer.adGroupAds.create([{
+    ad_group: adGroupResource,
+    status: enums.AdGroupAdStatus.PAUSED, // paused with the campaign
+    ad: {
+      final_urls: [product.landingPageUrl],
+      responsive_search_ad: { headlines, descriptions },
+    },
+  }]);
+  return results[0].resource_name;
 }
 
 /**

@@ -114,20 +114,21 @@ export async function createAutomatedCampaign(
  * Create campaign budget resource, returns its resource name.
  */
 async function createBudget(customer: Customer, product: ProductAdData, config: CampaignConfig): Promise<string> {
-  const results = await customer.campaignBudgets.create([{
+  const response = await customer.campaignBudgets.create([{
     name: `Budget - ${product.productName} - ${Date.now()}`,
     amount_micros: Math.round(config.dailyBudget * 1_000_000),
     delivery_method: enums.BudgetDeliveryMethod.STANDARD,
     explicitly_shared: false,
   }]);
-  return results[0].resource_name;
+  // .create() returns the MutateResponse object; results live under .results
+  return response.results![0].resource_name!;
 }
 
 /**
  * Create a PAUSED Search campaign with automated (Maximize Conversions) bidding.
  */
 async function createCampaign(customer: Customer, budgetResource: string, product: ProductAdData): Promise<string> {
-  const results = await customer.campaigns.create([{
+  const response = await customer.campaigns.create([{
     name: `Arbi - ${product.productName} - ${product.targetCountry} - ${Date.now()}`,
     advertising_channel_type: enums.AdvertisingChannelType.SEARCH,
     status: enums.CampaignStatus.PAUSED, // never auto-spend
@@ -142,7 +143,7 @@ async function createCampaign(customer: Customer, budgetResource: string, produc
       target_partner_search_network: false,
     },
   }]);
-  return results[0].resource_name;
+  return response.results![0].resource_name!;
 }
 
 /**
@@ -154,14 +155,14 @@ async function createAdGroup(
   product: ProductAdData,
   config: CampaignConfig
 ): Promise<string> {
-  const results = await customer.adGroups.create([{
+  const response = await customer.adGroups.create([{
     name: `AG - ${truncate(product.productName, 120)}`,
     campaign: campaignResource,
     status: enums.AdGroupStatus.ENABLED,
     type: enums.AdGroupType.SEARCH_STANDARD,
     cpc_bid_micros: Math.round((config.maxCPC ?? 0.5) * 1_000_000),
   }]);
-  return results[0].resource_name;
+  return response.results![0].resource_name!;
 }
 
 /**
@@ -205,7 +206,7 @@ async function createResponsiveSearchAd(customer: Customer, adGroupResource: str
     truncate(`Order ${name} today. Free shipping and easy returns.`, DESC_MAX),
   ].map(text => ({ text }));
 
-  const results = await customer.adGroupAds.create([{
+  const response = await customer.adGroupAds.create([{
     ad_group: adGroupResource,
     status: enums.AdGroupAdStatus.PAUSED, // paused with the campaign
     ad: {
@@ -213,7 +214,7 @@ async function createResponsiveSearchAd(customer: Customer, adGroupResource: str
       responsive_search_ad: { headlines, descriptions },
     },
   }]);
-  return results[0].resource_name;
+  return response.results![0].resource_name!;
 }
 
 /**

@@ -220,9 +220,12 @@ function generateProductLandingPage(listing: any): string {
     : [];
 
   // Guaranteed fallback so a picture ALWAYS renders, even if the product has no
-  // image or its URL 404s. placehold.co is a reliable, always-available service
-  // (the old source.unsplash.com endpoint was shut down and returned nothing).
-  const fallbackImage = `https://placehold.co/800x800/1e293b/ffffff/png?text=${encodeURIComponent(listing.productTitle || 'Product')}`;
+  // image or its URL 404s. This is an inline SVG data URI — it needs no network
+  // request, so it cannot fail to load (unlike an external placeholder service;
+  // the old source.unsplash.com endpoint was shut down and returned nothing).
+  const safeTitle = String(listing.productTitle || 'Product').replace(/[<>&"']/g, ' ').slice(0, 60);
+  const fallbackSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800"><rect width="100%" height="100%" fill="#1e293b"/><text x="400" y="400" fill="#ffffff" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${safeTitle}</text></svg>`;
+  const fallbackImage = `data:image/svg+xml,${encodeURIComponent(fallbackSvg)}`;
 
   const mainImageUrl = productImages.length > 0
     ? productImages[0]

@@ -213,28 +213,26 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
  * Generate beautiful product landing page HTML
  */
 function generateProductLandingPage(listing: any): string {
-  // Only use REAL product images from Cloudinary - NO PLACEHOLDERS
+  // Prefer real product images (Cloudinary), but accept any valid http(s) image
+  // rather than dropping to an empty slot.
   const productImages = listing.productImages && Array.isArray(listing.productImages) && listing.productImages.length > 0
-    ? listing.productImages.filter((img: string) => img.includes('cloudinary.com') || img.includes('res.cloudinary'))
+    ? listing.productImages.filter((img: string) => typeof img === 'string' && /^https?:\/\//.test(img))
     : [];
 
-  // If no real images, use Unsplash for professional product photos
-  const getUnsplashImage = (title: string) => {
-    const keyword = title.toLowerCase()
-      .replace(/\b(pro|edition|premium|deluxe|plus)\b/gi, '')
-      .split(' ')[0];
-    return `https://source.unsplash.com/800x800/?${encodeURIComponent(keyword)},product`;
-  };
+  // Guaranteed fallback so a picture ALWAYS renders, even if the product has no
+  // image or its URL 404s. placehold.co is a reliable, always-available service
+  // (the old source.unsplash.com endpoint was shut down and returned nothing).
+  const fallbackImage = `https://placehold.co/800x800/1e293b/ffffff/png?text=${encodeURIComponent(listing.productTitle || 'Product')}`;
 
   const mainImageUrl = productImages.length > 0
     ? productImages[0]
-    : getUnsplashImage(listing.productTitle);
+    : fallbackImage;
 
   // Only show gallery if we have 2+ REAL images
   const thumbnailsHtml = productImages.length > 1
     ? `<div class="thumbnail-gallery">
         ${productImages.map((img: string, idx: number) =>
-          `<img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="thumbnail${idx === 0 ? ' active' : ''}" data-index="${idx}" loading="lazy">`
+          `<img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="thumbnail${idx === 0 ? ' active' : ''}" data-index="${idx}" loading="lazy" onerror="this.onerror=null;this.src='${fallbackImage}'">`
         ).join('\n        ')}
        </div>`
     : '';
@@ -978,7 +976,7 @@ function generateProductLandingPage(listing: any): string {
         <div class="product-display" id="productDisplay">
             <div class="glass-panel">
                 <div class="light-sweep"></div>
-                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="product-image" id="productImage">
+                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="product-image" id="productImage" onerror="this.onerror=null;this.src='${fallbackImage}'">
             </div>
         </div>
 

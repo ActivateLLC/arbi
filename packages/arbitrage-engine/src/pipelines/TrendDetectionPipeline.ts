@@ -2,10 +2,15 @@ import { KalodataScout } from '../scouts/KalodataScout';
 import { VideoDownloader } from '../services/VideoDownloader';
 import { ProductSourcingScout } from '../scouts/ProductSourcingScout';
 import { Product } from '../types';
+import { scoreExpectedValue } from '../scorers/expectedValue';
 
 interface TrendOpportunity {
   product: Product;
   trendScore: number;
+  /** Expected profit per month ($) — the price-agnostic lucrativeness metric. */
+  expectedMonthlyProfit: number;
+  /** Composite 0–100 expected-value rank (primary sort key). */
+  lucrativeScore: number;
   videoUrls: string[];
   estimatedProfit: number;
   confidence: 'high' | 'medium' | 'low';
@@ -100,8 +105,9 @@ export class TrendDetectionPipeline {
         }
       }
 
-      // Sort by trend score (highest first)
-      opportunities.sort((a, b) => b.trendScore - a.trendScore);
+      // Rank by expected value (expected monthly profit) — demand × premium,
+      // price-agnostic. trendScore still gates entry; lucrativeScore orders winners.
+      opportunities.sort((a, b) => b.lucrativeScore - a.lucrativeScore);
 
       console.log(`🎯 [TrendDetectionPipeline] Found ${opportunities.length} high-potential opportunities`);
 
@@ -173,6 +179,17 @@ export class TrendDetectionPipeline {
       // Step 2: Calculate trend score (0-100)
       const trendScore = this.calculateTrendScore(product);
 
+      // Expected-value ranking: rank by expected monthly profit (demand velocity
+      // × premium), price-agnostic and confidence-adjusted. See scorers/expectedValue.
+      const value = scoreExpectedValue({
+        profitPerUnit: actualProfit,
+        marginPercent: actualMarginPercent,
+        monthlySalesProxy: product.metadata?.salesCount,
+        rating: product.metadata?.rating,
+        reviewCount: product.metadata?.reviewCount ?? product.metadata?.ratingCount,
+        trending: product.metadata?.trending,
+      });
+
       // Step 3: Get confidence level (use actual margin)
       const confidence = this.getConfidenceLevel(trendScore, actualMarginPercent);
 
@@ -185,6 +202,8 @@ export class TrendDetectionPipeline {
       return {
         product,
         trendScore,
+        expectedMonthlyProfit: value.expectedMonthlyProfit,
+        lucrativeScore: value.lucrativeScore,
         videoUrls,
         estimatedProfit: actualProfit,
         confidence,

@@ -18,6 +18,7 @@ export * from './risk-manager/RiskManager';
 // Export autonomous components
 export * from './calculators/profitCalculator';
 export * from './scorers/opportunityScorer';
+export * from './scorers/expectedValue';
 export * from './autonomous/autonomousEngine';
 export * from './dropshipping/DropshippingEngine';
 

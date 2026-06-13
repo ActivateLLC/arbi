@@ -78,11 +78,10 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   console.log('   Amount Paid:', `$${(session.amount_total! / 100).toFixed(2)}`);
 
   try {
-    // Extract order details from metadata
-    const metadata = session.metadata;
-    if (!metadata) {
-      throw new Error('No metadata in session');
-    }
+    // Extract order details from metadata. Never hard-fail on partial data:
+    // a completed payment must always be recorded so revenue is never silently
+    // dropped. Missing fields fall back to safe defaults.
+    const metadata = session.metadata || {};
 
     const listingId = metadata.listingId;
     const quantity = parseInt(metadata.quantity || '1');
@@ -96,18 +95,29 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     console.log('      Supplier Price:', `$${supplierPrice}`);
     console.log('      Your Profit:', `$${estimatedProfit}`);
 
-    // Get customer shipping address from Stripe
-    const shippingAddress = session.shipping_details?.address;
-    if (!shippingAddress) {
-      throw new Error('No shipping address provided');
-    }
+    // Get customer shipping address from Stripe. Stripe moved/renamed this
+    // field across API versions, so fall back to the customer's billing address
+    // and never drop the order if it's absent — fulfillment can be completed
+    // manually, but the sale and revenue must still be recorded.
+    const shippingDetails: any = (session as any).shipping_details
+      ?? (session as any).collected_information?.shipping_details
+      ?? null;
+    const shippingAddress: any = shippingDetails?.address
+      ?? session.customer_details?.address
+      ?? {};
+    const shippingName: string =
+      shippingDetails?.name ?? session.customer_details?.name ?? '';
 
-    console.log('   📫 Shipping To:');
-    console.log('      Name:', session.shipping_details?.name);
-    console.log('      Address:', shippingAddress.line1);
-    console.log('      City:', shippingAddress.city);
-    console.log('      State:', shippingAddress.state);
-    console.log('      ZIP:', shippingAddress.postal_code);
+    if (!shippingDetails?.address) {
+      console.warn('   ⚠️  No shipping address on session — recording sale anyway (manual fulfillment).');
+    } else {
+      console.log('   📫 Shipping To:');
+      console.log('      Name:', shippingName);
+      console.log('      Address:', shippingAddress.line1);
+      console.log('      City:', shippingAddress.city);
+      console.log('      State:', shippingAddress.state);
+      console.log('      ZIP:', shippingAddress.postal_code);
+    }
 
     // Save order to database
     const db = getDatabase();
@@ -116,13 +126,13 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       listingId,
       buyerEmail: session.customer_details?.email || 'unknown@email.com',
       buyerShippingAddress: {
-        name: session.shipping_details?.name || '',
-        line1: shippingAddress.line1,
+        name: shippingName,
+        line1: shippingAddress.line1 || '',
         line2: shippingAddress.line2 || '',
-        city: shippingAddress.city,
-        state: shippingAddress.state,
-        postalCode: shippingAddress.postal_code,
-        country: shippingAddress.country,
+        city: shippingAddress.city || '',
+        state: shippingAddress.state || '',
+        postalCode: shippingAddress.postal_code || '',
+        country: shippingAddress.country || '',
       },
       paymentIntentId: session.payment_intent?.toString() || session.id,
       amountPaid: session.amount_total! / 100,
@@ -167,7 +177,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
           productUrl: supplierUrl,
           quantity,
           shippingAddress: {
-            name: session.shipping_details?.name || '',
+            name: shippingName,
             line1: shippingAddress.line1,
             line2: shippingAddress.line2 || '',
             city: shippingAddress.city,
@@ -208,7 +218,7 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       console.log('   🛒 Purchase from:', supplierUrl);
       console.log('   📦 Quantity:', quantity);
       console.log('   💵 Using buyer\'s money: $', session.amount_total! / 100);
-      console.log('   📬 Ship to:', session.shipping_details?.name);
+      console.log('   📬 Ship to:', shippingName);
       console.log('      ', `${shippingAddress.line1}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postal_code}`);
     }
 

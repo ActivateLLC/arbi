@@ -75,6 +75,8 @@ router.get('/checkout/:listingId', async (req: Request, res: Response) => {
         opportunityId: listing.opportunityId,
         supplierPrice: listing.supplierPrice.toString(),
         estimatedProfit: listing.estimatedProfit.toString(),
+        supplierUrl: listing.supplierUrl || '',
+        quantity: '1',
       },
       // Optional: Pre-fill shipping (for faster checkout)
       shipping_address_collection: {

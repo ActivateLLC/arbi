@@ -38,6 +38,31 @@ router.get('/preview', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/cj/source-create?count=5&markup=100&keyword=...&confirm=yes
+ * Mobile-friendly catalog creation. Requires confirm=yes so it isn't triggered
+ * by accident (this one DOES create listings).
+ */
+router.get('/source-create', async (req: Request, res: Response) => {
+  if (req.query.confirm !== 'yes') {
+    return res.status(400).json({
+      success: false,
+      error: 'Add &confirm=yes to actually create listings (this persists them).',
+    });
+  }
+  try {
+    const result = await sourceTrendingFromCJ({
+      keyword: req.query.keyword ? String(req.query.keyword) : undefined,
+      count: req.query.count ? Number(req.query.count) : 5,
+      markupPercentage: req.query.markup ? Number(req.query.markup) : undefined,
+      preview: false,
+    });
+    res.status(result.success ? 200 : 400).json(result);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * POST /api/cj/source
  * Source demand-first (Trending) CJ products into fulfillable listings.
  * Body: { keyword?, categoryId?, count?, markupPercentage?, preview? }

@@ -56,8 +56,11 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     let vid = str(p.vid);
 
     // Fill missing vid/price/image/name from product detail + first variant.
+    // The catalog list omits vid, so a detail call is needed — pace it to avoid
+    // CJ rate-limiting (which was silently dropping ~⅔ of candidates).
     if (!vid || !price || !name || !image) {
       try {
+        await new Promise(r => setTimeout(r, 600));
         const d = await cjClient.getProductDetail(pid);
         name = name || str(d.productNameEn, d.productName);
         image = image || str(d.productImage, Array.isArray(d.productImageSet) ? d.productImageSet[0] : undefined);

@@ -6,7 +6,9 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { getDatabase } from '../config/database';
-import { supplierFulfillment } from '../services/supplierFulfillment';
+// NOTE: supplierFulfillment is imported lazily inside the auto-fulfillment
+// branch below — it pulls in the optional @browserbasehq/stagehand dependency,
+// so we must not load it at module init (it would crash boot if not installed).
 
 const router = Router();
 
@@ -18,9 +20,11 @@ const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET || '';
 
 /**
  * POST /api/webhooks/stripe
- * Handle Stripe webhook events
+ * Handle Stripe webhook events.
+ * Mounted at '/api/webhooks/stripe' in index.ts with a raw body parser, so the
+ * route path here is the mount root ('/').
  */
-router.post('/stripe', async (req: Request, res: Response) => {
+router.post('/', async (req: Request, res: Response) => {
   const sig = req.headers['stripe-signature'];
 
   if (!sig || !stripe || !webhookSecret) {
@@ -141,6 +145,10 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       console.log('\n🤖 INITIATING AUTOMATED MULTI-VENDOR FULFILLMENT...');
 
       try {
+        // Lazy-load: only pulls in @browserbasehq/stagehand when auto-fulfillment
+        // is actually enabled. If the package isn't installed this throws and is
+        // caught below, leaving the order saved for manual fulfillment.
+        const { supplierFulfillment } = await import('../services/supplierFulfillment');
         const fulfillmentResult = await supplierFulfillment.fulfillOrder({
           orderId: order.orderId,
           productUrl: supplierUrl,

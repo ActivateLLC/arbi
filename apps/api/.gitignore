@@ -18,7 +18,3 @@ logs/
 *.tmp
 *.cache
 *.local
-*.test.ts
-*.test.js
-*.spec.ts
-*.spec.js

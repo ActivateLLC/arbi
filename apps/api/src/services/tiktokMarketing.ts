@@ -102,7 +102,7 @@ export class TikTokMarketingService {
       const adId = await this.createAd(adGroupId, imageId, config);
       console.log(`   ✅ Ad created: ${adId}`);
 
-      console.log('   🎉 TikTok campaign is LIVE!');
+      console.log('   ✅ TikTok campaign created PAUSED (enable in TikTok Ads Manager or via enableCampaign).');
 
       return {
         success: true,
@@ -133,6 +133,7 @@ export class TikTokMarketingService {
         campaign_name: campaignName,
         objective_type: 'CONVERSIONS', // Optimize for purchases
         budget_mode: 'BUDGET_MODE_INFINITE', // Daily budget at ad group level
+        operation_status: 'DISABLE', // created PAUSED — never auto-spend until enabled
       },
       {
         headers: {
@@ -161,6 +162,7 @@ export class TikTokMarketingService {
         advertiser_id: this.advertiserId,
         campaign_id: campaignId,
         adgroup_name: `AdGroup - ${config.productTitle.substring(0, 40)}`,
+        operation_status: 'DISABLE', // created PAUSED — never auto-spend until enabled
 
         // Budget
         budget_mode: 'BUDGET_MODE_DAY',
@@ -250,6 +252,7 @@ export class TikTokMarketingService {
         advertiser_id: this.advertiserId,
         adgroup_id: adGroupId,
         ad_name: `Ad - ${config.productTitle.substring(0, 40)}`,
+        operation_status: 'DISABLE', // created PAUSED — never auto-spend until enabled
         ad_format: 'SINGLE_IMAGE',
         ad_text: adText.substring(0, 100), // Max 100 chars
 

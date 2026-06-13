@@ -226,4 +226,25 @@ router.post('/quick-start', async (req: Request, res: Response, next: NextFuncti
   }
 });
 
+/**
+ * GET /api/google-ads/quick-start-now?confirm=yes
+ * Mobile-tappable trigger for quick-start (creates PAUSED campaigns).
+ */
+router.get('/quick-start-now', async (req: Request, res: Response, next: NextFunction) => {
+  if (req.query.confirm !== 'yes') {
+    return res.status(400).json({ success: false, error: 'Add ?confirm=yes to create campaigns (they are created PAUSED).' });
+  }
+  try {
+    const products = await getActiveProductsForAds(5, 30);
+    if (products.length === 0) {
+      return res.status(200).json({ success: false, message: 'No products with 30%+ profit margin found.' });
+    }
+    const config: CampaignConfig = { dailyBudget: 20, targetROAS: 4.0, geoTargeting: ['US'], maxCPC: 1.5 };
+    const result = await createBulkCampaigns(products, config);
+    res.status(201).json({ success: true, message: `Created ${result.success} PAUSED campaign(s)`, ...result });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
 export default router;

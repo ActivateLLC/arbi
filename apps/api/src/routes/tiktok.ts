@@ -132,4 +132,29 @@ router.post('/campaign/:id/pause', async (req: Request, res: Response, next: Nex
   }
 });
 
+/**
+ * GET /api/tiktok/quick-start-now?confirm=yes
+ * Mobile-tappable trigger for quick-start (creates PAUSED TikTok campaigns).
+ */
+router.get('/quick-start-now', async (req: Request, res: Response, next: NextFunction) => {
+  if (req.query.confirm !== 'yes') {
+    return res.status(400).json({ success: false, error: 'Add ?confirm=yes to create campaigns (they are created PAUSED).' });
+  }
+  try {
+    const products = await getActiveProductsForTikTok(5, 30, 20);
+    if (products.length === 0) {
+      return res.status(200).json({ success: false, message: 'No active listings with a real image and 30%+ margin found.' });
+    }
+    const campaigns = [];
+    for (const p of products) {
+      const r = await tiktokMarketing.createCampaign(p);
+      campaigns.push({ product: p.productTitle, ...r });
+    }
+    const created = campaigns.filter((c) => c.success).length;
+    res.status(201).json({ success: true, message: `Created ${created} PAUSED TikTok campaign(s)`, campaigns });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
 export default router;

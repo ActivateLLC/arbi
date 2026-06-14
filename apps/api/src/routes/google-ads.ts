@@ -493,11 +493,17 @@ router.post('/optimize', async (_req: Request, res: Response, next: NextFunction
  */
 router.get('/status', (_req: Request, res: Response) => {
   const t = (k: string) => (process.env[k] || '').trim();
+  const f = (k: string) => t(k).toLowerCase() === 'true';
   res.json({
     credsPresent: !!(t('GOOGLE_ADS_CLIENT_ID') && t('GOOGLE_ADS_CLIENT_SECRET') &&
       t('GOOGLE_ADS_REFRESH_TOKEN') && t('GOOGLE_ADS_DEVELOPER_TOKEN') && t('GOOGLE_ADS_CUSTOMER_ID')),
     managerLinked: !!t('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
     conversionTracking: !!t('GOOGLE_ADS_CONVERSION_SEND_TO'),
+    // Added-feature automations (so the dashboard can show what's live).
+    amazonSourcing: !!t('RAINFOREST_API_KEY'),
+    autonomous: f('ENABLE_AUTONOMOUS'),
+    autoGoLive: f('AUTO_GO_LIVE'),
+    stockMonitor: f('ENABLE_STOCK_MONITOR'),
   });
 });
 

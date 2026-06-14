@@ -14,6 +14,7 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { getListings } from './marketplace';
+import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../services/google-ads/googleAdsConversions';
 
 const router = Router();
 
@@ -262,6 +263,7 @@ function generateProductLandingPage(listing: any): string {
     <meta name="description" content="${listing.productDescription} | Free shipping, 30-day returns, secure checkout. Buy now at Arbi.">
     <meta name="keywords" content="${listing.productTitle}, buy ${listing.productTitle.toLowerCase()}, best price, free shipping">
     <link rel="canonical" href="https://api.arbi.creai.dev/product/${listing.listingId}">
+    ${googleAdsGlobalTagHtml()}
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="product">
@@ -1380,6 +1382,8 @@ function generateSuccessPage(session: any): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Order Confirmed!</title>
+    ${googleAdsGlobalTagHtml()}
+    ${googleAdsConversionEventHtml((session.amount_total || 0) / 100, session.id)}
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {

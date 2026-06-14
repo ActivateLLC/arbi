@@ -18,6 +18,7 @@ import { getListings, getListing } from './marketplace';
 import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 import { uploadVideoToYouTube } from '../services/google-ads/youtubeUpload';
+import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 
 const router = Router();
 
@@ -448,6 +449,34 @@ router.post('/campaign/:id/pause', async (req: Request, res: Response, next: Nex
   } catch (error: any) {
     next(error);
   }
+});
+
+/**
+ * GET /api/google-ads/conversions/setup
+ * Create (idempotently) the purchase conversion action and return its gtag
+ * send_to. Set GOOGLE_ADS_CONVERSION_SEND_TO to the returned value + redeploy,
+ * and Smart Bidding starts learning from real purchases.
+ */
+router.get('/conversions/setup', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const info = await ensureConversionAction();
+    res.json({
+      success: true,
+      ...info,
+      alreadyConfigured: conversionSendTo() === info.sendTo && !!info.sendTo,
+      next: info.sendTo
+        ? `Set GOOGLE_ADS_CONVERSION_SEND_TO=${info.sendTo} on arbi-production, then redeploy.`
+        : 'Conversion action created, but the tag is still propagating — re-run in a minute to get the send_to.',
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/** GET /api/google-ads/conversions/status — is conversion tracking wired? */
+router.get('/conversions/status', (_req: Request, res: Response) => {
+  const sendTo = conversionSendTo();
+  res.json({ configured: !!sendTo, sendTo: sendTo || null });
 });
 
 /**

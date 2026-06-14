@@ -55,6 +55,19 @@ export interface CampaignConfig {
   geoTargeting: string[]; // Country codes ['US', 'CA', 'UK']
   ageRange?: { min: number; max: number };
   gender?: 'MALE' | 'FEMALE' | 'ALL';
+
+  // --- Performance layer (Smart Bidding) ---
+  // Target CPA in USD. Steers Maximize Conversions toward a cost-per-acquisition
+  // goal. Safe on new campaigns (unlike Target ROAS, which needs conversion
+  // history). Omit for a pure Maximize Conversions start.
+  targetCpa?: number;
+  // Opt-in Target ROAS (Maximize Conversion Value). Only enable once the account
+  // has conversion history, or Google rejects it on a fresh campaign.
+  useTargetRoas?: boolean;
+  // Audience signals (resource names, e.g. "customers/X/audiences/Y" for
+  // remarketing, or in-market audiences) attached in OBSERVATION mode — feeds
+  // Smart Bidding without restricting reach. Empty = none.
+  audiences?: string[];
 }
 
 // Google Ads text limits
@@ -96,6 +109,24 @@ function dedupeAssets(candidates: string[], max: number): { text: string }[] {
     if (text && !seen.has(key)) { seen.add(key); out.push({ text }); }
   }
   return out;
+}
+
+/**
+ * Choose the Smart Bidding strategy for a campaign payload.
+ * - Target ROAS (Maximize Conversion Value) only when explicitly opted in
+ *   (needs conversion history; rejected on brand-new campaigns otherwise).
+ * - Target CPA (Maximize Conversions toward a CPA) when provided — safe on new
+ *   campaigns and a real efficiency lever.
+ * - Otherwise plain Maximize Conversions (new-account-safe default).
+ */
+export function buildBiddingStrategy(config: CampaignConfig): Record<string, any> {
+  if (config.useTargetRoas && config.targetROAS && config.targetROAS > 0) {
+    return { maximizeConversionValue: { targetRoas: config.targetROAS } };
+  }
+  if (config.targetCpa && config.targetCpa > 0) {
+    return { maximizeConversions: { targetCpaMicros: Math.round(config.targetCpa * 1_000_000) } };
+  }
+  return { maximizeConversions: {} };
 }
 
 const meaningfulCategory = (c: string) => {
@@ -311,7 +342,7 @@ export async function createAutomatedCampaign(
       advertisingChannelType: 'SEARCH',
       status: 'PAUSED', // never auto-spend
       campaignBudget: budgetResource,
-      maximizeConversions: {},
+      ...buildBiddingStrategy(config),
       // Required on every campaign since API v17 (EU political ad transparency).
       containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
       networkSettings: {
@@ -342,6 +373,10 @@ export async function createAutomatedCampaign(
   }], customerIdOverride);
   console.log(`✅ Ad Group created: ${adGroupResource}`);
 
+  // Step 3b: Audience signals (observation mode) — feeds Smart Bidding extra
+  // signal without restricting reach. No-op unless audiences are configured.
+  await attachAudienceSignals(adGroupResource, config, customerIdOverride);
+
   // Step 4: Keywords (so the search campaign can actually serve)
   const terms = buildKeywords(product);
   if (terms.length) {
@@ -370,6 +405,37 @@ export async function createAutomatedCampaign(
   console.log(`✅ Responsive Search Ad created: ${adResource}`);
 
   return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
+}
+
+/**
+ * Attach audience signals to an ad group in OBSERVATION mode (status ENABLED,
+ * no negative). This gathers performance data and lets Smart Bidding lean into
+ * high-intent audiences WITHOUT narrowing who sees the ad. No-op when no
+ * audiences are configured. Failures are non-fatal.
+ *
+ * Audience resource names: remarketing lists ("customers/{cid}/audiences/{id}")
+ * require the conversion/remarketing tag to be live first; in-market audiences
+ * can be attached as soon as their resource names are supplied.
+ */
+async function attachAudienceSignals(
+  adGroupResource: string,
+  config: CampaignConfig,
+  customerIdOverride?: string
+): Promise<void> {
+  const audiences = (config.audiences || []).filter(Boolean);
+  if (!audiences.length) return;
+  try {
+    await mutate('adGroupCriteria', audiences.map(name => ({
+      create: {
+        adGroup: adGroupResource,
+        status: 'ENABLED',
+        audience: { audience: name },
+      },
+    })), customerIdOverride);
+    console.log(`✅ Attached ${audiences.length} audience signal(s) (observation)`);
+  } catch (e: any) {
+    console.warn(`⚠️ Audience attach failed (non-fatal): ${e?.message || e}`);
+  }
 }
 
 /**

@@ -15,6 +15,7 @@ import {
   buildHeadlines,
   buildDescriptions,
   buildKeywords,
+  buildBiddingStrategy,
   ProductAdData,
   CampaignConfig,
 } from './campaignAutomation';
@@ -200,5 +201,26 @@ describe('ad creative generation (amazing-ads helpers)', () => {
       expect(k.length).toBeGreaterThanOrEqual(2);
       expect(k.length).toBeLessThanOrEqual(80);
     }
+  });
+});
+
+describe('Smart Bidding strategy (performance layer)', () => {
+  const base: CampaignConfig = { dailyBudget: 20, geoTargeting: ['US'] };
+
+  it('defaults to Maximize Conversions on a fresh campaign (new-account-safe)', () => {
+    const b = buildBiddingStrategy(base);
+    expect(b.maximizeConversions).toEqual({});
+    expect(b.maximizeConversionValue).toBeUndefined();
+  });
+
+  it('steers to a Target CPA when provided (Maximize Conversions + tCPA)', () => {
+    const b = buildBiddingStrategy({ ...base, targetCpa: 12 });
+    expect(b.maximizeConversions.targetCpaMicros).toBe(12_000_000);
+  });
+
+  it('uses Target ROAS only when explicitly opted in (needs conversion history)', () => {
+    expect(buildBiddingStrategy({ ...base, targetROAS: 4 }).maximizeConversions).toEqual({}); // not auto-applied
+    const b = buildBiddingStrategy({ ...base, targetROAS: 4, useTargetRoas: true });
+    expect(b.maximizeConversionValue.targetRoas).toBe(4);
   });
 });

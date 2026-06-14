@@ -222,6 +222,27 @@ async function createResponsiveSearchAd(customer: Customer, adGroupResource: str
 }
 
 /**
+ * Extract a meaningful message from a google-ads-api error. The library throws
+ * errors whose real detail is in `errors[]` (each with an error_code + message),
+ * not the top-level `.message` (often empty) — so surface that.
+ */
+function describeAdsError(error: any): string {
+  try {
+    const errs = error?.errors || error?.failure?.errors;
+    if (Array.isArray(errs) && errs.length) {
+      return errs
+        .map((e: any) => {
+          const code = e.error_code ? Object.entries(e.error_code).map(([k, v]) => `${k}=${v}`).join(',') : '';
+          return [e.message, code].filter(Boolean).join(' ');
+        })
+        .join(' | ');
+    }
+  } catch { /* fall through */ }
+  if (error?.message) return error.message;
+  try { return JSON.stringify(error).slice(0, 600); } catch { return String(error); }
+}
+
+/**
  * Bulk create campaigns for multiple products
  */
 export async function createBulkCampaigns(
@@ -241,8 +262,9 @@ export async function createBulkCampaigns(
       // Rate limit: Wait 1 second between API calls
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error: any) {
-      console.error(`❌ Failed to create campaign for ${product.productName}:`, error.message);
-      results.push({ product: product.productName, error: error.message, status: 'failed' });
+      const detail = describeAdsError(error);
+      console.error(`❌ Failed to create campaign for ${product.productName}:`, detail);
+      results.push({ product: product.productName, error: detail, status: 'failed' });
       failed++;
     }
   }

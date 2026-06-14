@@ -79,44 +79,73 @@ export async function createAutomatedCampaign(
     throw new Error(`Automated ads not allowed in ${product.targetCountry}. Manual creation required.`);
   }
 
-  const customer = getClient().Customer({
+  console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
+
+  // The google-ads-api library reuses ONE gRPC channel per client. If that
+  // channel wedges while establishing (intermittent from a cold Railway
+  // container), every call on it hangs — so retrying on the same client is
+  // useless. Instead, rebuild a FRESH client/channel on each whole-chain
+  // attempt; a wedged channel is abandoned rather than reused. Resource names
+  // are account-scoped (not channel-scoped), so a new channel to the same
+  // account works fine. Everything is PAUSED, so an abandoned attempt's orphan
+  // budget/campaign costs nothing.
+  const STEP_MS = 15000;
+  const MAX_ATTEMPTS = 3;
+  let lastErr: any;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const customer = buildFreshCustomer();
+    try {
+      // Step 1: Budget (a campaign references a budget resource, can't inline one)
+      const budgetResource = await withTimeout(createBudget(customer, product, config), STEP_MS, 'budget create');
+      console.log(`✅ Budget created: ${budgetResource}`);
+
+      // Step 2: Campaign (PAUSED, MAXIMIZE_CONVERSIONS)
+      const campaignResource = await withTimeout(createCampaign(customer, budgetResource, product), STEP_MS, 'campaign create');
+      console.log(`✅ Campaign created: ${campaignResource}`);
+
+      // Step 3: Ad Group
+      const adGroupResource = await withTimeout(createAdGroup(customer, campaignResource, product, config), STEP_MS, 'ad group create');
+      console.log(`✅ Ad Group created: ${adGroupResource}`);
+
+      // Step 4: Keywords (so the search campaign can actually serve)
+      await withTimeout(createKeywords(customer, adGroupResource, product), STEP_MS, 'keywords create');
+
+      // Step 5: Responsive Search Ad
+      const adResource = await withTimeout(createResponsiveSearchAd(customer, adGroupResource, product), STEP_MS, 'responsive search ad create');
+      console.log(`✅ Responsive Search Ad created: ${adResource}`);
+
+      return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
+    } catch (e: any) {
+      lastErr = e;
+      const isTimeout = typeof e?.message === 'string' && e.message.includes('timed out');
+      // Only a wedged-channel timeout is worth retrying with a fresh channel.
+      // Validation/permission errors are deterministic — fail fast.
+      if (!isTimeout || attempt === MAX_ATTEMPTS) throw e;
+      console.warn(`⚠️ ${e.message} — rebuilding gRPC channel (attempt ${attempt}/${MAX_ATTEMPTS})`);
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+  }
+  throw lastErr;
+}
+
+/**
+ * Build a Customer on a brand-new GoogleAdsApi instance (fresh gRPC channel),
+ * bypassing the cached singleton. Used so each campaign-creation attempt gets
+ * an unwedged channel.
+ */
+function buildFreshCustomer(): Customer {
+  const api = new GoogleAdsApi({
+    client_id: (process.env.GOOGLE_ADS_CLIENT_ID || '').trim(),
+    client_secret: (process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim(),
+    developer_token: (process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '').trim(),
+  });
+  return api.Customer({
     customer_id: (process.env.GOOGLE_ADS_CUSTOMER_ID || '').trim(),
     // When the ad account sits under a manager (MCC), authenticate "through" it.
     login_customer_id: (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').trim() || undefined,
     refresh_token: (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim(),
   });
-
-  console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
-
-  // Each step has a labelled per-attempt timeout AND retries on timeout, so a
-  // cold/flaky gRPC channel to Google self-heals on the next attempt instead of
-  // failing the whole campaign. The label still names the stalled call.
-  const STEP_MS = 15000;
-
-  // Step 1: Budget (a campaign references a budget resource, it can't inline one)
-  const budgetResource = await withRetry(() => createBudget(customer, product, config), STEP_MS, 'budget create');
-  console.log(`✅ Budget created: ${budgetResource}`);
-
-  // Step 2: Campaign (PAUSED, MAXIMIZE_CONVERSIONS)
-  const campaignResource = await withRetry(() => createCampaign(customer, budgetResource, product), STEP_MS, 'campaign create');
-  console.log(`✅ Campaign created: ${campaignResource}`);
-
-  // Step 3: Ad Group
-  const adGroupResource = await withRetry(() => createAdGroup(customer, campaignResource, product, config), STEP_MS, 'ad group create');
-  console.log(`✅ Ad Group created: ${adGroupResource}`);
-
-  // Step 4: Keywords (so the search campaign can actually serve)
-  await withRetry(() => createKeywords(customer, adGroupResource, product), STEP_MS, 'keywords create');
-
-  // Step 5: Responsive Search Ad
-  const adResource = await withRetry(() => createResponsiveSearchAd(customer, adGroupResource, product), STEP_MS, 'responsive search ad create');
-  console.log(`✅ Responsive Search Ad created: ${adResource}`);
-
-  return {
-    campaignId: campaignResource,
-    adGroupId: adGroupResource,
-    adId: adResource,
-  };
 }
 
 /**
@@ -270,31 +299,6 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
     ),
   ]);
-}
-
-/**
- * Run a single Google API step with a per-attempt timeout, retrying ONLY on
- * timeouts. Railway's first gRPC write to googleads.googleapis.com sometimes
- * stalls on a cold channel; re-issuing the call usually connects immediately.
- * Validation/permission errors are deterministic, so they fail fast (no retry).
- *
- * `factory` must return a FRESH promise each call (a thunk) — racing the same
- * promise twice wouldn't re-issue the request.
- */
-async function withRetry<T>(factory: () => Promise<T>, ms: number, label: string, attempts = 3): Promise<T> {
-  let lastErr: any;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      return await withTimeout(factory(), ms, label);
-    } catch (e: any) {
-      lastErr = e;
-      const isTimeout = typeof e?.message === 'string' && e.message.includes('timed out');
-      if (!isTimeout || attempt === attempts) throw e;
-      console.warn(`⚠️ ${label} timed out (attempt ${attempt}/${attempts}) — retrying on a warm channel`);
-      await new Promise((r) => setTimeout(r, 1000 * attempt)); // brief backoff
-    }
-  }
-  throw lastErr;
 }
 
 /**

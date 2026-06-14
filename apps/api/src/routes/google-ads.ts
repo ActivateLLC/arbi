@@ -236,7 +236,10 @@ router.get('/quick-start-now', async (req: Request, res: Response, next: NextFun
     return res.status(400).json({ success: false, error: 'Add ?confirm=yes to create campaigns (they are created PAUSED).' });
   }
   try {
-    const products = await getActiveProductsForAds(5, 30);
+    // ?count=1 keeps the request fast (each campaign is several sequential
+    // Google API calls; 5 can exceed a mobile browser's timeout).
+    const count = Math.min(Math.max(Number(req.query.count) || 5, 1), 5);
+    const products = await getActiveProductsForAds(count, 30);
     if (products.length === 0) {
       return res.status(200).json({ success: false, message: 'No products with 30%+ profit margin found.' });
     }

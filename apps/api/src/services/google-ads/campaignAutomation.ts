@@ -1,9 +1,22 @@
 /**
- * Google Ads Campaign Automation
- * Automatically creates and manages Google Ads campaigns for Arbi products
+ * Google Ads Campaign Automation (REST transport)
+ *
+ * Creates and manages Google Ads campaigns for Arbi products.
+ *
+ * NOTE ON TRANSPORT: this talks to the Google Ads API over plain HTTPS/REST
+ * (axios), NOT the gRPC client library. The gRPC client's channel
+ * establishment hangs intermittently from our Railway container (the first
+ * write call wedges and every retry on the same channel hangs with it), while
+ * plain HTTPS to googleapis.com is fast and reliable. REST sidesteps that
+ * transport entirely. Field names are camelCase and enum values are strings,
+ * per the REST API contract.
  */
 
-import { GoogleAdsApi, Customer, enums } from 'google-ads-api';
+import axios from 'axios';
+
+const API_VERSION = 'v23'; // matches the google-ads-api package we had installed
+const ADS_BASE = `https://googleads.googleapis.com/${API_VERSION}`;
+const REQUEST_TIMEOUT_MS = 20000;
 
 // Google Ads Compliance - Inline for build compatibility
 const ALLOWED_COUNTRIES = ['US', 'CA', 'GB', 'AU', 'JP', 'KR', 'SG', 'AE', 'BR', 'MX', 'IN'];
@@ -15,23 +28,6 @@ function canUseAutomatedAds(countryCode: string): boolean {
 
 function canUseAIContent(countryCode: string): boolean {
   return AI_CONTENT_ALLOWED.includes(countryCode);
-}
-
-// Initialize Google Ads API lazily — constructing the client at module load
-// would crash boot wherever the GOOGLE_ADS_* env vars aren't set. Build it on
-// first use instead.
-let _client: GoogleAdsApi | null = null;
-function getClient(): GoogleAdsApi {
-  if (!_client) {
-    _client = new GoogleAdsApi({
-      // .trim() — env values pasted via dashboards often carry a trailing
-      // newline, which silently breaks OAuth (invalid_grant) and customer ids.
-      client_id: (process.env.GOOGLE_ADS_CLIENT_ID || '').trim(),
-      client_secret: (process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim(),
-      developer_token: (process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '').trim(),
-    });
-  }
-  return _client;
 }
 
 export interface ProductAdData {
@@ -59,14 +55,63 @@ const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
 const HEADLINE_MAX = 30;
 const DESC_MAX = 90;
 
+const trimEnv = (k: string) => (process.env[k] || '').trim();
+// REST wants bare digits for customer ids (no dashes).
+const digits = (s: string) => s.replace(/-/g, '');
+function customerId(): string { return digits(trimEnv('GOOGLE_ADS_CUSTOMER_ID')); }
+function loginCustomerId(): string | undefined { return digits(trimEnv('GOOGLE_ADS_LOGIN_CUSTOMER_ID')) || undefined; }
+
+// --- OAuth: exchange the refresh token for a short-lived access token, cached
+// until ~1 min before expiry. This is the exact REST exchange that debug-auth
+// proved works fast from the container. ---
+let _token: { value: string; expiresAt: number } | null = null;
+async function getAccessToken(): Promise<string> {
+  if (_token && Date.now() < _token.expiresAt) return _token.value;
+  const body = new URLSearchParams({
+    client_id: trimEnv('GOOGLE_ADS_CLIENT_ID'),
+    client_secret: trimEnv('GOOGLE_ADS_CLIENT_SECRET'),
+    refresh_token: trimEnv('GOOGLE_ADS_REFRESH_TOKEN'),
+    grant_type: 'refresh_token',
+  }).toString();
+  const r = await axios.post('https://oauth2.googleapis.com/token', body, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    timeout: 15000,
+  });
+  const ttlMs = (Number(r.data.expires_in) || 3600) * 1000;
+  _token = { value: r.data.access_token, expiresAt: Date.now() + ttlMs - 60000 };
+  return _token.value;
+}
+
+async function adsHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${await getAccessToken()}`,
+    'developer-token': trimEnv('GOOGLE_ADS_DEVELOPER_TOKEN'),
+    'Content-Type': 'application/json',
+  };
+  const lc = loginCustomerId();
+  if (lc) headers['login-customer-id'] = lc; // authenticate "through" the manager (MCC)
+  return headers;
+}
+
 /**
- * Create an automated Google Ads SEARCH campaign for a product.
+ * POST a {resource}:mutate request and return the created resource names.
+ */
+async function mutate(resource: string, operations: any[]): Promise<string[]> {
+  const url = `${ADS_BASE}/customers/${customerId()}/${resource}:mutate`;
+  try {
+    const r = await axios.post(url, { operations }, { headers: await adsHeaders(), timeout: REQUEST_TIMEOUT_MS });
+    return (r.data?.results || []).map((x: any) => x.resourceName as string);
+  } catch (e: any) {
+    throw new Error(describeAdsError(e));
+  }
+}
+
+/**
+ * Create an automated Google Ads SEARCH campaign for a product (over REST).
  *
- * SEARCH + Responsive Search Ad is intentional: it's text-only (no image/video
- * asset uploads or YouTube linkage), uses new-account-safe MAXIMIZE_CONVERSIONS
- * bidding, and drives intent traffic straight to the product landing page.
- * Video (YouTube) campaigns require uploaded YouTube assets and are handled by
- * the Performance Max path instead.
+ * SEARCH + Responsive Search Ad is intentional: text-only (no asset uploads or
+ * YouTube linkage), uses new-account-safe MAXIMIZE_CONVERSIONS bidding, and
+ * drives intent traffic to the product landing page.
  *
  * Everything is created PAUSED — nothing spends until enabled in Google Ads.
  */
@@ -74,166 +119,74 @@ export async function createAutomatedCampaign(
   product: ProductAdData,
   config: CampaignConfig
 ): Promise<{ campaignId: string; adGroupId: string; adId: string }> {
-  // Compliance check
   if (!canUseAutomatedAds(product.targetCountry)) {
     throw new Error(`Automated ads not allowed in ${product.targetCountry}. Manual creation required.`);
   }
 
   console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
+  const ts = Date.now();
 
-  // The google-ads-api library reuses ONE gRPC channel per client. If that
-  // channel wedges while establishing (intermittent from a cold Railway
-  // container), every call on it hangs — so retrying on the same client is
-  // useless. Instead, rebuild a FRESH client/channel on each whole-chain
-  // attempt; a wedged channel is abandoned rather than reused. Resource names
-  // are account-scoped (not channel-scoped), so a new channel to the same
-  // account works fine. Everything is PAUSED, so an abandoned attempt's orphan
-  // budget/campaign costs nothing.
-  const STEP_MS = 15000;
-  const MAX_ATTEMPTS = 3;
-  let lastErr: any;
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const customer = buildFreshCustomer();
-    try {
-      // Step 1: Budget (a campaign references a budget resource, can't inline one)
-      const budgetResource = await withTimeout(createBudget(customer, product, config), STEP_MS, 'budget create');
-      console.log(`✅ Budget created: ${budgetResource}`);
-
-      // Step 2: Campaign (PAUSED, MAXIMIZE_CONVERSIONS)
-      const campaignResource = await withTimeout(createCampaign(customer, budgetResource, product), STEP_MS, 'campaign create');
-      console.log(`✅ Campaign created: ${campaignResource}`);
-
-      // Step 3: Ad Group
-      const adGroupResource = await withTimeout(createAdGroup(customer, campaignResource, product, config), STEP_MS, 'ad group create');
-      console.log(`✅ Ad Group created: ${adGroupResource}`);
-
-      // Step 4: Keywords (so the search campaign can actually serve)
-      await withTimeout(createKeywords(customer, adGroupResource, product), STEP_MS, 'keywords create');
-
-      // Step 5: Responsive Search Ad
-      const adResource = await withTimeout(createResponsiveSearchAd(customer, adGroupResource, product), STEP_MS, 'responsive search ad create');
-      console.log(`✅ Responsive Search Ad created: ${adResource}`);
-
-      return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
-    } catch (e: any) {
-      lastErr = e;
-      const isTimeout = typeof e?.message === 'string' && e.message.includes('timed out');
-      // Only a wedged-channel timeout is worth retrying with a fresh channel.
-      // Validation/permission errors are deterministic — fail fast.
-      if (!isTimeout || attempt === MAX_ATTEMPTS) throw e;
-      console.warn(`⚠️ ${e.message} — rebuilding gRPC channel (attempt ${attempt}/${MAX_ATTEMPTS})`);
-      await new Promise((r) => setTimeout(r, 1000 * attempt));
-    }
-  }
-  throw lastErr;
-}
-
-/**
- * Build a Customer on a brand-new GoogleAdsApi instance (fresh gRPC channel),
- * bypassing the cached singleton. Used so each campaign-creation attempt gets
- * an unwedged channel.
- */
-function buildFreshCustomer(): Customer {
-  const api = new GoogleAdsApi({
-    client_id: (process.env.GOOGLE_ADS_CLIENT_ID || '').trim(),
-    client_secret: (process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim(),
-    developer_token: (process.env.GOOGLE_ADS_DEVELOPER_TOKEN || '').trim(),
-  });
-  return api.Customer({
-    customer_id: (process.env.GOOGLE_ADS_CUSTOMER_ID || '').trim(),
-    // When the ad account sits under a manager (MCC), authenticate "through" it.
-    login_customer_id: (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').trim() || undefined,
-    refresh_token: (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim(),
-  });
-}
-
-/**
- * Create campaign budget resource, returns its resource name.
- */
-async function createBudget(customer: Customer, product: ProductAdData, config: CampaignConfig): Promise<string> {
-  const response = await customer.campaignBudgets.create([{
-    name: `Budget - ${product.productName} - ${Date.now()}`,
-    amount_micros: Math.round(config.dailyBudget * 1_000_000),
-    delivery_method: enums.BudgetDeliveryMethod.STANDARD,
-    explicitly_shared: false,
-  }]);
-  // .create() returns the MutateResponse object; results live under .results
-  return response.results![0].resource_name!;
-}
-
-/**
- * Create a PAUSED Search campaign with automated (Maximize Conversions) bidding.
- */
-async function createCampaign(customer: Customer, budgetResource: string, product: ProductAdData): Promise<string> {
-  const response = await customer.campaigns.create([{
-    name: `Arbi - ${product.productName} - ${product.targetCountry} - ${Date.now()}`,
-    advertising_channel_type: enums.AdvertisingChannelType.SEARCH,
-    status: enums.CampaignStatus.PAUSED, // never auto-spend
-    campaign_budget: budgetResource,
-    // Required on every campaign since Google Ads API v17 (EU political ad
-    // transparency). Our products are commercial, never political.
-    contains_eu_political_advertising:
-      enums.EuPoliticalAdvertisingStatus.DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING,
-    // Maximize Conversions is valid for brand-new campaigns (Target ROAS needs
-    // conversion history, so it would be rejected here).
-    maximize_conversions: {},
-    network_settings: {
-      target_google_search: true,
-      target_search_network: true,
-      target_content_network: false,
-      target_partner_search_network: false,
+  // Step 1: Budget (a campaign references a budget resource, can't inline one)
+  const [budgetResource] = await mutate('campaignBudgets', [{
+    create: {
+      name: `Budget - ${product.productName} - ${ts}`,
+      amountMicros: Math.round(config.dailyBudget * 1_000_000),
+      deliveryMethod: 'STANDARD',
+      explicitlyShared: false,
     },
   }]);
-  return response.results![0].resource_name!;
-}
+  console.log(`✅ Budget created: ${budgetResource}`);
 
-/**
- * Create the ad group.
- */
-async function createAdGroup(
-  customer: Customer,
-  campaignResource: string,
-  product: ProductAdData,
-  config: CampaignConfig
-): Promise<string> {
-  const response = await customer.adGroups.create([{
-    name: `AG - ${truncate(product.productName, 120)}`,
-    campaign: campaignResource,
-    status: enums.AdGroupStatus.ENABLED,
-    type: enums.AdGroupType.SEARCH_STANDARD,
-    cpc_bid_micros: Math.round((config.maxCPC ?? 0.5) * 1_000_000),
+  // Step 2: Campaign (PAUSED, Maximize Conversions — Target ROAS needs history)
+  const [campaignResource] = await mutate('campaigns', [{
+    create: {
+      name: `Arbi - ${product.productName} - ${product.targetCountry} - ${ts}`,
+      advertisingChannelType: 'SEARCH',
+      status: 'PAUSED', // never auto-spend
+      campaignBudget: budgetResource,
+      maximizeConversions: {},
+      // Required on every campaign since API v17 (EU political ad transparency).
+      containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
+      networkSettings: {
+        targetGoogleSearch: true,
+        targetSearchNetwork: true,
+        targetContentNetwork: false,
+        targetPartnerSearchNetwork: false,
+      },
+    },
   }]);
-  return response.results![0].resource_name!;
-}
+  console.log(`✅ Campaign created: ${campaignResource}`);
 
-/**
- * Add phrase-match keywords derived from the product name so the campaign serves.
- */
-async function createKeywords(customer: Customer, adGroupResource: string, product: ProductAdData): Promise<void> {
+  // Step 3: Ad Group
+  const [adGroupResource] = await mutate('adGroups', [{
+    create: {
+      name: `AG - ${truncate(product.productName, 120)}`,
+      campaign: campaignResource,
+      status: 'ENABLED',
+      type: 'SEARCH_STANDARD',
+      cpcBidMicros: Math.round((config.maxCPC ?? 0.5) * 1_000_000),
+    },
+  }]);
+  console.log(`✅ Ad Group created: ${adGroupResource}`);
+
+  // Step 4: Keywords (so the search campaign can actually serve)
   const base = product.productName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
   const terms = Array.from(new Set([
     base,
     `buy ${base}`,
     `${base} online`,
   ].filter(t => t.length >= 2 && t.length <= 80))).slice(0, 10);
+  if (terms.length) {
+    await mutate('adGroupCriteria', terms.map(text => ({
+      create: {
+        adGroup: adGroupResource,
+        status: 'ENABLED',
+        keyword: { text, matchType: 'PHRASE' },
+      },
+    })));
+  }
 
-  if (terms.length === 0) return;
-
-  await customer.adGroupCriteria.create(terms.map(text => ({
-    ad_group: adGroupResource,
-    status: enums.AdGroupCriterionStatus.ENABLED,
-    keyword: {
-      text,
-      match_type: enums.KeywordMatchType.PHRASE,
-    },
-  })));
-}
-
-/**
- * Create a Responsive Search Ad (text-only; no asset uploads needed).
- */
-async function createResponsiveSearchAd(customer: Customer, adGroupResource: string, product: ProductAdData): Promise<string> {
+  // Step 5: Responsive Search Ad (text-only; no asset uploads needed)
   const name = product.productName;
   const headlines = [
     truncate(name, HEADLINE_MAX),
@@ -242,63 +195,58 @@ async function createResponsiveSearchAd(customer: Customer, adGroupResource: str
     'Free Shipping',
     'Limited Time Offer',
   ].map(text => ({ text }));
-
   const descriptions = [
     truncate(`Shop ${name} at a great price. Fast, secure checkout.`, DESC_MAX),
     truncate(`Order ${name} today. Free shipping and easy returns.`, DESC_MAX),
   ].map(text => ({ text }));
 
-  const response = await customer.adGroupAds.create([{
-    ad_group: adGroupResource,
-    status: enums.AdGroupAdStatus.PAUSED, // paused with the campaign
-    ad: {
-      final_urls: [product.landingPageUrl],
-      responsive_search_ad: { headlines, descriptions },
+  const [adResource] = await mutate('adGroupAds', [{
+    create: {
+      adGroup: adGroupResource,
+      status: 'PAUSED', // paused with the campaign
+      ad: {
+        finalUrls: [product.landingPageUrl],
+        responsiveSearchAd: { headlines, descriptions },
+      },
     },
   }]);
-  return response.results![0].resource_name!;
+  console.log(`✅ Responsive Search Ad created: ${adResource}`);
+
+  return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
 }
 
 /**
- * Extract a meaningful message from a google-ads-api error. The library throws
- * errors whose real detail is in `errors[]` (each with an error_code + message),
- * not the top-level `.message` (often empty) — so surface that.
+ * Extract a meaningful message from a Google Ads REST error. The real detail
+ * lives in error.details[].errors[], each with an errorCode, message, and a
+ * location.fieldPathElements that pinpoints WHICH field/operation failed.
  */
 function describeAdsError(error: any): string {
   try {
-    const errs = error?.errors || error?.failure?.errors;
-    if (Array.isArray(errs) && errs.length) {
-      return errs
-        .map((e: any) => {
-          const code = e.error_code ? Object.entries(e.error_code).map(([k, v]) => `${k}=${v}`).join(',') : '';
-          // location.field_path_elements pinpoints WHICH field/operation failed
-          // (e.g. "operations[0].campaign.maximize_conversions") — without it a
-          // bare "REQUIRED" error is unactionable.
-          const path = Array.isArray(e?.location?.field_path_elements)
-            ? e.location.field_path_elements
-                .map((fp: any) => (fp.index !== undefined && fp.index !== null ? `${fp.field_name}[${fp.index}]` : fp.field_name))
-                .join('.')
-            : '';
-          return [e.message, code, path && `@ ${path}`].filter(Boolean).join(' ');
-        })
-        .join(' | ');
+    const gerr = error?.response?.data?.error;
+    if (gerr?.details?.length) {
+      const parts: string[] = [];
+      for (const d of gerr.details) {
+        if (Array.isArray(d.errors)) {
+          for (const er of d.errors) {
+            const code = er.errorCode
+              ? Object.entries(er.errorCode).map(([k, v]) => `${k}=${v}`).join(',')
+              : '';
+            const path = Array.isArray(er?.location?.fieldPathElements)
+              ? er.location.fieldPathElements
+                  .map((fp: any) => (fp.index !== undefined && fp.index !== null ? `${fp.fieldName}[${fp.index}]` : fp.fieldName))
+                  .join('.')
+              : '';
+            parts.push([er.message, code, path && `@ ${path}`].filter(Boolean).join(' '));
+          }
+        }
+      }
+      if (parts.length) return parts.join(' | ');
     }
+    if (gerr?.message) return gerr.message;
+    if (error?.code === 'ECONNABORTED') return `request timed out after ${REQUEST_TIMEOUT_MS}ms (${error?.config?.url || ''})`;
   } catch { /* fall through */ }
   if (error?.message) return error.message;
   try { return JSON.stringify(error).slice(0, 600); } catch { return String(error); }
-}
-
-/**
- * Reject if a promise doesn't settle in time, so a hung Google API call can't
- * make the HTTP request spin forever (the browser just shows "won't load").
- */
-function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
-    ),
-  ]);
 }
 
 /**
@@ -314,18 +262,13 @@ export async function createBulkCampaigns(
 
   for (const product of products) {
     try {
-      const result = await withTimeout(
-        createAutomatedCampaign(product, config),
-        120000, // outer safety net; per-step timeouts (20s each) fire first and name the stalled call
-        `campaign creation for ${product.productName}`
-      );
+      const result = await createAutomatedCampaign(product, config);
       results.push({ product: product.productName, ...result, status: 'success' });
       success++;
-
-      // Rate limit: Wait 1 second between API calls
+      // Rate limit: brief pause between products
       await new Promise(resolve => setTimeout(resolve, 1000));
     } catch (error: any) {
-      const detail = describeAdsError(error);
+      const detail = error?.message || describeAdsError(error);
       console.error(`❌ Failed to create campaign for ${product.productName}:`, detail);
       results.push({ product: product.productName, error: detail, status: 'failed' });
       failed++;
@@ -336,16 +279,10 @@ export async function createBulkCampaigns(
 }
 
 /**
- * Get campaign performance metrics
+ * Get campaign performance metrics (over REST via googleAds:search).
  */
 export async function getCampaignMetrics(campaignId: string) {
-  const customer = getClient().Customer({
-    customer_id: (process.env.GOOGLE_ADS_CUSTOMER_ID || '').trim(),
-    // When the ad account sits under a manager (MCC), authenticate "through" it.
-    login_customer_id: (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').trim() || undefined,
-    refresh_token: (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim(),
-  });
-
+  const url = `${ADS_BASE}/customers/${customerId()}/googleAds:search`;
   const query = `
     SELECT
       campaign.id,
@@ -360,14 +297,20 @@ export async function getCampaignMetrics(campaignId: string) {
     WHERE campaign.id = ${campaignId}
   `;
 
-  const results = await customer.query(query);
-
+  const r = await axios.post(url, { query }, { headers: await adsHeaders(), timeout: REQUEST_TIMEOUT_MS });
+  const row = (r.data?.results || [])[0];
+  if (!row) {
+    return { impressions: 0, clicks: 0, spend: 0, conversions: 0, revenue: 0, roas: 0 };
+  }
+  const m = row.metrics || {};
+  const spend = Number(m.costMicros || 0) / 1_000_000;
+  const revenue = Number(m.conversionsValue || 0);
   return {
-    impressions: results[0].metrics.impressions,
-    clicks: results[0].metrics.clicks,
-    spend: results[0].metrics.cost_micros / 1_000_000,
-    conversions: results[0].metrics.conversions,
-    revenue: results[0].metrics.conversions_value,
-    roas: results[0].metrics.conversions_value / (results[0].metrics.cost_micros / 1_000_000),
+    impressions: Number(m.impressions || 0),
+    clicks: Number(m.clicks || 0),
+    spend,
+    conversions: Number(m.conversions || 0),
+    revenue,
+    roas: spend > 0 ? revenue / spend : 0,
   };
 }

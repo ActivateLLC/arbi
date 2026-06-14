@@ -16,6 +16,9 @@ import {
   buildDescriptions,
   buildKeywords,
   buildBiddingStrategy,
+  productCampaignKey,
+  campaignProductKey,
+  DEFAULT_DAILY_BUDGET,
   ProductAdData,
   CampaignConfig,
 } from './campaignAutomation';
@@ -201,6 +204,22 @@ describe('ad creative generation (amazing-ads helpers)', () => {
       expect(k.length).toBeGreaterThanOrEqual(2);
       expect(k.length).toBeLessThanOrEqual(80);
     }
+  });
+});
+
+describe('dedup + budget (portfolio testing)', () => {
+  it('derives a stable product key that matches its campaign name', () => {
+    const product = 'Fashionable Multilayer Boho Moon Map Necklace';
+    const key = productCampaignKey(product);
+    const campaignName = `Arbi - ${product} - US - 1781477577336`;
+    expect(key.length).toBeGreaterThan(3);
+    // The product key extracted from the campaign name must match the product's own key.
+    expect(campaignProductKey(campaignName)).toBe(key);
+  });
+
+  it('uses a low default daily budget (test many products cheaply)', () => {
+    expect(DEFAULT_DAILY_BUDGET).toBeGreaterThan(0);
+    expect(DEFAULT_DAILY_BUDGET).toBeLessThanOrEqual(20);
   });
 });
 

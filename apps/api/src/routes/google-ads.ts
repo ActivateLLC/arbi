@@ -11,6 +11,7 @@ import {
   getCampaignMetrics,
   setCampaignStatus,
   listCampaigns,
+  DEFAULT_DAILY_BUDGET,
   ProductAdData,
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
@@ -220,7 +221,7 @@ router.post('/quick-start', async (req: Request, res: Response, next: NextFuncti
 
     // Step 2: Create campaigns with conservative budget
     const config: CampaignConfig = {
-      dailyBudget: 20, // Start conservative at $20/day per product
+      dailyBudget: DEFAULT_DAILY_BUDGET, // low test budget — spread across many products
       targetROAS: 4.0, // Target $4 revenue per $1 spent (aggressive)
       geoTargeting: ['US'],
       maxCPC: 1.5,
@@ -266,7 +267,7 @@ router.get('/quick-start-now', async (req: Request, res: Response, next: NextFun
     if (products.length === 0) {
       return res.status(200).json({ success: false, message: 'No products with 30%+ profit margin found.' });
     }
-    const config: CampaignConfig = { dailyBudget: 20, targetROAS: 4.0, geoTargeting: ['US'], maxCPC: 1.5 };
+    const config: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, targetROAS: 4.0, geoTargeting: ['US'], maxCPC: 1.5 };
     const result = await createBulkCampaigns(products, config);
     res.status(201).json({ success: true, message: `Created ${result.success} PAUSED campaign(s)`, ...result });
   } catch (error: any) {

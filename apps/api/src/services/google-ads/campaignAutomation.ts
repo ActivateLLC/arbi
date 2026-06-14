@@ -507,16 +507,56 @@ function describeAdsError(error: any): string {
 /**
  * Bulk create campaigns for multiple products (optionally scoped to a tenant).
  */
+// Lower per-campaign daily budget = test MORE products cheaply; the optimizer
+// then concentrates spend on the few winners (scaling up to its cap). Tunable
+// via env CAMPAIGN_DAILY_BUDGET.
+export const DEFAULT_DAILY_BUDGET = (() => {
+  const v = Number((process.env.CAMPAIGN_DAILY_BUDGET || '').trim());
+  return Number.isFinite(v) && v > 0 ? v : 10;
+})();
+
+/** Normalized key from a product TITLE (used for de-duplication). */
+export function productCampaignKey(s: string): string {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 40);
+}
+
+/** Strip the "Arbi - <title> - <CC> - <ts>" wrapper back to the product title. */
+export function campaignProductName(name: string): string {
+  return (name || '')
+    .replace(/^arbi\s*-\s*/i, '')
+    .replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, '')
+    .trim();
+}
+
+/** Product key derived from a campaign NAME — comparable to productCampaignKey. */
+export function campaignProductKey(name: string): string {
+  return productCampaignKey(campaignProductName(name));
+}
+
 export async function createBulkCampaigns(
   products: ProductAdData[],
   config: CampaignConfig,
   customerIdOverride?: string
 ): Promise<{ success: number; failed: number; results: any[] }> {
+  // De-dupe: skip products that already have a campaign, so repeated launches /
+  // autonomous cycles never create duplicate spend for the same product.
+  let queue = products;
+  try {
+    const existing = await listCampaigns(customerIdOverride);
+    const existingKeys = (existing as any[]).map((c) => campaignProductKey(c.name)).filter(Boolean);
+    queue = products.filter((p) => {
+      const key = productCampaignKey(p.productName);
+      return key.length > 3 && !existingKeys.some((n) => n === key || n.includes(key) || key.includes(n));
+    });
+  } catch {
+    queue = products; // if we can't list, proceed without dedup
+  }
+
   const results = [];
   let success = 0;
   let failed = 0;
 
-  for (const product of products) {
+  for (const product of queue) {
     try {
       const result = await createAutomatedCampaign(product, config, customerIdOverride);
       results.push({ product: product.productName, ...result, status: 'success' });

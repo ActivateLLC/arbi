@@ -22,6 +22,8 @@ import {
   createBulkCampaigns,
   listCampaigns,
   setCampaignStatus,
+  campaignProductKey,
+  DEFAULT_DAILY_BUDGET,
   ProductAdData,
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
@@ -34,7 +36,7 @@ import { getAutonomousSettings } from '../services/autonomousSettings';
 const logger = createLogger();
 
 const CAMPAIGN_CONFIG: CampaignConfig = {
-  dailyBudget: 20,
+  dailyBudget: DEFAULT_DAILY_BUDGET,
   targetROAS: 3.0,
   geoTargeting: ['US'],
   maxCPC: 1.5,
@@ -97,15 +99,27 @@ async function cycle(): Promise<void> {
     }
   }
 
-  // 2) Take our PAUSED campaigns LIVE (the real-spend switch).
+  // 2) Take our PAUSED campaigns LIVE — but ONE per product and capped per cycle,
+  //    so we test many products at low budget instead of dumping spend on dupes.
   if (cfg.autoGoLive) {
     try {
-      const campaigns = await listCampaigns();
-      const paused = (campaigns as any[]).filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''));
-      for (const c of paused) {
+      const campaigns = (await listCampaigns()) as any[];
+      const cap = Math.max(Number(process.env.AUTO_GO_LIVE_MAX) || 5, 1);
+      // Products already serving — don't double-enable.
+      const liveKeys = new Set(campaigns.filter((c) => c.status === 'ENABLED').map((c) => campaignProductKey(c.name)));
+      const pausedArbi = campaigns.filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''));
+      const seen = new Set<string>();
+      let enabled = 0;
+      for (const c of pausedArbi) {
+        if (enabled >= cap) break;
+        const key = campaignProductKey(c.name);
+        if (!key || liveKeys.has(key) || seen.has(key)) continue; // one per product
+        seen.add(key);
         await setCampaignStatus(c.id, 'ENABLED');
-        logger.info(`🤖 AUTO_GO_LIVE: enabled campaign ${c.id} (${c.name})`);
+        enabled++;
+        logger.info(`🤖 AUTO_GO_LIVE: enabled ${c.id} (${c.name})`);
       }
+      if (enabled) logger.info(`🤖 AUTO_GO_LIVE: took ${enabled} campaign(s) live this cycle (cap ${cap})`);
     } catch (e: any) {
       logger.error('🤖 AUTO_GO_LIVE error:', e?.message || e);
     }

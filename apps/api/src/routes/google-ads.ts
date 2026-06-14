@@ -15,6 +15,7 @@ import {
 import { getListings, getListing } from './marketplace';
 import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
+import { uploadVideoToYouTube } from '../services/google-ads/youtubeUpload';
 
 const router = Router();
 
@@ -308,6 +309,105 @@ router.post('/generate-video', async (req: Request, res: Response, next: NextFun
 
     const result = await generateProductVideo(listingToProduct(listing), imageUrl, { model });
     res.status(201).json({ success: true, listingId, ...result });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * YouTube permission setup (one-time, admin). Grants the youtube.upload scope so
+ * generated videos can be hosted on YouTube and used as Google Ads video assets.
+ * The minted refresh token covers BOTH adwords + youtube, so one credential
+ * drives ads AND uploads — replace GOOGLE_ADS_REFRESH_TOKEN with it.
+ */
+const youtubeRedirectUri = () =>
+  process.env.GOOGLE_OAUTH_REDIRECT_URI ||
+  `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/api/google-ads/youtube-oauth/callback`;
+
+router.get('/youtube-oauth/url', (_req: Request, res: Response) => {
+  const clientId = (process.env.GOOGLE_ADS_CLIENT_ID || '').trim();
+  if (!clientId) return res.status(503).json({ success: false, error: 'GOOGLE_ADS_CLIENT_ID not set.' });
+  const redirectUri = youtubeRedirectUri();
+  const scope = [
+    'https://www.googleapis.com/auth/adwords',
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube',
+  ].join(' ');
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope,
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+  });
+  res.json({
+    success: true,
+    authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+    redirectUri,
+    note: 'First: in Google Cloud Console add this exact redirectUri to the OAuth client, and enable "YouTube Data API v3". Then open authUrl with the Google account that owns your YouTube channel + Google Ads.',
+  });
+});
+
+router.get('/youtube-oauth/callback', async (req: Request, res: Response) => {
+  const code = String(req.query.code || '');
+  if (!code) return res.status(400).json({ success: false, error: 'Missing ?code. Start at /api/google-ads/youtube-oauth/url.' });
+  try {
+    const body = new URLSearchParams({
+      client_id: (process.env.GOOGLE_ADS_CLIENT_ID || '').trim(),
+      client_secret: (process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim(),
+      code,
+      redirect_uri: youtubeRedirectUri(),
+      grant_type: 'authorization_code',
+    }).toString();
+    const r = await axios.post('https://oauth2.googleapis.com/token', body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      validateStatus: () => true,
+      timeout: 15000,
+    });
+    if (r.status !== 200 || !r.data?.refresh_token) {
+      return res.status(400).json({
+        success: false,
+        error: r.data?.error || `status ${r.status}`,
+        error_description: r.data?.error_description,
+        hint: 'Ensure access_type=offline + prompt=consent and that the redirect URI matches the OAuth client exactly.',
+      });
+    }
+    res.json({
+      success: true,
+      message: 'Set GOOGLE_ADS_REFRESH_TOKEN to this value in Railway (arbi-production) — it covers Google Ads AND YouTube — then redeploy.',
+      refresh_token: r.data.refresh_token,
+      scope: r.data.scope,
+    });
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || String(error) });
+  }
+});
+
+/**
+ * POST /api/google-ads/youtube/upload-from-listing  Body: { listingId, model? }
+ * Generate a UGC video for a listing and host it on YouTube (unlisted). Returns
+ * the YouTube video id to use as a Google Ads video asset.
+ */
+router.post('/youtube/upload-from-listing', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!isVideoConfigured()) throw new ApiError(503, 'Higgsfield not configured: set HF_API_KEY and HF_API_SECRET.');
+    const { listingId, model } = req.body || {};
+    if (!listingId) throw new ApiError(400, 'listingId is required');
+    const listing: any = await getListing(listingId);
+    if (!listing) throw new ApiError(404, 'Listing not found');
+    const imageUrl = Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) throw new ApiError(409, 'Listing has no product image to animate');
+
+    const product = listingToProduct(listing);
+    const video = await generateProductVideo(product, imageUrl, { model });
+    const youtube = await uploadVideoToYouTube({
+      videoUrl: video.videoUrl,
+      title: product.productName,
+      description: video.brief.hooks[0],
+    });
+    res.status(201).json({ success: true, listingId, sourceVideoUrl: video.videoUrl, youtube });
   } catch (error: any) {
     next(error);
   }

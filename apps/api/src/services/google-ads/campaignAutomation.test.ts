@@ -9,7 +9,15 @@
 
 jest.mock('axios');
 import axios from 'axios';
-import { createAutomatedCampaign, ProductAdData, CampaignConfig } from './campaignAutomation';
+import {
+  createAutomatedCampaign,
+  shortProductName,
+  buildHeadlines,
+  buildDescriptions,
+  buildKeywords,
+  ProductAdData,
+  CampaignConfig,
+} from './campaignAutomation';
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
@@ -129,5 +137,53 @@ describe('ad campaign automation (revenue-critical path)', () => {
     await expect(
       createAutomatedCampaign({ ...product, targetCountry: 'CN' }, config)
     ).rejects.toThrow(/not allowed/i);
+  });
+
+  it('scopes the campaign to a tenant child account when customerId is given', async () => {
+    mockedAxios.post.mockClear();
+    await createAutomatedCampaign(product, config, '999-888-7777');
+    const urls = mockedAxios.post.mock.calls.map(([u]) => String(u));
+    // Every :mutate call must target the tenant's bare-digit customer id.
+    const mutateUrls = urls.filter((u) => u.includes(':mutate'));
+    expect(mutateUrls.length).toBeGreaterThan(0);
+    for (const u of mutateUrls) expect(u).toContain('/customers/9998887777/');
+  });
+});
+
+// A real, messy retailer title — the kind that used to break keyword/headline
+// generation (too long for the 30-char headline and 80-char keyword limits).
+const LONG_NAME =
+  'Infinity Love God We Trust Christian Cross Birthstone Crystal Pendant Necklace Colour Gems Zircon Heart Necklace Women Jewelry';
+
+describe('ad creative generation (amazing-ads helpers)', () => {
+  const longProduct: ProductAdData = { ...product, productName: LONG_NAME, category: 'Jewelry' };
+
+  it('derives a concise brand-style name from a long title', () => {
+    const short = shortProductName(LONG_NAME);
+    expect(short.length).toBeLessThanOrEqual(20);
+    expect(short.length).toBeGreaterThan(0);
+  });
+
+  it('produces >=3 unique headlines, each within 30 chars', () => {
+    const hs = buildHeadlines(longProduct).map((h) => h.text);
+    expect(hs.length).toBeGreaterThanOrEqual(3);
+    for (const h of hs) expect(h.length).toBeLessThanOrEqual(30);
+    expect(new Set(hs.map((h) => h.toLowerCase())).size).toBe(hs.length); // all unique
+  });
+
+  it('produces >=2 unique descriptions, each within 90 chars', () => {
+    const ds = buildDescriptions(longProduct).map((d) => d.text);
+    expect(ds.length).toBeGreaterThanOrEqual(2);
+    for (const d of ds) expect(d.length).toBeLessThanOrEqual(90);
+    expect(new Set(ds.map((d) => d.toLowerCase())).size).toBe(ds.length);
+  });
+
+  it('still yields servable keywords for very long titles (the latent bug)', () => {
+    const kws = buildKeywords(longProduct);
+    expect(kws.length).toBeGreaterThan(0); // long names used to yield ZERO
+    for (const k of kws) {
+      expect(k.length).toBeGreaterThanOrEqual(2);
+      expect(k.length).toBeLessThanOrEqual(80);
+    }
   });
 });

@@ -19,6 +19,7 @@ import productImageRoutes from './product-image';
 import fulfillmentRoutes from './fulfillment';
 import cjRoutes from './cj';
 import tiktokRoutes from './tiktok';
+import tenantRoutes from './tenants';
 
 const router = Router();
 
@@ -75,5 +76,9 @@ router.use('/cj', cjRoutes);
 
 // TikTok Ads automation (campaigns created PAUSED)
 router.use('/tiktok', tiktokRoutes);
+
+// Multi-tenant advertisers — each subscribed customer gets their own Google Ads
+// child account under the manager (MCC); campaigns are scoped to that account.
+router.use('/tenants', tenantRoutes);
 
 export default router;

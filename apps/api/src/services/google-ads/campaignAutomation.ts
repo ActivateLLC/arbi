@@ -10,6 +10,13 @@
  * plain HTTPS to googleapis.com is fast and reliable. REST sidesteps that
  * transport entirely. Field names are camelCase and enum values are strings,
  * per the REST API contract.
+ *
+ * MULTI-TENANT: under a manager (MCC) account, ONE set of manager credentials
+ * (refresh token + developer token + login-customer-id = manager) manages every
+ * child account — only the customer_id in the URL path changes per tenant. So
+ * every entry point accepts an optional `customerId` override; omit it and it
+ * falls back to GOOGLE_ADS_CUSTOMER_ID. `provisionChildAccount` creates a new
+ * child account under the manager for a newly-subscribed tenant.
  */
 
 import axios from 'axios';
@@ -56,10 +63,29 @@ const HEADLINE_MAX = 30;
 const DESC_MAX = 90;
 
 /**
+ * Real retailer product titles are long, keyword-stuffed strings ("Infinity
+ * Love God We Trust Christian Cross Birthstone…"). Using the whole title in
+ * headlines/keywords blows past the 30-char headline limit and the 80-char
+ * keyword limit (producing ZERO usable keywords). Derive a concise, human
+ * brand-style name from the leading words instead.
+ */
+export function shortProductName(name: string, maxWords = 4, maxLen = 20): string {
+  const cleaned = name.replace(/[^a-zA-Z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const words = cleaned.split(' ').filter(Boolean);
+  let s = '';
+  for (const w of words.slice(0, maxWords)) {
+    const next = s ? `${s} ${w}` : w;
+    if (next.length > maxLen) break;
+    s = next;
+  }
+  return s || truncate(cleaned, maxLen);
+}
+
+/**
  * Google rejects a Responsive Search Ad if two headline (or description) assets
- * are identical (assetError=DUPLICATE_ASSET). Long product names make e.g.
- * "Name" and "Name Online" collapse to the same string after truncation, so
- * dedupe case-insensitively (preserving order) and drop blanks.
+ * are identical (assetError=DUPLICATE_ASSET), and long product names make
+ * variants collapse to the same string after truncation. Dedupe case-
+ * insensitively (preserving order) and drop blanks.
  */
 function dedupeAssets(candidates: string[], max: number): { text: string }[] {
   const seen = new Set<string>();
@@ -70,6 +96,74 @@ function dedupeAssets(candidates: string[], max: number): { text: string }[] {
     if (text && !seen.has(key)) { seen.add(key); out.push({ text }); }
   }
   return out;
+}
+
+const meaningfulCategory = (c: string) => {
+  const t = (c || '').trim();
+  return t && !/^(general|cj|cjdropshipping|uncategorized)$/i.test(t) ? t : '';
+};
+
+/**
+ * Build a strong, varied set of RSA headlines (<=30 chars each, all unique).
+ * Mixes product/brand, intent CTAs, offers, and trust signals — Google's
+ * optimizer mixes-and-matches, and variety drives Ad Strength + Quality Score.
+ */
+export function buildHeadlines(product: ProductAdData): { text: string }[] {
+  const short = shortProductName(product.productName);
+  const cat = meaningfulCategory(product.category);
+  return dedupeAssets([
+    short,
+    `Buy ${short}`,
+    `Shop ${short}`,
+    `${short} on Sale`,
+    `${short} Online`,
+    cat && `Top ${cat}`,
+    cat && `Shop ${cat}`,
+    'Free Shipping',
+    'Fast Free Delivery',
+    'Shop Now',
+    'Order Today',
+    'Limited Time Offer',
+    'Top Rated',
+    'Secure Checkout',
+    '30-Day Returns',
+  ].filter(Boolean) as string[], HEADLINE_MAX).slice(0, 15);
+}
+
+/**
+ * Build benefit-rich RSA descriptions (<=90 chars each, all unique, min 2).
+ */
+export function buildDescriptions(product: ProductAdData): { text: string }[] {
+  const short = shortProductName(product.productName);
+  const cat = meaningfulCategory(product.category);
+  return dedupeAssets([
+    `Shop ${short} at a great price. Fast, secure checkout and free shipping.`,
+    `Order ${short} today with free shipping and easy 30-day returns.`,
+    cat && `Discover top-rated ${cat}. Secure checkout, fast delivery, easy returns.`,
+    `Limited-time offer on ${short}. Buy now while supplies last.`,
+    'Great prices, fast free shipping, and hassle-free returns. Order today.',
+  ].filter(Boolean) as string[], DESC_MAX).slice(0, 4);
+}
+
+/**
+ * Build phrase-match keyword terms (2..80 chars each, all unique, capped).
+ * Derived from the SHORT name so long titles still yield real, servable terms.
+ */
+export function buildKeywords(product: ProductAdData): string[] {
+  const base = shortProductName(product.productName).toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
+  const cat = meaningfulCategory(product.category).toLowerCase();
+  const candidates = [
+    base,
+    `buy ${base}`,
+    `${base} online`,
+    `${base} for sale`,
+    `best ${base}`,
+    `${base} deals`,
+    cat,
+  ];
+  return Array.from(new Set(
+    candidates.map(t => t.trim()).filter(t => t.length >= 2 && t.length <= 80)
+  )).slice(0, 15);
 }
 
 const trimEnv = (k: string) => (process.env[k] || '').trim();
@@ -105,19 +199,57 @@ async function adsHeaders(): Promise<Record<string, string>> {
     'developer-token': trimEnv('GOOGLE_ADS_DEVELOPER_TOKEN'),
     'Content-Type': 'application/json',
   };
+  // login-customer-id is ALWAYS the manager (MCC) — for both child mutates and
+  // for provisioning new children — so it comes straight from env.
   const lc = loginCustomerId();
-  if (lc) headers['login-customer-id'] = lc; // authenticate "through" the manager (MCC)
+  if (lc) headers['login-customer-id'] = lc;
   return headers;
 }
 
 /**
  * POST a {resource}:mutate request and return the created resource names.
+ * `customerIdOverride` targets a specific tenant's child account.
  */
-async function mutate(resource: string, operations: any[]): Promise<string[]> {
-  const url = `${ADS_BASE}/customers/${customerId()}/${resource}:mutate`;
+async function mutate(resource: string, operations: any[], customerIdOverride?: string): Promise<string[]> {
+  const cid = digits(customerIdOverride || '') || customerId();
+  const url = `${ADS_BASE}/customers/${cid}/${resource}:mutate`;
   try {
     const r = await axios.post(url, { operations }, { headers: await adsHeaders(), timeout: REQUEST_TIMEOUT_MS });
     return (r.data?.results || []).map((x: any) => x.resourceName as string);
+  } catch (e: any) {
+    throw new Error(describeAdsError(e));
+  }
+}
+
+/**
+ * Provision a brand-new Google Ads child account under the Arbi manager (MCC),
+ * for a newly-subscribed tenant. Returns the new account's customer id (digits)
+ * which is then stored on the tenant and passed as `customerId` to campaign
+ * creation. The manager id is GOOGLE_ADS_LOGIN_CUSTOMER_ID.
+ */
+export async function provisionChildAccount(opts: {
+  descriptiveName: string;
+  currencyCode?: string;
+  timeZone?: string;
+}): Promise<{ customerId: string; resourceName: string }> {
+  const managerId = loginCustomerId() || customerId();
+  if (!managerId) throw new Error('No manager account configured (set GOOGLE_ADS_LOGIN_CUSTOMER_ID).');
+  const url = `${ADS_BASE}/customers/${managerId}:createCustomerClient`;
+  const body = {
+    customerClient: {
+      descriptiveName: opts.descriptiveName,
+      currencyCode: opts.currencyCode || 'USD',
+      timeZone: opts.timeZone || 'America/New_York',
+    },
+  };
+  try {
+    const r = await axios.post(url, body, { headers: await adsHeaders(), timeout: REQUEST_TIMEOUT_MS });
+    // Response carries the new client resource name as `customerClient`
+    // ("customers/{newId}") or `resourceName`.
+    const rn: string = r.data?.customerClient || r.data?.resourceName || '';
+    const id = digits(String(rn).split('/').pop() || '');
+    if (!id) throw new Error(`createCustomerClient returned no customer id: ${JSON.stringify(r.data).slice(0, 300)}`);
+    return { customerId: id, resourceName: rn };
   } catch (e: any) {
     throw new Error(describeAdsError(e));
   }
@@ -131,10 +263,12 @@ async function mutate(resource: string, operations: any[]): Promise<string[]> {
  * drives intent traffic to the product landing page.
  *
  * Everything is created PAUSED — nothing spends until enabled in Google Ads.
+ * `customerId` scopes the campaign to a tenant's child account (default: env).
  */
 export async function createAutomatedCampaign(
   product: ProductAdData,
-  config: CampaignConfig
+  config: CampaignConfig,
+  customerIdOverride?: string
 ): Promise<{ campaignId: string; adGroupId: string; adId: string }> {
   if (!canUseAutomatedAds(product.targetCountry)) {
     throw new Error(`Automated ads not allowed in ${product.targetCountry}. Manual creation required.`);
@@ -151,7 +285,7 @@ export async function createAutomatedCampaign(
       deliveryMethod: 'STANDARD',
       explicitlyShared: false,
     },
-  }]);
+  }], customerIdOverride);
   console.log(`✅ Budget created: ${budgetResource}`);
 
   // Step 2: Campaign (PAUSED, Maximize Conversions — Target ROAS needs history)
@@ -171,7 +305,7 @@ export async function createAutomatedCampaign(
         targetPartnerSearchNetwork: false,
       },
     },
-  }]);
+  }], customerIdOverride);
   console.log(`✅ Campaign created: ${campaignResource}`);
 
   // Step 3: Ad Group
@@ -183,16 +317,11 @@ export async function createAutomatedCampaign(
       type: 'SEARCH_STANDARD',
       cpcBidMicros: Math.round((config.maxCPC ?? 0.5) * 1_000_000),
     },
-  }]);
+  }], customerIdOverride);
   console.log(`✅ Ad Group created: ${adGroupResource}`);
 
   // Step 4: Keywords (so the search campaign can actually serve)
-  const base = product.productName.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim();
-  const terms = Array.from(new Set([
-    base,
-    `buy ${base}`,
-    `${base} online`,
-  ].filter(t => t.length >= 2 && t.length <= 80))).slice(0, 10);
+  const terms = buildKeywords(product);
   if (terms.length) {
     await mutate('adGroupCriteria', terms.map(text => ({
       create: {
@@ -200,31 +329,12 @@ export async function createAutomatedCampaign(
         status: 'ENABLED',
         keyword: { text, matchType: 'PHRASE' },
       },
-    })));
+    })), customerIdOverride);
   }
 
   // Step 5: Responsive Search Ad (text-only; no asset uploads needed)
-  const name = product.productName;
-  // Distinct generic headlines guarantee >=3 unique assets even when the
-  // name-based ones collapse to the same string after truncation.
-  const headlines = dedupeAssets([
-    name,
-    `Buy ${name}`,
-    `${name} Online`,
-    `Shop ${name}`,
-    'Free Shipping',
-    'Limited Time Offer',
-    'Shop Now',
-    'Order Today',
-    'Top Rated',
-  ], HEADLINE_MAX).slice(0, 12);
-  const descriptions = dedupeAssets([
-    `Shop ${name} at a great price. Fast, secure checkout.`,
-    `Order ${name} today. Free shipping and easy returns.`,
-    'Great prices with fast, secure checkout. Order today.',
-    'Free shipping and easy returns on every order.',
-  ], DESC_MAX).slice(0, 4);
-
+  const headlines = buildHeadlines(product);
+  const descriptions = buildDescriptions(product);
   const [adResource] = await mutate('adGroupAds', [{
     create: {
       adGroup: adGroupResource,
@@ -234,7 +344,7 @@ export async function createAutomatedCampaign(
         responsiveSearchAd: { headlines, descriptions },
       },
     },
-  }]);
+  }], customerIdOverride);
   console.log(`✅ Responsive Search Ad created: ${adResource}`);
 
   return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
@@ -275,11 +385,12 @@ function describeAdsError(error: any): string {
 }
 
 /**
- * Bulk create campaigns for multiple products
+ * Bulk create campaigns for multiple products (optionally scoped to a tenant).
  */
 export async function createBulkCampaigns(
   products: ProductAdData[],
-  config: CampaignConfig
+  config: CampaignConfig,
+  customerIdOverride?: string
 ): Promise<{ success: number; failed: number; results: any[] }> {
   const results = [];
   let success = 0;
@@ -287,7 +398,7 @@ export async function createBulkCampaigns(
 
   for (const product of products) {
     try {
-      const result = await createAutomatedCampaign(product, config);
+      const result = await createAutomatedCampaign(product, config, customerIdOverride);
       results.push({ product: product.productName, ...result, status: 'success' });
       success++;
       // Rate limit: brief pause between products
@@ -306,8 +417,9 @@ export async function createBulkCampaigns(
 /**
  * Get campaign performance metrics (over REST via googleAds:search).
  */
-export async function getCampaignMetrics(campaignId: string) {
-  const url = `${ADS_BASE}/customers/${customerId()}/googleAds:search`;
+export async function getCampaignMetrics(campaignId: string, customerIdOverride?: string) {
+  const cid = digits(customerIdOverride || '') || customerId();
+  const url = `${ADS_BASE}/customers/${cid}/googleAds:search`;
   const query = `
     SELECT
       campaign.id,

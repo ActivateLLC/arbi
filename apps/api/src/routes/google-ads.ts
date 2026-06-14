@@ -21,7 +21,7 @@ const router = Router();
  * in-memory fallback) and map them into the ProductAdData shape the campaign
  * automation expects. Optionally filter by a minimum profit margin (%).
  */
-async function getActiveProductsForAds(limit: number, minProfitMargin = 0): Promise<ProductAdData[]> {
+export async function getActiveProductsForAds(limit: number, minProfitMargin = 0): Promise<ProductAdData[]> {
   const listings = await getListings('active');
 
   return (listings as any[])

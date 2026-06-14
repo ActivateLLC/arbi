@@ -270,7 +270,7 @@ export async function createBulkCampaigns(
     try {
       const result = await withTimeout(
         createAutomatedCampaign(product, config),
-        25000,
+        45000,
         `campaign creation for ${product.productName}`
       );
       results.push({ product: product.productName, ...result, status: 'success' });

@@ -9,6 +9,8 @@ import {
   createAutomatedCampaign,
   createBulkCampaigns,
   getCampaignMetrics,
+  setCampaignStatus,
+  listCampaigns,
   ProductAdData,
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
@@ -408,6 +410,41 @@ router.post('/youtube/upload-from-listing', async (req: Request, res: Response, 
       description: video.brief.hooks[0],
     });
     res.status(201).json({ success: true, listingId, sourceVideoUrl: video.videoUrl, youtube });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/google-ads/campaigns — list campaigns with status + metrics.
+ * Powers the dashboard "go live" view (what's PAUSED vs serving).
+ */
+router.get('/campaigns', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, campaigns: await listCampaigns() });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/campaign/:id/enable — start serving (real spend begins).
+ * POST /api/google-ads/campaign/:id/pause  — stop serving.
+ * One-tap go-live: no Google Ads console needed.
+ */
+router.post('/campaign/:id/enable', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const resourceName = await setCampaignStatus(req.params.id, 'ENABLED');
+    res.json({ success: true, campaignId: req.params.id, status: 'ENABLED', resourceName });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+router.post('/campaign/:id/pause', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const resourceName = await setCampaignStatus(req.params.id, 'PAUSED');
+    res.json({ success: true, campaignId: req.params.id, status: 'PAUSED', resourceName });
   } catch (error: any) {
     next(error);
   }

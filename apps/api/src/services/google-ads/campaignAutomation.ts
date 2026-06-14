@@ -451,3 +451,67 @@ export async function getCampaignMetrics(campaignId: string, customerIdOverride?
     roas: spend > 0 ? revenue / spend : 0,
   };
 }
+
+/**
+ * Enable or pause a campaign — the one-tap "go live" control, so flipping a
+ * campaign on/off never requires the Google Ads console. Accepts a bare numeric
+ * campaign id or a full resource name. Returns the updated resource name.
+ */
+export async function setCampaignStatus(
+  campaignId: string,
+  status: 'ENABLED' | 'PAUSED',
+  customerIdOverride?: string
+): Promise<string> {
+  const cid = digits(customerIdOverride || '') || customerId();
+  const resourceName = String(campaignId).includes('/')
+    ? String(campaignId)
+    : `customers/${cid}/campaigns/${campaignId}`;
+  const [updated] = await mutate('campaigns', [{
+    update: { resourceName, status },
+    updateMask: 'status',
+  }], customerIdOverride);
+  return updated;
+}
+
+/**
+ * List campaigns with status + headline metrics (drives the dashboard's
+ * go-live view: see what's PAUSED vs serving, and the numbers if any).
+ */
+export async function listCampaigns(customerIdOverride?: string) {
+  const cid = digits(customerIdOverride || '') || customerId();
+  const url = `${ADS_BASE}/customers/${cid}/googleAds:search`;
+  const query = `
+    SELECT
+      campaign.id,
+      campaign.name,
+      campaign.status,
+      campaign.advertising_channel_type,
+      metrics.impressions,
+      metrics.clicks,
+      metrics.cost_micros,
+      metrics.conversions,
+      metrics.conversions_value
+    FROM campaign
+    ORDER BY campaign.id DESC
+    LIMIT 200
+  `;
+  const r = await axios.post(url, { query }, { headers: await adsHeaders(), timeout: REQUEST_TIMEOUT_MS });
+  const rows = r.data?.results || [];
+  return rows.map((row: any) => {
+    const m = row.metrics || {};
+    const spend = Number(m.costMicros || 0) / 1_000_000;
+    const revenue = Number(m.conversionsValue || 0);
+    return {
+      id: row.campaign?.id,
+      name: row.campaign?.name,
+      status: row.campaign?.status,
+      channel: row.campaign?.advertisingChannelType,
+      impressions: Number(m.impressions || 0),
+      clicks: Number(m.clicks || 0),
+      spend,
+      conversions: Number(m.conversions || 0),
+      revenue,
+      roas: spend > 0 ? revenue / spend : 0,
+    };
+  });
+}

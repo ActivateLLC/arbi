@@ -55,6 +55,23 @@ const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n) : s);
 const HEADLINE_MAX = 30;
 const DESC_MAX = 90;
 
+/**
+ * Google rejects a Responsive Search Ad if two headline (or description) assets
+ * are identical (assetError=DUPLICATE_ASSET). Long product names make e.g.
+ * "Name" and "Name Online" collapse to the same string after truncation, so
+ * dedupe case-insensitively (preserving order) and drop blanks.
+ */
+function dedupeAssets(candidates: string[], max: number): { text: string }[] {
+  const seen = new Set<string>();
+  const out: { text: string }[] = [];
+  for (const c of candidates) {
+    const text = truncate((c || '').trim(), max);
+    const key = text.toLowerCase();
+    if (text && !seen.has(key)) { seen.add(key); out.push({ text }); }
+  }
+  return out;
+}
+
 const trimEnv = (k: string) => (process.env[k] || '').trim();
 // REST wants bare digits for customer ids (no dashes).
 const digits = (s: string) => s.replace(/-/g, '');
@@ -188,17 +205,25 @@ export async function createAutomatedCampaign(
 
   // Step 5: Responsive Search Ad (text-only; no asset uploads needed)
   const name = product.productName;
-  const headlines = [
-    truncate(name, HEADLINE_MAX),
-    truncate(`Buy ${name}`, HEADLINE_MAX),
-    truncate(`${name} Online`, HEADLINE_MAX),
+  // Distinct generic headlines guarantee >=3 unique assets even when the
+  // name-based ones collapse to the same string after truncation.
+  const headlines = dedupeAssets([
+    name,
+    `Buy ${name}`,
+    `${name} Online`,
+    `Shop ${name}`,
     'Free Shipping',
     'Limited Time Offer',
-  ].map(text => ({ text }));
-  const descriptions = [
-    truncate(`Shop ${name} at a great price. Fast, secure checkout.`, DESC_MAX),
-    truncate(`Order ${name} today. Free shipping and easy returns.`, DESC_MAX),
-  ].map(text => ({ text }));
+    'Shop Now',
+    'Order Today',
+    'Top Rated',
+  ], HEADLINE_MAX).slice(0, 12);
+  const descriptions = dedupeAssets([
+    `Shop ${name} at a great price. Fast, secure checkout.`,
+    `Order ${name} today. Free shipping and easy returns.`,
+    'Great prices with fast, secure checkout. Order today.',
+    'Free shipping and easy returns on every order.',
+  ], DESC_MAX).slice(0, 4);
 
   const [adResource] = await mutate('adGroupAds', [{
     create: {

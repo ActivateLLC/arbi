@@ -88,28 +88,28 @@ export async function createAutomatedCampaign(
 
   console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
 
-  // Each step is wrapped with its own labelled timeout so a hang reports WHICH
-  // Google API call stalled (e.g. "ad group create") instead of a generic
-  // "campaign creation timed out" that tells us nothing.
-  const STEP_MS = 20000;
+  // Each step has a labelled per-attempt timeout AND retries on timeout, so a
+  // cold/flaky gRPC channel to Google self-heals on the next attempt instead of
+  // failing the whole campaign. The label still names the stalled call.
+  const STEP_MS = 15000;
 
   // Step 1: Budget (a campaign references a budget resource, it can't inline one)
-  const budgetResource = await withTimeout(createBudget(customer, product, config), STEP_MS, 'budget create');
+  const budgetResource = await withRetry(() => createBudget(customer, product, config), STEP_MS, 'budget create');
   console.log(`✅ Budget created: ${budgetResource}`);
 
   // Step 2: Campaign (PAUSED, MAXIMIZE_CONVERSIONS)
-  const campaignResource = await withTimeout(createCampaign(customer, budgetResource, product), STEP_MS, 'campaign create');
+  const campaignResource = await withRetry(() => createCampaign(customer, budgetResource, product), STEP_MS, 'campaign create');
   console.log(`✅ Campaign created: ${campaignResource}`);
 
   // Step 3: Ad Group
-  const adGroupResource = await withTimeout(createAdGroup(customer, campaignResource, product, config), STEP_MS, 'ad group create');
+  const adGroupResource = await withRetry(() => createAdGroup(customer, campaignResource, product, config), STEP_MS, 'ad group create');
   console.log(`✅ Ad Group created: ${adGroupResource}`);
 
   // Step 4: Keywords (so the search campaign can actually serve)
-  await withTimeout(createKeywords(customer, adGroupResource, product), STEP_MS, 'keywords create');
+  await withRetry(() => createKeywords(customer, adGroupResource, product), STEP_MS, 'keywords create');
 
   // Step 5: Responsive Search Ad
-  const adResource = await withTimeout(createResponsiveSearchAd(customer, adGroupResource, product), STEP_MS, 'responsive search ad create');
+  const adResource = await withRetry(() => createResponsiveSearchAd(customer, adGroupResource, product), STEP_MS, 'responsive search ad create');
   console.log(`✅ Responsive Search Ad created: ${adResource}`);
 
   return {
@@ -270,6 +270,31 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
       setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
     ),
   ]);
+}
+
+/**
+ * Run a single Google API step with a per-attempt timeout, retrying ONLY on
+ * timeouts. Railway's first gRPC write to googleads.googleapis.com sometimes
+ * stalls on a cold channel; re-issuing the call usually connects immediately.
+ * Validation/permission errors are deterministic, so they fail fast (no retry).
+ *
+ * `factory` must return a FRESH promise each call (a thunk) — racing the same
+ * promise twice wouldn't re-issue the request.
+ */
+async function withRetry<T>(factory: () => Promise<T>, ms: number, label: string, attempts = 3): Promise<T> {
+  let lastErr: any;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await withTimeout(factory(), ms, label);
+    } catch (e: any) {
+      lastErr = e;
+      const isTimeout = typeof e?.message === 'string' && e.message.includes('timed out');
+      if (!isTimeout || attempt === attempts) throw e;
+      console.warn(`⚠️ ${label} timed out (attempt ${attempt}/${attempts}) — retrying on a warm channel`);
+      await new Promise((r) => setTimeout(r, 1000 * attempt)); // brief backoff
+    }
+  }
+  throw lastErr;
 }
 
 /**

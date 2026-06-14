@@ -88,23 +88,28 @@ export async function createAutomatedCampaign(
 
   console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
 
+  // Each step is wrapped with its own labelled timeout so a hang reports WHICH
+  // Google API call stalled (e.g. "ad group create") instead of a generic
+  // "campaign creation timed out" that tells us nothing.
+  const STEP_MS = 20000;
+
   // Step 1: Budget (a campaign references a budget resource, it can't inline one)
-  const budgetResource = await createBudget(customer, product, config);
+  const budgetResource = await withTimeout(createBudget(customer, product, config), STEP_MS, 'budget create');
   console.log(`✅ Budget created: ${budgetResource}`);
 
   // Step 2: Campaign (PAUSED, MAXIMIZE_CONVERSIONS)
-  const campaignResource = await createCampaign(customer, budgetResource, product);
+  const campaignResource = await withTimeout(createCampaign(customer, budgetResource, product), STEP_MS, 'campaign create');
   console.log(`✅ Campaign created: ${campaignResource}`);
 
   // Step 3: Ad Group
-  const adGroupResource = await createAdGroup(customer, campaignResource, product, config);
+  const adGroupResource = await withTimeout(createAdGroup(customer, campaignResource, product, config), STEP_MS, 'ad group create');
   console.log(`✅ Ad Group created: ${adGroupResource}`);
 
   // Step 4: Keywords (so the search campaign can actually serve)
-  await createKeywords(customer, adGroupResource, product);
+  await withTimeout(createKeywords(customer, adGroupResource, product), STEP_MS, 'keywords create');
 
   // Step 5: Responsive Search Ad
-  const adResource = await createResponsiveSearchAd(customer, adGroupResource, product);
+  const adResource = await withTimeout(createResponsiveSearchAd(customer, adGroupResource, product), STEP_MS, 'responsive search ad create');
   console.log(`✅ Responsive Search Ad created: ${adResource}`);
 
   return {
@@ -282,7 +287,7 @@ export async function createBulkCampaigns(
     try {
       const result = await withTimeout(
         createAutomatedCampaign(product, config),
-        45000,
+        120000, // outer safety net; per-step timeouts (20s each) fire first and name the stalled call
         `campaign creation for ${product.productName}`
       );
       results.push({ product: product.productName, ...result, status: 'success' });

@@ -606,6 +606,8 @@ export async function listCampaigns(customerIdOverride?: string) {
       campaign.name,
       campaign.status,
       campaign.advertising_channel_type,
+      campaign.campaign_budget,
+      campaign_budget.amount_micros,
       metrics.impressions,
       metrics.clicks,
       metrics.cost_micros,
@@ -626,6 +628,8 @@ export async function listCampaigns(customerIdOverride?: string) {
       name: row.campaign?.name,
       status: row.campaign?.status,
       channel: row.campaign?.advertisingChannelType,
+      budgetResource: row.campaign?.campaignBudget,
+      dailyBudget: Number(row.campaignBudget?.amountMicros || 0) / 1_000_000,
       impressions: Number(m.impressions || 0),
       clicks: Number(m.clicks || 0),
       spend,
@@ -634,4 +638,20 @@ export async function listCampaigns(customerIdOverride?: string) {
       roas: spend > 0 ? revenue / spend : 0,
     };
   });
+}
+
+/**
+ * Update a campaign budget's daily amount (USD). Used by the autonomous
+ * optimizer to scale winners / throttle underperformers.
+ */
+export async function setCampaignBudget(
+  budgetResource: string,
+  dailyBudgetUsd: number,
+  customerIdOverride?: string
+): Promise<string> {
+  const [updated] = await mutate('campaignBudgets', [{
+    update: { resourceName: budgetResource, amountMicros: Math.round(dailyBudgetUsd * 1_000_000) },
+    updateMask: 'amount_micros',
+  }], customerIdOverride);
+  return updated;
 }

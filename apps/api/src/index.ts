@@ -82,6 +82,14 @@ const server = app.listen(port, '0.0.0.0', () => {
   logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
   logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+
+  // 24/7 autonomous engine (no-op unless ENABLE_AUTONOMOUS=true).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('./jobs/autonomousEngine').startAutonomousEngine();
+  } catch (e: any) {
+    logger.error('Autonomous engine failed to start:', e?.message || e);
+  }
 });
 
 // Handle server errors

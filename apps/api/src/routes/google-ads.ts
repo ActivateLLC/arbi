@@ -19,6 +19,7 @@ import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 import { uploadVideoToYouTube } from '../services/google-ads/youtubeUpload';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
+import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 
 const router = Router();
 
@@ -468,6 +469,18 @@ router.get('/conversions/setup', async (_req: Request, res: Response, next: Next
         ? `Set GOOGLE_ADS_CONVERSION_SEND_TO=${info.sendTo} on arbi-production, then redeploy.`
         : 'Conversion action created, but the tag is still propagating — re-run in a minute to get the send_to.',
     });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/optimize — run one autonomous optimization pass now
+ * (scale winners / pause losers within caps). Safe: never enables a campaign.
+ */
+router.post('/optimize', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, ...(await runOptimizationPass()) });
   } catch (error: any) {
     next(error);
   }

@@ -137,6 +137,10 @@ async function createCampaign(customer: Customer, budgetResource: string, produc
     advertising_channel_type: enums.AdvertisingChannelType.SEARCH,
     status: enums.CampaignStatus.PAUSED, // never auto-spend
     campaign_budget: budgetResource,
+    // Required on every campaign since Google Ads API v17 (EU political ad
+    // transparency). Our products are commercial, never political.
+    contains_eu_political_advertising:
+      enums.EuPoliticalAdvertisingStatus.DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING,
     // Maximize Conversions is valid for brand-new campaigns (Target ROAS needs
     // conversion history, so it would be rejected here).
     maximize_conversions: {},

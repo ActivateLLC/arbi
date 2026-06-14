@@ -38,8 +38,9 @@ describe('decideCampaignAction (autonomous brain)', () => {
     const d = decideCampaignAction({ ...base, spend: 50, conversions: 1, revenue: 20, dailyBudget: 20 });
     expect(d.action).toBe('reduce');
     expect(d.newBudget).toBe(14); // 20 * 0.7
+    // At min budget and still losing money => kill the chronic loser.
     const floored = decideCampaignAction({ ...base, spend: 50, conversions: 1, revenue: 20, dailyBudget: 5 });
-    expect(floored.action).toBe('hold');
+    expect(floored.action).toBe('pause');
   });
 
   it('holds a profitable-but-below-target campaign', () => {

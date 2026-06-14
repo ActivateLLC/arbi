@@ -26,6 +26,7 @@ import {
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
+import { syncAdsToStock } from '../services/google-ads/stockSync';
 import { sourceTrendingFromCJ } from '../services/cjSourcing';
 import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../services/amazonSourcing';
 import { getAutonomousSettings } from '../services/autonomousSettings';
@@ -118,6 +119,14 @@ async function cycle(): Promise<void> {
     } catch (e: any) {
       logger.error('🤖 OPTIMIZE error:', e?.message || e);
     }
+  }
+
+  // 4) Protect spend: pause ads for anything that's gone out of stock.
+  try {
+    const sg = await syncAdsToStock();
+    if (sg.paused.length) logger.info(`🤖 STOCK: paused ${sg.paused.length} out-of-stock campaign(s)`);
+  } catch (e: any) {
+    logger.error('🤖 STOCK error:', e?.message || e);
   }
 }
 

@@ -13,7 +13,7 @@
 
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
-import { getListings } from './marketplace';
+import { getListings, getListing } from './marketplace';
 import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../services/google-ads/googleAdsConversions';
 
 const router = Router();
@@ -195,10 +195,17 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
     const session = await stripe.checkout.sessions.retrieve(session_id as string);
 
     if (session.payment_status === 'paid') {
-      // TODO: Trigger automatic supplier purchase here
-      // This would call the marketplace checkout endpoint to fulfill the order
+      // Report PROFIT (the margin) as the Google Ads conversion value — NOT the
+      // gross sale price — so Smart Bidding + our optimizer optimize net profit.
+      // Falls back to gross if the listing/margin can't be read.
+      let conversionValue = (session.amount_total || 0) / 100;
+      try {
+        const listing: any = await getListing(listingId);
+        const margin = Number(listing?.estimatedProfit);
+        if (Number.isFinite(margin) && margin > 0) conversionValue = margin;
+      } catch { /* keep gross fallback */ }
 
-      const html = generateSuccessPage(session);
+      const html = generateSuccessPage(session, conversionValue);
       res.setHeader('Content-Type', 'text/html');
       res.send(html);
     } else {
@@ -1374,7 +1381,7 @@ function generateProductLandingPage(listing: any): string {
 /**
  * Generate success page after payment
  */
-function generateSuccessPage(session: any): string {
+function generateSuccessPage(session: any, conversionValue?: number): string {
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -1383,7 +1390,7 @@ function generateSuccessPage(session: any): string {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Order Confirmed!</title>
     ${googleAdsGlobalTagHtml()}
-    ${googleAdsConversionEventHtml((session.amount_total || 0) / 100, session.id)}
+    ${googleAdsConversionEventHtml(conversionValue ?? (session.amount_total || 0) / 100, session.id)}
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {

@@ -13,6 +13,7 @@ import {
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { getListings } from './marketplace';
+import { buildCreativeBrief } from '../services/google-ads/adCreative';
 
 const router = Router();
 
@@ -246,6 +247,23 @@ router.get('/quick-start-now', async (req: Request, res: Response, next: NextFun
     const config: CampaignConfig = { dailyBudget: 20, targetROAS: 4.0, geoTargeting: ['US'], maxCPC: 1.5 };
     const result = await createBulkCampaigns(products, config);
     res.status(201).json({ success: true, message: `Created ${result.success} PAUSED campaign(s)`, ...result });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/google-ads/creative-briefs?count=N
+ * Preview the UGC-style creative (hooks, 5-beat captioned video script, social
+ * copy) we'd generate for the top active products. This is the "brain" that
+ * feeds video generation (Higgsfield/Reap), TikTok, and Demand Gen/PMax copy.
+ */
+router.get('/creative-briefs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const count = Math.min(Math.max(Number(req.query.count) || 3, 1), 10);
+    const products = await getActiveProductsForAds(count, 0);
+    const briefs = products.map((p) => buildCreativeBrief(p));
+    res.json({ success: true, count: briefs.length, briefs });
   } catch (error: any) {
     next(error);
   }

@@ -11,6 +11,7 @@ import {
   getCampaignMetrics,
   setCampaignStatus,
   listCampaigns,
+  demandRank,
   DEFAULT_DAILY_BUDGET,
   ProductAdData,
   CampaignConfig,
@@ -53,20 +54,28 @@ export async function getActiveProductsForAds(limit: number, minProfitMargin = 0
       const price = Number(l.marketplacePrice) || 0;
       const profit = Number(l.estimatedProfit) || 0;
       const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
+      const demandScore = Number(l.demandScore) || 0;
       return {
-        productId: l.listingId,
-        productName: l.productTitle,
-        productPrice: price,
-        profitMargin,
-        category: l.supplierPlatform || 'general',
-        targetCountry: 'US',
-        landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
-        videoUrl: undefined,
-      } as ProductAdData;
+        product: {
+          productId: l.listingId,
+          productName: l.productTitle,
+          productPrice: price,
+          profitMargin,
+          category: l.supplierPlatform || 'general',
+          targetCountry: 'US',
+          landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
+          videoUrl: undefined,
+        } as ProductAdData,
+        demandScore,
+        profit,
+      };
     })
-    .filter((p) => p.profitMargin >= minProfitMargin)
-    .sort((a, b) => b.profitMargin - a.profitMargin)
-    .slice(0, limit);
+    .filter((x) => x.product.profitMargin >= minProfitMargin)
+    // Demand-first: promote the most proven (highest-demand) products, breaking
+    // ties by estimated profit — so we spend on what's most likely to sell now.
+    .sort((a, b) => demandRank(b.demandScore, b.profit) - demandRank(a.demandScore, a.profit))
+    .slice(0, limit)
+    .map((x) => x.product);
 }
 
 /**

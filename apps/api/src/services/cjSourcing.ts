@@ -116,6 +116,7 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
       cjProductId: pid,
       marketplacePrice,
       estimatedProfit: Number((marketplacePrice - price).toFixed(2)),
+      demandScore: num(p.listedNum, p.listedCount), // proven demand (CJ listed count)
       status: 'active',
       listedAt: new Date(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

@@ -18,6 +18,7 @@ import {
   buildBiddingStrategy,
   productCampaignKey,
   campaignProductKey,
+  demandRank,
   DEFAULT_DAILY_BUDGET,
   ProductAdData,
   CampaignConfig,
@@ -220,6 +221,23 @@ describe('dedup + budget (portfolio testing)', () => {
   it('uses a low default daily budget (test many products cheaply)', () => {
     expect(DEFAULT_DAILY_BUDGET).toBeGreaterThan(0);
     expect(DEFAULT_DAILY_BUDGET).toBeLessThanOrEqual(20);
+  });
+});
+
+describe('demand-first ranking (promote proven sellers first)', () => {
+  it('ranks higher demand above higher profit (demand dominates)', () => {
+    const lowDemandHighProfit = demandRank(2, 500);
+    const highDemandLowProfit = demandRank(50, 5);
+    expect(highDemandLowProfit).toBeGreaterThan(lowDemandHighProfit);
+  });
+
+  it('breaks demand ties by estimated profit', () => {
+    expect(demandRank(10, 40)).toBeGreaterThan(demandRank(10, 12));
+  });
+
+  it('treats missing/NaN signals as zero (never throws, sorts last)', () => {
+    expect(demandRank(NaN as any, undefined as any)).toBe(0);
+    expect(demandRank(5, 0)).toBeGreaterThan(demandRank(0, 0));
   });
 });
 

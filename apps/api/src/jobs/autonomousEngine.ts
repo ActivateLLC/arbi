@@ -23,6 +23,8 @@ import {
   listCampaigns,
   setCampaignStatus,
   campaignProductKey,
+  productCampaignKey,
+  demandRank,
   DEFAULT_DAILY_BUDGET,
   ProductAdData,
   CampaignConfig,
@@ -50,18 +52,24 @@ function activeProducts(listings: any[], limit: number, minMargin: number): Prod
       const profit = Number(l.estimatedProfit) || 0;
       const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
       return {
-        productId: l.listingId,
-        productName: l.productTitle,
-        productPrice: price,
-        profitMargin,
-        category: l.supplierPlatform || 'general',
-        targetCountry: 'US',
-        landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
-      } as ProductAdData;
+        product: {
+          productId: l.listingId,
+          productName: l.productTitle,
+          productPrice: price,
+          profitMargin,
+          category: l.supplierPlatform || 'general',
+          targetCountry: 'US',
+          landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
+        } as ProductAdData,
+        demandScore: Number(l.demandScore) || 0,
+        profit,
+      };
     })
-    .filter((p) => p.profitMargin >= minMargin)
-    .sort((a, b) => b.profitMargin - a.profitMargin)
-    .slice(0, limit);
+    .filter((x) => x.product.profitMargin >= minMargin)
+    // Demand-first: create/promote the most proven products first.
+    .sort((a, b) => demandRank(b.demandScore, b.profit) - demandRank(a.demandScore, a.profit))
+    .slice(0, limit)
+    .map((x) => x.product);
 }
 
 async function cycle(): Promise<void> {
@@ -107,7 +115,16 @@ async function cycle(): Promise<void> {
       const cap = Math.max(Number(process.env.AUTO_GO_LIVE_MAX) || 5, 1);
       // Products already serving — don't double-enable.
       const liveKeys = new Set(campaigns.filter((c) => c.status === 'ENABLED').map((c) => campaignProductKey(c.name)));
-      const pausedArbi = campaigns.filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''));
+      // Demand map: productCampaignKey(title) → demandScore, so we take the most
+      // in-demand PAUSED campaigns live first (not whatever order the API returns).
+      const demandByKey = new Map<string, number>();
+      for (const l of (await getListings('active')) as any[]) {
+        const k = productCampaignKey(String(l.productTitle || ''));
+        if (k) demandByKey.set(k, Math.max(demandByKey.get(k) || 0, Number(l.demandScore) || 0));
+      }
+      const pausedArbi = campaigns
+        .filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''))
+        .sort((a, b) => (demandByKey.get(campaignProductKey(b.name)) || 0) - (demandByKey.get(campaignProductKey(a.name)) || 0));
       const seen = new Set<string>();
       let enabled = 0;
       for (const c of pausedArbi) {

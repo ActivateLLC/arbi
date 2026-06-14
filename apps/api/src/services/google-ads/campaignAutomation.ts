@@ -533,6 +533,15 @@ export function campaignProductKey(name: string): string {
   return productCampaignKey(campaignProductName(name));
 }
 
+/**
+ * Promotion priority: DEMAND (proven sales proxy — Amazon reviews / CJ listed
+ * count) dominates so the most in-demand products go live first; estimated
+ * profit breaks ties. Used to rank which products to create/launch.
+ */
+export function demandRank(demandScore: number, estimatedProfit: number): number {
+  return (Number(demandScore) || 0) * 1000 + (Number(estimatedProfit) || 0);
+}
+
 export async function createBulkCampaigns(
   products: ProductAdData[],
   config: CampaignConfig,

@@ -68,7 +68,8 @@ export interface MarketplaceListing {
   cjProductId?: string; // CJ Dropshipping product id (pid), optional
   marketplacePrice: number;
   estimatedProfit: number;
-  status: 'active' | 'sold' | 'expired';
+  demandScore?: number; // proven-demand proxy (Amazon reviews / CJ listed count)
+  status: 'active' | 'sold' | 'expired' | 'out_of_stock';
   listedAt: Date;
   expiresAt: Date;
   soldAt?: Date;

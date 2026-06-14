@@ -80,6 +80,7 @@ export async function sourceTrendingFromAmazon(opts: AmazonSourceOptions = {}) {
       supplierPlatform: 'amazon',
       marketplacePrice,
       estimatedProfit: Number((marketplacePrice - price).toFixed(2)),
+      demandScore: Number(p.ratings_total || p.reviews_total || 0), // proven demand
       status: 'active',
       listedAt: new Date(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

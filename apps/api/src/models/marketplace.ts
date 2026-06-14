@@ -56,6 +56,11 @@ const MarketplaceListingModel: ModelDefinition = {
       type: 'decimal',
       allowNull: false
     },
+    demandScore: {
+      type: 'decimal', // proven-demand proxy (Amazon reviews / CJ listed count)
+      allowNull: true,
+      defaultValue: 0
+    },
     status: {
       type: 'string',
       allowNull: false,

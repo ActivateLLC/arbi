@@ -473,6 +473,21 @@ router.get('/conversions/setup', async (_req: Request, res: Response, next: Next
   }
 });
 
+/**
+ * GET /api/google-ads/status — setup health for the dashboard's Setup panel.
+ * Reports config presence only (no secrets, no token exchange) so it's cheap to
+ * poll: credentials present, manager header set, conversion tracking wired.
+ */
+router.get('/status', (_req: Request, res: Response) => {
+  const t = (k: string) => (process.env[k] || '').trim();
+  res.json({
+    credsPresent: !!(t('GOOGLE_ADS_CLIENT_ID') && t('GOOGLE_ADS_CLIENT_SECRET') &&
+      t('GOOGLE_ADS_REFRESH_TOKEN') && t('GOOGLE_ADS_DEVELOPER_TOKEN') && t('GOOGLE_ADS_CUSTOMER_ID')),
+    managerLinked: !!t('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
+    conversionTracking: !!t('GOOGLE_ADS_CONVERSION_SEND_TO'),
+  });
+});
+
 /** GET /api/google-ads/conversions/status — is conversion tracking wired? */
 router.get('/conversions/status', (_req: Request, res: Response) => {
   const sendTo = conversionSendTo();

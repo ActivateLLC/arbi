@@ -12,10 +12,26 @@ import {
   ProductAdData,
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
-import { getListings } from './marketplace';
+import { getListings, getListing } from './marketplace';
 import { buildCreativeBrief } from '../services/google-ads/adCreative';
+import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 
 const router = Router();
+
+/** Map a marketplace listing to the ProductAdData shape. */
+function listingToProduct(l: any): ProductAdData {
+  const price = Number(l.marketplacePrice) || 0;
+  const profit = Number(l.estimatedProfit) || 0;
+  return {
+    productId: l.listingId,
+    productName: l.productTitle,
+    productPrice: price,
+    profitMargin: price > 0 ? Math.round((profit / price) * 100) : 0,
+    category: l.supplierPlatform || 'general',
+    targetCountry: 'US',
+    landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
+  };
+}
 
 /**
  * Fetch active marketplace listings (via getListings, which handles the DB +
@@ -264,6 +280,34 @@ router.get('/creative-briefs', async (req: Request, res: Response, next: NextFun
     const products = await getActiveProductsForAds(count, 0);
     const briefs = products.map((p) => buildCreativeBrief(p));
     res.json({ success: true, count: briefs.length, briefs });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/** GET /api/google-ads/video-config — is Higgsfield video generation configured? */
+router.get('/video-config', (_req: Request, res: Response) => {
+  res.json({ configured: isVideoConfigured() });
+});
+
+/**
+ * POST /api/google-ads/generate-video  Body: { listingId, model? }
+ * Generate a UGC-style 9:16 video from a listing's real product image.
+ */
+router.post('/generate-video', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!isVideoConfigured()) {
+      throw new ApiError(503, 'Higgsfield not configured: set HF_API_KEY and HF_API_SECRET.');
+    }
+    const { listingId, model } = req.body || {};
+    if (!listingId) throw new ApiError(400, 'listingId is required');
+    const listing: any = await getListing(listingId);
+    if (!listing) throw new ApiError(404, 'Listing not found');
+    const imageUrl = Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) throw new ApiError(409, 'Listing has no product image to animate');
+
+    const result = await generateProductVideo(listingToProduct(listing), imageUrl, { model });
+    res.status(201).json({ success: true, listingId, ...result });
   } catch (error: any) {
     next(error);
   }

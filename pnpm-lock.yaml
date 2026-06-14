@@ -93,6 +93,9 @@ importers:
       '@arbi/web-automation':
         specifier: workspace:*
         version: link:../../packages/web-automation
+      '@higgsfield/client':
+        specifier: ^0.2.1
+        version: 0.2.1
       axios:
         specifier: ^1.6.5
         version: 1.13.2
@@ -2363,6 +2366,16 @@ packages:
     resolution: {integrity: sha512-foQZKJig7Ob0BMAYBfcJk8d77QtOe7Wo4ox7ff1lQYoNNAb6jwcY1ncdoy2e9wQZzvNy7ODZCYJkK8kzmcAnAg==}
     dependencies:
       '@hapi/hoek': 9.3.0
+    dev: false
+
+  /@higgsfield/client@0.2.1:
+    resolution: {integrity: sha512-xRIlOF0jQwRQ1jIj93okju1PnG/ngx7yeJsmpPq2SSattWUMsL1TjkEZJlVfrrkUeDfP5g8TY/wJ/+TLRNwqFw==}
+    engines: {node: '>=14.0.0'}
+    dependencies:
+      axios: 1.13.2
+      form-data: 4.0.5
+    transitivePeerDependencies:
+      - debug
     dev: false
 
   /@humanwhocodes/config-array@0.13.0:

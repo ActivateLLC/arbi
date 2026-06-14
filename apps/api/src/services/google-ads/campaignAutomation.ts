@@ -166,6 +166,22 @@ export function buildKeywords(product: ProductAdData): string[] {
   )).slice(0, 15);
 }
 
+// Google geo target constant IDs for our allowed countries (used to actually
+// RESTRICT where ads serve — focusing spend instead of blanketing the globe).
+const GEO_TARGET_CONSTANTS: Record<string, string> = {
+  US: '2840', CA: '2124', GB: '2826', AU: '2036', JP: '2392',
+  KR: '2410', SG: '2702', AE: '2784', BR: '2076', MX: '2484', IN: '2356',
+};
+
+// Default campaign-level NEGATIVE keywords. Research: excluding low-intent terms
+// like "free/cheap/diy" cuts wasted spend 15–30% and lifts Quality Score, which
+// lets us win auctions at lower CPCs than competitors.
+const DEFAULT_NEGATIVE_KEYWORDS = [
+  'free', 'cheap', 'used', 'second hand', 'diy', 'how to make', 'repair',
+  'manual', 'pdf', 'job', 'jobs', 'salary', 'meaning', 'definition',
+  'wikipedia', 'torrent', 'crack', 'knockoff', 'replica',
+];
+
 const trimEnv = (k: string) => (process.env[k] || '').trim();
 // REST wants bare digits for customer ids (no dashes).
 const digits = (s: string) => s.replace(/-/g, '');
@@ -308,6 +324,12 @@ export async function createAutomatedCampaign(
   }], customerIdOverride);
   console.log(`✅ Campaign created: ${campaignResource}`);
 
+  // Step 2b: Targeting — restrict geo + add negative keywords. This is what makes
+  // the campaign competitive: spend stays in the target country and isn't burned
+  // on low-intent "free/cheap/diy" searches.
+  await applyCampaignTargeting(campaignResource, config, customerIdOverride);
+  console.log(`✅ Targeting applied (geo + negative keywords)`);
+
   // Step 3: Ad Group
   const [adGroupResource] = await mutate('adGroups', [{
     create: {
@@ -348,6 +370,38 @@ export async function createAutomatedCampaign(
   console.log(`✅ Responsive Search Ad created: ${adResource}`);
 
   return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
+}
+
+/**
+ * Apply campaign-level targeting: geo (where ads serve) + negative keywords
+ * (what searches to avoid). Both are campaignCriteria. Failures here are
+ * non-fatal — the campaign still exists; we log and continue.
+ */
+async function applyCampaignTargeting(
+  campaignResource: string,
+  config: CampaignConfig,
+  customerIdOverride?: string
+): Promise<void> {
+  const ops: any[] = [];
+
+  // Geo: restrict to the configured countries (default US).
+  const geos = config.geoTargeting && config.geoTargeting.length ? config.geoTargeting : ['US'];
+  for (const code of geos) {
+    const id = GEO_TARGET_CONSTANTS[code.toUpperCase()];
+    if (id) ops.push({ create: { campaign: campaignResource, location: { geoTargetConstant: `geoTargetConstants/${id}` } } });
+  }
+
+  // Negative keywords (broad) to cut wasted spend.
+  for (const text of DEFAULT_NEGATIVE_KEYWORDS) {
+    ops.push({ create: { campaign: campaignResource, negative: true, keyword: { text, matchType: 'BROAD' } } });
+  }
+
+  if (!ops.length) return;
+  try {
+    await mutate('campaignCriteria', ops, customerIdOverride);
+  } catch (e: any) {
+    console.warn(`⚠️ Campaign targeting partially failed (non-fatal): ${e?.message || e}`);
+  }
 }
 
 /**

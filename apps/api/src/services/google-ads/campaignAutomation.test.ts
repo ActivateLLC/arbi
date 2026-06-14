@@ -25,6 +25,7 @@ const mockedAxios = axios as jest.Mocked<typeof axios>;
 const RESOURCE_BY_ENDPOINT: Record<string, string> = {
   campaignBudgets: 'customers/1/campaignBudgets/111',
   campaigns: 'customers/1/campaigns/222',
+  campaignCriteria: 'customers/1/campaignCriteria/770',
   adGroups: 'customers/1/adGroups/333',
   adGroupCriteria: 'customers/1/adGroupCriteria/abc',
   adGroupAds: 'customers/1/adGroupAds/444',
@@ -97,6 +98,20 @@ describe('ad campaign automation (revenue-critical path)', () => {
     expect(campaign.campaignBudget).toBe('customers/1/campaignBudgets/111');
     // Required since API v17 — must be present or Google rejects the campaign.
     expect(campaign.containsEuPoliticalAdvertising).toBe('DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING');
+  });
+
+  it('restricts geo and adds negative keywords (competitive targeting)', () => {
+    const ops = bodyFor('campaignCriteria').operations;
+    // Geo: at least the US location is targeted.
+    const geo = ops.find((o: any) => o.create?.location?.geoTargetConstant);
+    expect(geo.create.location.geoTargetConstant).toBe('geoTargetConstants/2840'); // US
+    // Negatives: low-intent terms are excluded as broad negatives.
+    const negatives = ops.filter((o: any) => o.create?.negative === true).map((o: any) => o.create.keyword.text);
+    expect(negatives).toContain('free');
+    expect(negatives).toContain('cheap');
+    for (const o of ops.filter((x: any) => x.create?.negative)) {
+      expect(o.create.keyword.matchType).toBe('BROAD');
+    }
   });
 
   it('creates a Search ad group linked to the campaign', () => {

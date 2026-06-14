@@ -233,7 +233,15 @@ function describeAdsError(error: any): string {
       return errs
         .map((e: any) => {
           const code = e.error_code ? Object.entries(e.error_code).map(([k, v]) => `${k}=${v}`).join(',') : '';
-          return [e.message, code].filter(Boolean).join(' ');
+          // location.field_path_elements pinpoints WHICH field/operation failed
+          // (e.g. "operations[0].campaign.maximize_conversions") — without it a
+          // bare "REQUIRED" error is unactionable.
+          const path = Array.isArray(e?.location?.field_path_elements)
+            ? e.location.field_path_elements
+                .map((fp: any) => (fp.index !== undefined && fp.index !== null ? `${fp.field_name}[${fp.index}]` : fp.field_name))
+                .join('.')
+            : '';
+          return [e.message, code, path && `@ ${path}`].filter(Boolean).join(' ');
         })
         .join(' | ');
     }

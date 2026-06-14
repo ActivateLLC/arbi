@@ -20,6 +20,7 @@ import fulfillmentRoutes from './fulfillment';
 import cjRoutes from './cj';
 import tiktokRoutes from './tiktok';
 import tenantRoutes from './tenants';
+import sourcingRoutes from './sourcing';
 
 const router = Router();
 
@@ -80,5 +81,8 @@ router.use('/tiktok', tiktokRoutes);
 // Multi-tenant advertisers — each subscribed customer gets their own Google Ads
 // child account under the manager (MCC); campaigns are scoped to that account.
 router.use('/tenants', tenantRoutes);
+
+// Multi-source product sourcing (CJ + Amazon/Rainforest, extensible).
+router.use('/sourcing', sourcingRoutes);
 
 export default router;

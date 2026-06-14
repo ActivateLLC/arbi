@@ -26,6 +26,8 @@ import {
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
+import { sourceTrendingFromCJ } from '../services/cjSourcing';
+import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../services/amazonSourcing';
 
 const logger = createLogger();
 const flag = (k: string) => (process.env[k] || '').toLowerCase() === 'true';
@@ -60,6 +62,18 @@ function activeProducts(listings: any[], limit: number, minMargin: number): Prod
 }
 
 async function cycle(): Promise<void> {
+  // 0) Source fresh products from every configured retailer (CJ + Amazon).
+  if (flag('AUTO_SOURCE')) {
+    try {
+      const cj = await sourceTrendingFromCJ({ count: 5 }).catch((e) => ({ sourced: 0, error: e?.message }));
+      let amz: any = { sourced: 0 };
+      if (isAmazonSourcingConfigured()) amz = await sourceTrendingFromAmazon({ count: 5 }).catch((e) => ({ sourced: 0, error: e?.message }));
+      logger.info(`🤖 AUTO_SOURCE: CJ +${cj.sourced || 0}, Amazon +${amz.sourced || 0}`);
+    } catch (e: any) {
+      logger.error('🤖 AUTO_SOURCE error:', e?.message || e);
+    }
+  }
+
   // 1) Create PAUSED campaigns for new high-margin products (skip ones that
   //    already have a campaign, so we don't duplicate every cycle).
   if (flag('AUTO_CREATE')) {
@@ -114,7 +128,7 @@ export function startAutonomousEngine(): void {
     return;
   }
   const minutes = Math.max(Number(process.env.AUTONOMOUS_INTERVAL_MIN) || 60, 15);
-  logger.info(`🤖 Autonomous engine ON — every ${minutes}m | create=${flag('AUTO_CREATE')} goLive=${flag('AUTO_GO_LIVE')} optimize=${(process.env.AUTO_OPTIMIZE || 'true') !== 'false'}`);
+  logger.info(`🤖 Autonomous engine ON — every ${minutes}m | source=${flag('AUTO_SOURCE')} create=${flag('AUTO_CREATE')} goLive=${flag('AUTO_GO_LIVE')} optimize=${(process.env.AUTO_OPTIMIZE || 'true') !== 'false'}`);
   // First run shortly after boot, then on the interval.
   setTimeout(() => { cycle().catch((e) => logger.error('🤖 cycle error:', e)); }, 30_000);
   setInterval(() => { cycle().catch((e) => logger.error('🤖 cycle error:', e)); }, minutes * 60_000);

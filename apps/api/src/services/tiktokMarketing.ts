@@ -27,6 +27,13 @@ interface TikTokCampaignResult {
   error?: string;
 }
 
+export interface TikTokVideoCampaignConfig extends TikTokCampaignConfig {
+  /** Hosted video URL (e.g. from Higgsfield) uploaded via UPLOAD_BY_URL. */
+  videoUrl: string;
+  /** Ad caption/hook (defaults to a generic line if omitted). */
+  adText?: string;
+}
+
 export class TikTokMarketingService {
   private accessToken: string;
   private advertiserId: string;
@@ -289,6 +296,111 @@ export class TikTokMarketingService {
       throw new Error(`Ad creation failed: ${response.data.message}`);
     }
 
+    return response.data.data.ad_id;
+  }
+
+  /**
+   * Create a complete TikTok VIDEO ad campaign (UGC creative).
+   * Campaign → Ad Group → upload video (by URL) → auto-cover → single-video ad.
+   * Everything created PAUSED (operation_status DISABLE).
+   */
+  async createVideoCampaign(config: TikTokVideoCampaignConfig): Promise<TikTokCampaignResult> {
+    if (!this.isConfigured()) {
+      return { success: false, error: 'TikTok Marketing API not configured. Set TIKTOK_ACCESS_TOKEN and TIKTOK_ADVERTISER_ID' };
+    }
+    console.log('\n🎬 Creating TikTok VIDEO Ad Campaign...');
+    console.log(`   Product: ${config.productTitle}`);
+    try {
+      const campaignId = await this.createCampaignObject(config);
+      console.log(`   ✅ Campaign created: ${campaignId}`);
+      const adGroupId = await this.createAdGroup(campaignId, config);
+      console.log(`   ✅ Ad Group created: ${adGroupId}`);
+      const videoId = await this.uploadVideoByUrl(config.videoUrl);
+      console.log(`   ✅ Video uploaded: ${videoId}`);
+      // Cover image: prefer a frame TikTok suggests from the video; fall back to
+      // the product image if suggestion is unavailable.
+      let coverImageId: string | undefined;
+      try {
+        coverImageId = await this.getSuggestedCover(videoId);
+      } catch {
+        if (config.productImage) coverImageId = await this.uploadImage(config.productImage);
+      }
+      const adId = await this.createVideoAd(adGroupId, videoId, coverImageId, config);
+      console.log(`   ✅ Video ad created: ${adId}`);
+      console.log('   ✅ TikTok video campaign created PAUSED.');
+      return { success: true, campaignId, adGroupId, adId };
+    } catch (error: any) {
+      console.error('   ❌ TikTok video campaign creation failed:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /** Upload a video to the ad account by URL (Higgsfield returns a hosted URL). */
+  private async uploadVideoByUrl(videoUrl: string): Promise<string> {
+    const response = await axios.post(
+      `${TIKTOK_API_BASE}/file/video/ad/upload/`,
+      {
+        advertiser_id: this.advertiserId,
+        upload_type: 'UPLOAD_BY_URL',
+        video_url: videoUrl,
+      },
+      { headers: { 'Access-Token': this.accessToken, 'Content-Type': 'application/json' } }
+    );
+    if (response.data.code !== 0) {
+      throw new Error(`Video upload failed: ${response.data.message}`);
+    }
+    // /file/video/ad/upload/ returns data as an array of uploaded videos.
+    const data = response.data.data;
+    const v = Array.isArray(data) ? data[0] : data;
+    if (!v?.video_id) throw new Error('Video upload returned no video_id');
+    return v.video_id;
+  }
+
+  /** Ask TikTok for a suggested cover frame for an uploaded video. */
+  private async getSuggestedCover(videoId: string): Promise<string> {
+    const response = await axios.get(`${TIKTOK_API_BASE}/file/video/suggestcover/`, {
+      params: { advertiser_id: this.advertiserId, video_id: videoId },
+      headers: { 'Access-Token': this.accessToken },
+    });
+    if (response.data.code !== 0) throw new Error(`Suggest cover failed: ${response.data.message}`);
+    const id = response.data.data?.list?.[0]?.id;
+    if (!id) throw new Error('No suggested cover returned');
+    return id;
+  }
+
+  /** Create a SINGLE_VIDEO ad. */
+  private async createVideoAd(
+    adGroupId: string,
+    videoId: string,
+    coverImageId: string | undefined,
+    config: TikTokVideoCampaignConfig
+  ): Promise<string> {
+    const adText = (config.adText || `${config.productTitle} — Shop now! 🛍️`).substring(0, 100);
+    const response = await axios.post(
+      `${TIKTOK_API_BASE}/ad/create/`,
+      {
+        advertiser_id: this.advertiserId,
+        adgroup_id: adGroupId,
+        ad_name: `VideoAd - ${config.productTitle.substring(0, 40)}`,
+        operation_status: 'DISABLE', // created PAUSED
+        ad_format: 'SINGLE_VIDEO',
+        creatives: [{
+          video_id: videoId,
+          ...(coverImageId ? { image_ids: [coverImageId] } : {}),
+          identity_type: 'CUSTOMIZED_USER',
+          identity_id: this.advertiserId,
+          ad_text: adText,
+          call_to_action: 'SHOP_NOW',
+          landing_page_url: config.landingPageUrl,
+          display_name: 'Arbi',
+        }],
+        tracking_pixel_id: process.env.TIKTOK_PIXEL_ID || null,
+      },
+      { headers: { 'Access-Token': this.accessToken, 'Content-Type': 'application/json' } }
+    );
+    if (response.data.code !== 0) {
+      throw new Error(`Video ad creation failed: ${response.data.message}`);
+    }
     return response.data.data.ad_id;
   }
 

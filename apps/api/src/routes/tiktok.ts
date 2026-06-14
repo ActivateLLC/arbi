@@ -8,9 +8,73 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import { tiktokMarketing } from '../services/tiktokMarketing';
-import { getListings } from './marketplace';
+import { getListings, getListing } from './marketplace';
+import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
+import { ProductAdData } from '../services/google-ads/campaignAutomation';
 
 const router = Router();
+
+/**
+ * POST /api/tiktok/launch-video-from-listing  Body: { listingId, model? }
+ *
+ * The full creative pipeline: take a listing's real product photo → generate a
+ * UGC-style 9:16 video with Higgsfield → launch it as a PAUSED TikTok video ad.
+ * Both Higgsfield and TikTok must be configured (we check first so we never
+ * burn a video generation that can't be used).
+ */
+router.post('/launch-video-from-listing', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!tiktokMarketing.isConfigured()) {
+      throw new ApiError(503, 'TikTok not configured: set TIKTOK_ACCESS_TOKEN and TIKTOK_ADVERTISER_ID.');
+    }
+    if (!isVideoConfigured()) {
+      throw new ApiError(503, 'Higgsfield not configured: set HF_API_KEY and HF_API_SECRET.');
+    }
+    const { listingId, model } = req.body || {};
+    if (!listingId) throw new ApiError(400, 'listingId is required');
+
+    const listing: any = await getListing(listingId);
+    if (!listing) throw new ApiError(404, 'Listing not found');
+    const imageUrl = Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) throw new ApiError(409, 'Listing has no product image to animate');
+
+    const price = Number(listing.marketplacePrice) || 0;
+    const profit = Number(listing.estimatedProfit) || 0;
+    const product: ProductAdData = {
+      productId: listing.listingId,
+      productName: listing.productTitle,
+      productPrice: price,
+      profitMargin: price > 0 ? Math.round((profit / price) * 100) : 0,
+      category: listing.supplierPlatform || 'general',
+      targetCountry: 'US',
+      landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${listing.listingId}`,
+    };
+
+    // 1) Generate the UGC video from the real product image.
+    const video = await generateProductVideo(product, imageUrl, { model });
+
+    // 2) Launch it as a PAUSED TikTok video ad, using the brief's hook as caption.
+    const tiktok = await tiktokMarketing.createVideoCampaign({
+      productTitle: listing.productTitle,
+      productDescription: listing.productDescription || listing.productTitle,
+      productImage: imageUrl,
+      landingPageUrl: product.landingPageUrl,
+      marketplacePrice: price,
+      videoUrl: video.videoUrl,
+      adText: video.brief.hooks[0],
+    });
+
+    res.status(tiktok.success ? 201 : 502).json({
+      success: tiktok.success,
+      listingId,
+      videoUrl: video.videoUrl,
+      hook: video.brief.hooks[0],
+      tiktok,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
 
 interface TikTokProduct {
   productTitle: string;

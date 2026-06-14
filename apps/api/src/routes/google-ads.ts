@@ -20,6 +20,7 @@ import { isConfigured as isVideoConfigured, generateProductVideo } from '../serv
 import { uploadVideoToYouTube } from '../services/google-ads/youtubeUpload';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
+import { syncAdsToStock } from '../services/google-ads/stockSync';
 
 const router = Router();
 
@@ -481,6 +482,18 @@ router.get('/conversions/setup', async (_req: Request, res: Response, next: Next
 router.post('/optimize', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     res.json({ success: true, ...(await runOptimizationPass()) });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/stock-sync — pause ads for out-of-stock products
+ * (don't pay for clicks on things you can't ship). Only pauses, never enables.
+ */
+router.post('/stock-sync', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, ...(await syncAdsToStock()) });
   } catch (error: any) {
     next(error);
   }

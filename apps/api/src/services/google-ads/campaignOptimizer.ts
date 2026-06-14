@@ -29,16 +29,21 @@ export interface OptimizationConfig {
   minDailyBudget: number;      // never reduce below this
 }
 
-export const DEFAULT_OPTIMIZATION_CONFIG: OptimizationConfig = {
-  targetRoas: 3.0,
-  minSpendToAct: 20,
-  zeroConvSpendCap: 30,
-  minConversionsToScale: 2,
-  scaleStep: 0.2,
-  reduceStep: 0.3,
-  maxDailyBudget: 200,
-  minDailyBudget: 5,
-};
+export const DEFAULT_OPTIMIZATION_CONFIG: OptimizationConfig = (() => {
+  const n = (k: string, d: number) => { const v = Number(process.env[k]); return Number.isFinite(v) && v > 0 ? v : d; };
+  return {
+    // Because conversion VALUE = profit, ROAS here means profit ÷ ad-spend.
+    // targetRoas 3.0 => only scale when profit is 3x the ad spend ("by miles").
+    targetRoas: n('OPTIMIZER_TARGET_ROAS', 3.0),
+    minSpendToAct: n('OPTIMIZER_MIN_SPEND', 20),
+    zeroConvSpendCap: n('OPTIMIZER_ZERO_CONV_CAP', 30),
+    minConversionsToScale: n('OPTIMIZER_MIN_CONV_SCALE', 2),
+    scaleStep: n('OPTIMIZER_SCALE_STEP', 0.2),
+    reduceStep: n('OPTIMIZER_REDUCE_STEP', 0.3),
+    maxDailyBudget: n('OPTIMIZER_MAX_BUDGET', 200),
+    minDailyBudget: n('OPTIMIZER_MIN_BUDGET', 5),
+  };
+})();
 
 export interface CampaignMetricsLike {
   status: string;
@@ -84,13 +89,14 @@ export function decideCampaignAction(c: CampaignMetricsLike, config: Optimizatio
     return { action: 'scale', reason: `ROAS ${round2(roas)}x >= ${config.targetRoas}x — scaling budget`, newBudget };
   }
 
-  // Losing money (ROAS below break-even) -> throttle budget (floored).
+  // Losing money (profit < ad spend) -> throttle; if already at min budget and
+  // STILL losing, kill it — a chronic loser should never keep draining spend.
   if (roas > 0 && roas < 1) {
     if (c.dailyBudget <= config.minDailyBudget) {
-      return { action: 'hold', reason: `underperformer already at min budget ($${config.minDailyBudget})` };
+      return { action: 'pause', reason: `ROAS ${round2(roas)}x < 1 at min budget — pausing chronic loser (profit never beat spend)` };
     }
     const newBudget = round2(Math.max(c.dailyBudget * (1 - config.reduceStep), config.minDailyBudget));
-    return { action: 'reduce', reason: `ROAS ${round2(roas)}x < 1 — reducing budget`, newBudget };
+    return { action: 'reduce', reason: `ROAS ${round2(roas)}x < 1 — profit below ad spend, reducing budget`, newBudget };
   }
 
   return { action: 'hold', reason: `holding (ROAS ${round2(roas)}x, ${c.conversions} conv)` };

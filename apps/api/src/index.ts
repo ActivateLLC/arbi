@@ -1,4 +1,11 @@
 import 'dotenv/config';
+
+// google-auth-library (used by google-ads-api) otherwise probes the GCP metadata
+// server on first call. On non-GCP hosts (Railway) that probe stalls/retries and
+// can hang outbound API calls. Disable detection so it goes straight to the
+// provided OAuth refresh-token credentials.
+process.env.METADATA_SERVER_DETECTION = process.env.METADATA_SERVER_DETECTION || 'none';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';

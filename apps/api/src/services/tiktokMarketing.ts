@@ -77,6 +77,35 @@ export class TikTokMarketingService {
   }
 
   /**
+   * Build the TikTok for Business authorization URL. The user opens it, approves,
+   * and TikTok redirects to `redirectUri` with an `auth_code` to exchange.
+   * `redirectUri` MUST exactly match the redirect URL registered in the app.
+   */
+  authUrl(redirectUri: string, state = 'arbi'): string {
+    const appId = process.env.TIKTOK_APP_ID || '';
+    const params = new URLSearchParams({ app_id: appId, state, redirect_uri: redirectUri });
+    return `https://business-api.tiktok.com/portal/auth?${params.toString()}`;
+  }
+
+  /**
+   * Exchange an auth_code for a long-lived access token + the advertiser ids the
+   * token can manage. Returns everything needed to populate TIKTOK_ACCESS_TOKEN
+   * and TIKTOK_ADVERTISER_ID.
+   */
+  async exchangeAuthCode(authCode: string): Promise<{ accessToken: string; advertiserIds: string[]; scope?: any }> {
+    const response = await axios.post(`${TIKTOK_API_BASE}/oauth2/access_token/`, {
+      app_id: process.env.TIKTOK_APP_ID,
+      secret: process.env.TIKTOK_APP_SECRET,
+      auth_code: authCode,
+    });
+    if (response.data.code !== 0) {
+      throw new Error(`TikTok token exchange failed: ${response.data.message}`);
+    }
+    const d = response.data.data || {};
+    return { accessToken: d.access_token, advertiserIds: d.advertiser_ids || [], scope: d.scope };
+  }
+
+  /**
    * Create a complete TikTok ad campaign
    * Creates: Campaign → Ad Group → Image Ad → Launches live
    */

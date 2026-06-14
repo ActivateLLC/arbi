@@ -114,6 +114,49 @@ router.get('/status', (_req: Request, res: Response) => {
   res.json({ configured: tiktokMarketing.isConfigured() });
 });
 
+/**
+ * TikTok OAuth setup (one-time, admin). Flow:
+ *   1) GET /api/tiktok/oauth/url  → returns the authUrl + the redirectUri you
+ *      must register in your TikTok app's settings.
+ *   2) Open authUrl, approve. TikTok redirects to the callback below.
+ *   3) The callback exchanges the code and shows TIKTOK_ACCESS_TOKEN +
+ *      TIKTOK_ADVERTISER_ID to paste into Railway (arbi-production), then redeploy.
+ * Secrets are shown only to complete setup; this is an admin step.
+ */
+const tiktokRedirectUri = () =>
+  process.env.TIKTOK_REDIRECT_URI || `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/api/tiktok/oauth/callback`;
+
+router.get('/oauth/url', (_req: Request, res: Response) => {
+  if (!process.env.TIKTOK_APP_ID || !process.env.TIKTOK_APP_SECRET) {
+    return res.status(503).json({ success: false, error: 'Set TIKTOK_APP_ID and TIKTOK_APP_SECRET first.' });
+  }
+  const redirectUri = tiktokRedirectUri();
+  res.json({
+    success: true,
+    authUrl: tiktokMarketing.authUrl(redirectUri),
+    redirectUri,
+    note: 'Register this exact redirectUri in your TikTok app (Developer portal → app → redirect URL), then open authUrl and approve.',
+  });
+});
+
+router.get('/oauth/callback', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const authCode = String(req.query.auth_code || req.query.code || '');
+    if (!authCode) throw new ApiError(400, 'Missing auth_code in callback. Start at /api/tiktok/oauth/url.');
+    const { accessToken, advertiserIds, scope } = await tiktokMarketing.exchangeAuthCode(authCode);
+    res.json({
+      success: true,
+      message: 'Add these to Railway (arbi-production), then redeploy.',
+      TIKTOK_ACCESS_TOKEN: accessToken,
+      TIKTOK_ADVERTISER_ID: advertiserIds[0] || '(choose one of advertiserIds below)',
+      advertiserIds,
+      scope,
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
 /** POST /api/tiktok/create-campaign — create one PAUSED TikTok campaign. */
 router.post('/create-campaign', async (req: Request, res: Response, next: NextFunction) => {
   try {

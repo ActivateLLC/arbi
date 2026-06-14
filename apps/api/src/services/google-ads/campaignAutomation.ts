@@ -81,6 +81,8 @@ export async function createAutomatedCampaign(
 
   const customer = getClient().Customer({
     customer_id: (process.env.GOOGLE_ADS_CUSTOMER_ID || '').trim(),
+    // When the ad account sits under a manager (MCC), authenticate "through" it.
+    login_customer_id: (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').trim() || undefined,
     refresh_token: (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim(),
   });
 
@@ -254,6 +256,8 @@ export async function createBulkCampaigns(
 export async function getCampaignMetrics(campaignId: string) {
   const customer = getClient().Customer({
     customer_id: (process.env.GOOGLE_ADS_CUSTOMER_ID || '').trim(),
+    // When the ad account sits under a manager (MCC), authenticate "through" it.
+    login_customer_id: (process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '').trim() || undefined,
     refresh_token: (process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim(),
   });
 

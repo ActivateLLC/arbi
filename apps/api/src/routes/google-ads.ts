@@ -270,6 +270,7 @@ router.get('/debug-auth', async (req: Request, res: Response) => {
     refreshTokenMasked: refreshToken ? `${refreshToken.slice(0, 6)}…${refreshToken.slice(-6)} (len ${refreshToken.length})` : '(MISSING)',
     refreshTokenStartsWith1Slash: refreshToken.startsWith('1//'),
     customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || '(MISSING)',
+    loginCustomerId: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '(not set)',
     developerTokenPresent: !!process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
   };
 

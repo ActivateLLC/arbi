@@ -243,6 +243,19 @@ function describeAdsError(error: any): string {
 }
 
 /**
+ * Reject if a promise doesn't settle in time, so a hung Google API call can't
+ * make the HTTP request spin forever (the browser just shows "won't load").
+ */
+function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
+/**
  * Bulk create campaigns for multiple products
  */
 export async function createBulkCampaigns(
@@ -255,7 +268,11 @@ export async function createBulkCampaigns(
 
   for (const product of products) {
     try {
-      const result = await createAutomatedCampaign(product, config);
+      const result = await withTimeout(
+        createAutomatedCampaign(product, config),
+        25000,
+        `campaign creation for ${product.productName}`
+      );
       results.push({ product: product.productName, ...result, status: 'success' });
       success++;
 

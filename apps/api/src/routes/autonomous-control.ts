@@ -10,7 +10,21 @@
 import { Router } from 'express';
 import { autonomousListing } from '../jobs/autonomousListing';
 import type { Request, Response } from 'express';
+import { getAutonomousSettings, setAutonomousSettings } from '../services/autonomousSettings';
 const router = Router();
+
+/**
+ * GET /api/autonomous-control/settings — current autonomous-engine settings.
+ * POST /api/autonomous-control/settings — toggle autonomy at runtime (no redeploy).
+ * Body: { autonomous?, autoSource?, autoCreate?, autoGoLive?, optimize? } (booleans)
+ */
+router.get('/settings', (_req: Request, res: Response) => {
+  res.json({ success: true, settings: getAutonomousSettings() });
+});
+
+router.post('/settings', (req: Request, res: Response) => {
+  res.json({ success: true, settings: setAutonomousSettings(req.body || {}) });
+});
 
 /**
  * POST /api/autonomous-control/start-listing

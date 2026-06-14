@@ -28,9 +28,9 @@ import {
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { sourceTrendingFromCJ } from '../services/cjSourcing';
 import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../services/amazonSourcing';
+import { getAutonomousSettings } from '../services/autonomousSettings';
 
 const logger = createLogger();
-const flag = (k: string) => (process.env[k] || '').toLowerCase() === 'true';
 
 const CAMPAIGN_CONFIG: CampaignConfig = {
   dailyBudget: 20,
@@ -62,8 +62,11 @@ function activeProducts(listings: any[], limit: number, minMargin: number): Prod
 }
 
 async function cycle(): Promise<void> {
+  const cfg = getAutonomousSettings();
+  if (!cfg.autonomous) return; // master switch (runtime-togggleable from the dashboard)
+
   // 0) Source fresh products from every configured retailer (CJ + Amazon).
-  if (flag('AUTO_SOURCE')) {
+  if (cfg.autoSource) {
     try {
       const cj = await sourceTrendingFromCJ({ count: 5 }).catch((e) => ({ sourced: 0, error: e?.message }));
       let amz: any = { sourced: 0 };
@@ -76,7 +79,7 @@ async function cycle(): Promise<void> {
 
   // 1) Create PAUSED campaigns for new high-margin products (skip ones that
   //    already have a campaign, so we don't duplicate every cycle).
-  if (flag('AUTO_CREATE')) {
+  if (cfg.autoCreate) {
     try {
       const products = activeProducts(await getListings('active'), 5, 30);
       const existing = await listCampaigns();
@@ -94,7 +97,7 @@ async function cycle(): Promise<void> {
   }
 
   // 2) Take our PAUSED campaigns LIVE (the real-spend switch).
-  if (flag('AUTO_GO_LIVE')) {
+  if (cfg.autoGoLive) {
     try {
       const campaigns = await listCampaigns();
       const paused = (campaigns as any[]).filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''));
@@ -107,8 +110,8 @@ async function cycle(): Promise<void> {
     }
   }
 
-  // 3) Optimize live campaigns (scale winners, pause losers). On by default.
-  if ((process.env.AUTO_OPTIMIZE || 'true').toLowerCase() !== 'false') {
+  // 3) Optimize live campaigns (scale winners, pause losers).
+  if (cfg.optimize) {
     try {
       const r = await runOptimizationPass();
       if (r.acted) logger.info(`🤖 OPTIMIZE: ${r.acted}/${r.evaluated} actions — ${r.actions.map((a) => `${a.name}:${a.action}`).join(', ')}`);
@@ -123,13 +126,11 @@ async function cycle(): Promise<void> {
  * this never spends money on its own.
  */
 export function startAutonomousEngine(): void {
-  if (!flag('ENABLE_AUTONOMOUS')) {
-    logger.info('🤖 Autonomous engine OFF (set ENABLE_AUTONOMOUS=true to enable 24/7 automation)');
-    return;
-  }
+  // Always ARM the interval; each cycle no-ops unless settings.autonomous is true.
+  // This lets the dashboard toggle autonomy on/off at runtime (no redeploy).
   const minutes = Math.max(Number(process.env.AUTONOMOUS_INTERVAL_MIN) || 60, 15);
-  logger.info(`🤖 Autonomous engine ON — every ${minutes}m | source=${flag('AUTO_SOURCE')} create=${flag('AUTO_CREATE')} goLive=${flag('AUTO_GO_LIVE')} optimize=${(process.env.AUTO_OPTIMIZE || 'true') !== 'false'}`);
-  // First run shortly after boot, then on the interval.
+  const cfg = getAutonomousSettings();
+  logger.info(`🤖 Autonomous engine armed — cycle every ${minutes}m (currently ${cfg.autonomous ? 'ON' : 'OFF'}; toggle from the dashboard)`);
   setTimeout(() => { cycle().catch((e) => logger.error('🤖 cycle error:', e)); }, 30_000);
   setInterval(() => { cycle().catch((e) => logger.error('🤖 cycle error:', e)); }, minutes * 60_000);
 }

@@ -6,6 +6,8 @@ export * from './scouts/ECommerceScout';
 export * from './scouts/WebScraperScout';
 export * from './scouts/RainforestScout';
 export * from './scouts/FacebookMarketplaceScout';
+export * from './scouts/KalodataScout';
+export * from './scouts/ProductSourcingScout';
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';
@@ -16,8 +18,16 @@ export * from './risk-manager/RiskManager';
 // Export autonomous components
 export * from './calculators/profitCalculator';
 export * from './scorers/opportunityScorer';
+export * from './scorers/expectedValue';
 export * from './autonomous/autonomousEngine';
 export * from './dropshipping/DropshippingEngine';
+
+// Export services
+export * from './services/VideoDownloader';
+
+// Export pipelines
+export * from './pipelines/TrendDetectionPipeline';
+
 // Export utilities
 export * from './utils/cache';
 

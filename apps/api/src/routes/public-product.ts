@@ -14,6 +14,7 @@
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { getListings } from './marketplace';
+import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../services/google-ads/googleAdsConversions';
 
 const router = Router();
 
@@ -213,28 +214,27 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
  * Generate beautiful product landing page HTML
  */
 function generateProductLandingPage(listing: any): string {
-  // Only use REAL product images from Cloudinary - NO PLACEHOLDERS
+  // Prefer real product images (Cloudinary), but accept any valid http(s) image
+  // rather than dropping to an empty slot.
   const productImages = listing.productImages && Array.isArray(listing.productImages) && listing.productImages.length > 0
-    ? listing.productImages.filter((img: string) => img.includes('cloudinary.com') || img.includes('res.cloudinary'))
+    ? listing.productImages.filter((img: string) => typeof img === 'string' && /^https?:\/\//.test(img))
     : [];
 
-  // If no real images, use Unsplash for professional product photos
-  const getUnsplashImage = (title: string) => {
-    const keyword = title.toLowerCase()
-      .replace(/\b(pro|edition|premium|deluxe|plus)\b/gi, '')
-      .split(' ')[0];
-    return `https://source.unsplash.com/800x800/?${encodeURIComponent(keyword)},product`;
-  };
+  // When a product has no usable image, fall back to a server-side resolver that
+  // fetches a REAL product photo (scraped from the web, cached to Cloudinary) —
+  // never a placeholder or SVG. The same resolver is used as the onerror target
+  // so a broken image URL is replaced by a real one too.
+  const resolverUrl = `/api/product-image/${encodeURIComponent(listing.listingId)}`;
 
   const mainImageUrl = productImages.length > 0
     ? productImages[0]
-    : getUnsplashImage(listing.productTitle);
+    : resolverUrl;
 
   // Only show gallery if we have 2+ REAL images
   const thumbnailsHtml = productImages.length > 1
     ? `<div class="thumbnail-gallery">
         ${productImages.map((img: string, idx: number) =>
-          `<img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="thumbnail${idx === 0 ? ' active' : ''}" data-index="${idx}" loading="lazy">`
+          `<img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="thumbnail${idx === 0 ? ' active' : ''}" data-index="${idx}" loading="lazy" onerror="this.onerror=null;this.src='${resolverUrl}'">`
         ).join('\n        ')}
        </div>`
     : '';
@@ -263,6 +263,7 @@ function generateProductLandingPage(listing: any): string {
     <meta name="description" content="${listing.productDescription} | Free shipping, 30-day returns, secure checkout. Buy now at Arbi.">
     <meta name="keywords" content="${listing.productTitle}, buy ${listing.productTitle.toLowerCase()}, best price, free shipping">
     <link rel="canonical" href="https://api.arbi.creai.dev/product/${listing.listingId}">
+    ${googleAdsGlobalTagHtml()}
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="product">
@@ -978,7 +979,7 @@ function generateProductLandingPage(listing: any): string {
         <div class="product-display" id="productDisplay">
             <div class="glass-panel">
                 <div class="light-sweep"></div>
-                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="product-image" id="productImage">
+                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="product-image" id="productImage" onerror="this.onerror=null;this.src='${resolverUrl}'">
             </div>
         </div>
 
@@ -1381,6 +1382,8 @@ function generateSuccessPage(session: any): string {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Order Confirmed!</title>
+    ${googleAdsGlobalTagHtml()}
+    ${googleAdsConversionEventHtml((session.amount_total || 0) / 100, session.id)}
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {

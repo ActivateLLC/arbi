@@ -5,7 +5,7 @@
   "description": "Arbi API server",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsup src/index.ts --format cjs --external @browserbasehq/stagehand",
+    "build": "tsup src/index.ts --format cjs --external @browserbasehq/stagehand --external @higgsfield/client",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "start:prod": "node dist/index.js",
@@ -20,6 +20,7 @@
     "@arbi/transaction": "workspace:*",
     "@arbi/voice-interface": "workspace:*",
     "@arbi/web-automation": "workspace:*",
+    "@higgsfield/client": "^0.2.1",
     "axios": "^1.6.5",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",

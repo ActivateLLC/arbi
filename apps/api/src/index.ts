@@ -1,4 +1,11 @@
 import 'dotenv/config';
+
+// google-auth-library (used by google-ads-api) otherwise probes the GCP metadata
+// server on first call. On non-GCP hosts (Railway) that probe stalls/retries and
+// can hang outbound API calls. Disable detection so it goes straight to the
+// provided OAuth refresh-token credentials.
+process.env.METADATA_SERVER_DETECTION = process.env.METADATA_SERVER_DETECTION || 'none';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -18,8 +25,29 @@ const logger = createLogger();
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Apply middleware
-app.use(helmet());
+// Apply middleware.
+// The public product/checkout pages are server-rendered HTML that legitimately
+// loads product images from external CDNs (Cloudinary and scraped retailer/CDN
+// hosts), Google Fonts, and a charting/animation CDN, and uses inline scripts
+// and inline handlers. Helmet's DEFAULT Content-Security-Policy sets
+// `img-src 'self' data:` and `script-src-attr 'none'`, which silently BLOCKS
+// every cross-origin product image and every inline onerror/onclick handler —
+// that was leaving product images as empty boxes. Relax the CSP to permit
+// https images/styles/scripts while keeping helmet's other protections.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'img-src': ["'self'", 'data:', 'https:', 'blob:'],
+      'script-src': ["'self'", "'unsafe-inline'", 'https:'],
+      'script-src-attr': ["'unsafe-inline'"],
+      'style-src': ["'self'", "'unsafe-inline'", 'https:'],
+      'font-src': ["'self'", 'https:', 'data:'],
+      'connect-src': ["'self'", 'https:'],
+      'frame-src': ["'self'", 'https://js.stripe.com', 'https://checkout.stripe.com'],
+    },
+  },
+}));
 app.use(cors());
 
 // Stripe webhook signature verification requires the raw, unparsed request
@@ -54,6 +82,14 @@ const server = app.listen(port, '0.0.0.0', () => {
   logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
   logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+
+  // 24/7 autonomous engine (no-op unless ENABLE_AUTONOMOUS=true).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('./jobs/autonomousEngine').startAutonomousEngine();
+  } catch (e: any) {
+    logger.error('Autonomous engine failed to start:', e?.message || e);
+  }
 });
 
 // Handle server errors

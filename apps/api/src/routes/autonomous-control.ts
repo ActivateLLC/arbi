@@ -10,7 +10,21 @@
 import { Router } from 'express';
 import { autonomousListing } from '../jobs/autonomousListing';
 import type { Request, Response } from 'express';
+import { getAutonomousSettings, setAutonomousSettings } from '../services/autonomousSettings';
 const router = Router();
+
+/**
+ * GET /api/autonomous-control/settings — current autonomous-engine settings.
+ * POST /api/autonomous-control/settings — toggle autonomy at runtime (no redeploy).
+ * Body: { autonomous?, autoSource?, autoCreate?, autoGoLive?, optimize? } (booleans)
+ */
+router.get('/settings', (_req: Request, res: Response) => {
+  res.json({ success: true, settings: getAutonomousSettings() });
+});
+
+router.post('/settings', (req: Request, res: Response) => {
+  res.json({ success: true, settings: setAutonomousSettings(req.body || {}) });
+});
 
 /**
  * POST /api/autonomous-control/start-listing
@@ -20,7 +34,7 @@ router.post('/start-listing', async (req: Request, res: Response) => {
   const {
     scanIntervalMinutes = 60,
     minScore = 75,
-    minProfit = 20,
+    minProfit = 3, // tiny fee-cover floor; ROI% is the real gate (price-neutral)
     minROI = 15,
     markupPercentage = 30,
     maxListingsPerRun = 10,

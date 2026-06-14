@@ -1,5 +1,6 @@
 import { DatabaseManager } from '@arbi/data';
 import { initializeMarketplaceModels } from '../models/marketplace';
+import { initializeTenantModels } from '../models/tenant';
 
 // Singleton database instance
 let dbInstance: DatabaseManager | null = null;
@@ -47,6 +48,8 @@ export function getDatabase(): DatabaseManager {
 
   // Initialize marketplace models
   initializeMarketplaceModels(dbInstance);
+  // Initialize tenant (advertiser) model — multi-tenant ad accounts
+  initializeTenantModels(dbInstance);
 
   return dbInstance;
 }

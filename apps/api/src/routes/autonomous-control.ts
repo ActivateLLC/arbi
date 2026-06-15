@@ -11,6 +11,7 @@ import { Router } from 'express';
 import { autonomousListing } from '../jobs/autonomousListing';
 import type { Request, Response } from 'express';
 import { getAutonomousSettings, setAutonomousSettings } from '../services/autonomousSettings';
+import { runCycleNow } from '../jobs/autonomousEngine';
 const router = Router();
 
 /**
@@ -23,7 +24,14 @@ router.get('/settings', (_req: Request, res: Response) => {
 });
 
 router.post('/settings', (req: Request, res: Response) => {
-  res.json({ success: true, settings: setAutonomousSettings(req.body || {}) });
+  const settings = setAutonomousSettings(req.body || {});
+  // If the operator just turned the engine on (or flipped Auto Go-Live on while
+  // autonomous), kick a pass NOW so go-live/sourcing happens immediately instead
+  // of waiting up to a full interval. Fire-and-forget — don't block the response.
+  if (settings.autonomous && (settings.autoGoLive || settings.autoCreate || settings.autoSource || settings.optimize)) {
+    void runCycleNow();
+  }
+  res.json({ success: true, settings });
 });
 
 /**

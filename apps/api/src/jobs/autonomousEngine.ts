@@ -75,7 +75,7 @@ function activeProducts(listings: any[], limit: number, minMargin: number): Prod
 
 async function cycle(): Promise<void> {
   const cfg = getAutonomousSettings();
-  if (!cfg.autonomous) return; // master switch (runtime-togggleable from the dashboard)
+  if (!cfg.autonomous) return; // master switch (runtime-toggleable from the dashboard)
 
   // 0) Source fresh products from every configured retailer (CJ + Amazon).
   if (cfg.autoSource) {
@@ -171,6 +171,28 @@ async function cycle(): Promise<void> {
   }
 }
 
+// Guard so overlapping triggers (interval + a dashboard toggle) don't run the
+// money-affecting cycle twice at once.
+let cycleRunning = false;
+
+/**
+ * Run a single engine pass right now (used when the dashboard toggles autonomy /
+ * Auto Go-Live, so go-live happens immediately instead of waiting up to a full
+ * interval). Respects the same settings gate as the scheduled cycle, and is
+ * a no-op while a cycle is already in flight. Fire-and-forget safe.
+ */
+export async function runCycleNow(): Promise<void> {
+  if (cycleRunning) return;
+  cycleRunning = true;
+  try {
+    await cycle();
+  } catch (e: any) {
+    logger.error('🤖 runCycleNow error:', e?.message || e);
+  } finally {
+    cycleRunning = false;
+  }
+}
+
 /**
  * Start the autonomous engine. No-op unless ENABLE_AUTONOMOUS=true, so deploying
  * this never spends money on its own.
@@ -181,6 +203,6 @@ export function startAutonomousEngine(): void {
   const minutes = Math.max(Number(process.env.AUTONOMOUS_INTERVAL_MIN) || 60, 15);
   const cfg = getAutonomousSettings();
   logger.info(`🤖 Autonomous engine armed — cycle every ${minutes}m (currently ${cfg.autonomous ? 'ON' : 'OFF'}; toggle from the dashboard)`);
-  setTimeout(() => { cycle().catch((e) => logger.error('🤖 cycle error:', e)); }, 30_000);
-  setInterval(() => { cycle().catch((e) => logger.error('🤖 cycle error:', e)); }, minutes * 60_000);
+  setTimeout(() => { void runCycleNow(); }, 30_000);
+  setInterval(() => { void runCycleNow(); }, minutes * 60_000);
 }

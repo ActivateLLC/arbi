@@ -12,7 +12,8 @@ import { Router, Request, Response } from 'express';
 
 const router = Router();
 
-const COMPANY = 'Arbi Inc.';
+const COMPANY = 'Activate LLC';
+const BRAND_LINE = 'ARBI is a store operated by Activate LLC.';
 const SUPPORT_EMAIL = 'contact@creai.dev';
 const UPDATED = 'June 15, 2026';
 
@@ -67,7 +68,7 @@ function page(title: string, bodyHtml: string): string {
       <a href="/privacy">Privacy Policy</a>
       <a href="/terms">Terms of Service</a>
     </div>
-    <p class="copy">&copy; 2026 ${COMPANY} All rights reserved.</p>
+    <p class="copy">&copy; 2026 ${COMPANY}. All rights reserved. ${BRAND_LINE}</p>
   </div>
 </body>
 </html>`;

@@ -1477,7 +1477,7 @@ function generateSuccessPage(session: any, conversionValue?: number): string {
             <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
             <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
         </div>
-        <small>&copy; 2026 Arbi Inc. All rights reserved.</small>
+        <small>&copy; 2026 Activate LLC. All rights reserved. ARBI is a store operated by Activate LLC.</small>
     </footer>
 </body>
 </html>

@@ -14,7 +14,57 @@ const router = Router();
 const geminiKey = () =>
   (process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.API_KEY || '').trim();
 
-router.post('/assistant', async (req: Request, res: Response) => {
+/**
+ * POST /api/ai/speak — ARBI's voice (Gemini TTS, "Schedar" voice), server-side.
+ * Body: { text }. Returns { audio: base64 WAV, mime } for the client to play.
+ */
+function pcmToWav(pcm: Buffer, sampleRate = 24000, channels = 1, bits = 16): Buffer {
+  const blockAlign = (channels * bits) / 8;
+  const header = Buffer.alloc(44);
+  header.write('RIFF', 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write('WAVE', 8);
+  header.write('fmt ', 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(channels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(sampleRate * blockAlign, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bits, 34);
+  header.write('data', 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]);
+}
+
+router.post('/speak', async (req: Request, res: Response) => {
+  const key = geminiKey();
+  const text = String(req.body?.text || '').slice(0, 1200);
+  const voice = String(req.body?.voice || 'Schedar');
+  if (!key) return res.status(503).json({ error: 'tts_not_configured' });
+  if (!text) return res.status(400).json({ error: 'text required' });
+  try {
+    const r = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,
+      {
+        contents: [{ parts: [{ text }] }],
+        generationConfig: {
+          responseModalities: ['AUDIO'],
+          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
+        },
+      },
+      { timeout: 30000 }
+    );
+    const part = (r.data?.candidates?.[0]?.content?.parts || []).find((p: any) => p.inlineData);
+    const b64 = part?.inlineData?.data;
+    if (!b64) return res.status(502).json({ error: 'no_audio' });
+    const wav = pcmToWav(Buffer.from(b64, 'base64'));
+    res.json({ audio: wav.toString('base64'), mime: 'audio/wav' });
+  } catch (e: any) {
+    console.error('TTS error:', e?.response?.data?.error?.message || e?.message || e);
+    res.status(502).json({ error: 'tts_failed' });
+  }
+});
   const key = geminiKey();
   const { query, context } = req.body || {};
   if (!query || typeof query !== 'string') {

@@ -3,16 +3,15 @@ import axios from 'axios';
 import { OpenAIAgent, AgentOrchestrator } from '@arbi/ai-engine';
 
 import { ApiError } from '../middleware/errorHandler';
+import { generateText, geminiKey, anthropicKey } from '../services/ai/textProvider';
 
 const router = Router();
 
 /**
  * POST /api/ai/assistant — "Talk to ARBI" co-pilot.
- * Runs Gemini SERVER-SIDE so the API key never ships in the client bundle.
- * Body: { query: string, context: <live business snapshot> }.
+ * Runs the LLM SERVER-SIDE (Gemini, with Anthropic fallback) so no API key ever
+ * ships in the client bundle. Body: { query: string, context: <live snapshot> }.
  */
-const geminiKey = () =>
-  (process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || process.env.API_KEY || '').trim();
 
 /**
  * POST /api/ai/speak — ARBI's voice (Gemini TTS, "Schedar" voice), server-side.
@@ -67,13 +66,12 @@ router.post('/speak', async (req: Request, res: Response) => {
 });
 
 router.post('/assistant', async (req: Request, res: Response) => {
-  const key = geminiKey();
   const { query, context } = req.body || {};
   if (!query || typeof query !== 'string') {
     return res.status(400).json({ reply: 'Ask me something about your business.' });
   }
-  if (!key) {
-    return res.json({ reply: 'ARBI AI is not configured yet — set GEMINI_API_KEY on the API to enable me.' });
+  if (!geminiKey() && !anthropicKey()) {
+    return res.json({ reply: 'ARBI AI is not configured yet — set GEMINI_API_KEY (or ANTHROPIC_API_KEY) on the API to enable me.' });
   }
 
   const systemPrompt = `You are ARBI, the operator's AI co-pilot for an autonomous arbitrage/dropshipping business.
@@ -89,22 +87,8 @@ Rules:
 - Be honest about zeros/empties — never invent sales, revenue, or metrics.
 - If automation.autonomous is false or no campaigns are LIVE, note ads aren't running and that's why revenue isn't growing.`;
 
-  try {
-    const r = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
-      {
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents: [{ role: 'user', parts: [{ text: query }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
-      },
-      { timeout: 25000, headers: { 'x-goog-api-key': key } }
-    );
-    const reply = r.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    res.json({ reply: reply || 'I could not generate a response just now.' });
-  } catch (e: any) {
-    console.error('AI assistant error:', e?.response?.data?.error?.message || e?.message || e);
-    res.json({ reply: 'ARBI is temporarily unavailable — please try again in a moment.' });
-  }
+  const reply = await generateText({ system: systemPrompt, user: query, temperature: 0.4, maxTokens: 600 });
+  res.json({ reply: reply || 'ARBI is temporarily unavailable — please try again in a moment.' });
 });
 
 // Initialize OpenAI configuration

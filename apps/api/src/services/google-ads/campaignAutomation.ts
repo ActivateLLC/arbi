@@ -20,6 +20,10 @@
  */
 
 import axios from 'axios';
+// NOTE: aiAdCopy imports back from this module (buildHeadlines/buildDescriptions/
+// shortProductName). The cycle is safe — both sides only touch each other at
+// call-time (inside async fns), never at module init.
+import { generateAdCopy } from './aiAdCopy';
 
 const API_VERSION = 'v23'; // matches the google-ads-api package we had installed
 const ADS_BASE = `https://googleads.googleapis.com/${API_VERSION}`;
@@ -389,9 +393,11 @@ export async function createAutomatedCampaign(
     })), customerIdOverride);
   }
 
-  // Step 5: Responsive Search Ad (text-only; no asset uploads needed)
-  const headlines = buildHeadlines(product);
-  const descriptions = buildDescriptions(product);
+  // Step 5: Responsive Search Ad (text-only; no asset uploads needed).
+  // Prefer AI-written, product-specific copy for higher Ad Strength; the helper
+  // always returns a Google-compliant set (falls back to templates on failure).
+  const { headlines, descriptions, source: copySource } = await generateAdCopy(product);
+  console.log(`📝 RSA copy source: ${copySource} (${headlines.length} headlines, ${descriptions.length} descriptions)`);
   const [adResource] = await mutate('adGroupAds', [{
     create: {
       adGroup: adGroupResource,

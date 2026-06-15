@@ -31,6 +31,7 @@ import {
 } from '../services/google-ads/campaignAutomation';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
+import { isAdvertisable, advertisableListings } from '../services/google-ads/advertisability';
 import { sourceTrendingFromCJ } from '../services/cjSourcing';
 import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../services/amazonSourcing';
 import { getAutonomousSettings } from '../services/autonomousSettings';
@@ -92,7 +93,10 @@ async function cycle(): Promise<void> {
   //    already have a campaign, so we don't duplicate every cycle).
   if (cfg.autoCreate) {
     try {
-      const products = activeProducts(await getListings('active'), 5, 30);
+      // Gate: only advertise properly-sourced, in-stock products (real supplier
+      // ref + image + active). Blocks placeholder/hardcoded rows from the funnel.
+      const eligible = advertisableListings(await getListings('active'));
+      const products = activeProducts(eligible, 5, 30);
       const existing = await listCampaigns();
       const existingNames = (existing as any[]).map((c) => (c.name || '').toLowerCase());
       const toCreate = products.filter(
@@ -117,10 +121,14 @@ async function cycle(): Promise<void> {
       const liveKeys = new Set(campaigns.filter((c) => c.status === 'ENABLED').map((c) => campaignProductKey(c.name)));
       // Demand map: productCampaignKey(title) → demandScore, so we take the most
       // in-demand PAUSED campaigns live first (not whatever order the API returns).
+      // advertisableKeys gates go-live to properly-sourced, in-stock products only.
       const demandByKey = new Map<string, number>();
+      const advertisableKeys = new Set<string>();
       for (const l of (await getListings('active')) as any[]) {
         const k = productCampaignKey(String(l.productTitle || ''));
-        if (k) demandByKey.set(k, Math.max(demandByKey.get(k) || 0, Number(l.demandScore) || 0));
+        if (!k) continue;
+        demandByKey.set(k, Math.max(demandByKey.get(k) || 0, Number(l.demandScore) || 0));
+        if (isAdvertisable(l)) advertisableKeys.add(k);
       }
       const pausedArbi = campaigns
         .filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''))
@@ -131,6 +139,8 @@ async function cycle(): Promise<void> {
         if (enabled >= cap) break;
         const key = campaignProductKey(c.name);
         if (!key || liveKeys.has(key) || seen.has(key)) continue; // one per product
+        // Don't take live a product that isn't advertisable (OOS / no real supplier).
+        if (!advertisableKeys.has(key)) { logger.info(`🤖 AUTO_GO_LIVE: skip ${c.name} — not advertisable (sourcing/stock)`); continue; }
         seen.add(key);
         await setCampaignStatus(c.id, 'ENABLED');
         enabled++;

@@ -7,6 +7,7 @@ import { adCampaignManager } from '../services/adCampaigns';
 import { imageScraper } from '../services/imageScraper';
 // import { requireApiKey } from '../middleware/apiAuth'; // Optional: Uncomment to require API key authentication
 import { createListingSchema, checkoutSchema, validateSchema } from '../schemas/marketplace';
+import { isBrandRestricted } from '../services/google-ads/advertisability';
 
 const router = Router();
 
@@ -677,6 +678,34 @@ router.get('/orders', async (req: Request, res: Response) => {
         ? parseFloat((stats.totalProfit / stats.successfulOrders).toFixed(2))
         : 0
     }
+  });
+});
+
+/**
+ * POST /api/marketplace/purge-restricted
+ * Expire active listings that reference protected brands/trademarks (e.g. leftover
+ * demo rows like "Apple AirPods Pro 2", "Nintendo Switch OLED"). These can't be
+ * legitimately dropshipped and would get Google Ads disapproved. We set status to
+ * 'expired' (reversible — not a hard delete) so they drop out of the catalog and
+ * can never go live. ?preview=1 lists what WOULD be expired without changing it.
+ */
+router.post('/purge-restricted', async (req: Request, res: Response) => {
+  const preview = req.query.preview === '1' || req.body?.preview === true;
+  const active = await getListings('active');
+  const restricted = active.filter((l) => isBrandRestricted(l.productTitle));
+
+  if (!preview) {
+    for (const l of restricted) {
+      try { await updateListing(l.listingId, { status: 'expired' as any }); } catch { /* keep going */ }
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    preview,
+    matched: restricted.length,
+    expired: preview ? 0 : restricted.length,
+    listings: restricted.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle })),
   });
 });
 

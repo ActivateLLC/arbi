@@ -29,6 +29,15 @@ describe('advertisability gate', () => {
     expect(r.reason).toMatch(/supplier/i);
   });
 
+  it('rejects protected brand/trademark products (e.g. AirPods, Nintendo Switch)', () => {
+    const air = checkAdvertisable({ ...base, productTitle: 'Apple AirPods Pro 2', cjVariantId: 'vid_1', supplierUrl: 'https://cjdropshipping.com/p' });
+    expect(air.ok).toBe(false);
+    expect(air.reason).toMatch(/brand|trademark/i);
+    expect(isAdvertisable({ ...base, productTitle: 'Nintendo Switch OLED Model White', cjVariantId: 'vid_1' })).toBe(false);
+    // A generic product with no brand still passes.
+    expect(isAdvertisable({ ...base, productTitle: 'Electric Standing Desk Pro 72 inch', cjVariantId: 'vid_1' })).toBe(true);
+  });
+
   it('rejects out-of-stock listings', () => {
     expect(isAdvertisable({ ...base, cjVariantId: 'vid_1', status: 'out_of_stock' as any })).toBe(false);
   });

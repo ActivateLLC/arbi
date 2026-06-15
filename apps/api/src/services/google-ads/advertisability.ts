@@ -22,6 +22,31 @@ import type { MarketplaceListing } from '../../routes/marketplace';
 
 const PLACEHOLDER_HOST = /(^|\/\/)(www\.)?(example\.(com|org|net)|localhost|test\.|placeholder)/i;
 
+/**
+ * Protected brands / trademarked products we must NOT advertise on a dropshipping
+ * store: they can't be legally/genuinely sourced via CJ, Google Ads routinely
+ * disapproves them (counterfeit/trademark policy), and we can't fulfill them.
+ * This is what stops leftover demo rows like "Apple AirPods Pro 2" or "Nintendo
+ * Switch OLED" from ever going live, regardless of how they got into the catalog.
+ */
+const BRAND_DENYLIST: RegExp[] = [
+  /\bapple\b/i, /\bairpods?\b/i, /\biphones?\b/i, /\bipads?\b/i, /\bmacbooks?\b/i, /\bairtags?\b/i,
+  /\bnintendo\b/i, /\bnintendo switch\b/i, /\bplaystation\b/i, /\bps[45]\b/i, /\bxbox\b/i,
+  /\bsamsung\b/i, /\bgalaxy\b/i, /\bgoogle pixel\b/i,
+  /\bsony\b/i, /\bbose\b/i, /\bbeats\b/i, /\bjbl\b/i, /\bsonos\b/i,
+  /\bdyson\b/i, /\bkitchenaid\b/i, /\bninja\b/i, /\bkeurig\b/i, /\binstant pot\b/i,
+  /\blego\b/i, /\bgopro\b/i, /\bdji\b/i, /\bfitbit\b/i, /\bgarmin\b/i,
+  /\bnike\b/i, /\badidas\b/i, /\bgucci\b/i, /\blouis vuitton\b/i, /\bchanel\b/i, /\brolex\b/i,
+  /\bdisney\b/i, /\bpok[eé]mon\b/i, /\bmarvel\b/i, /\bstar wars\b/i,
+  /\byeti\b/i, /\blululemon\b/i, /\bstanley\b/i,
+];
+
+/** True when a product title references a protected brand we can't advertise. */
+export function isBrandRestricted(title?: string): boolean {
+  const t = (title || '').toLowerCase();
+  return BRAND_DENYLIST.some((re) => re.test(t));
+}
+
 function hasRealSupplierUrl(url?: string): boolean {
   const u = (url || '').trim();
   if (!/^https?:\/\//i.test(u)) return false;
@@ -38,6 +63,9 @@ export function checkAdvertisable(listing: Partial<MarketplaceListing>): Adverti
   if (!listing) return { ok: false, reason: 'no listing' };
   if (listing.status && listing.status !== 'active') {
     return { ok: false, reason: `status=${listing.status}` };
+  }
+  if (isBrandRestricted(listing.productTitle)) {
+    return { ok: false, reason: 'brand/trademark — cannot legitimately source or advertise' };
   }
 
   const price = Number(listing.marketplacePrice) || 0;

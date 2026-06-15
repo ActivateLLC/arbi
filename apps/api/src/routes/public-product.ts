@@ -1146,7 +1146,7 @@ function generateProductLandingPage(listing: any): string {
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
             </button>
         </div>
-        <div class="panel-footer">Arbi Inc. © 2026 • support@arbi.creai.dev</div>
+        <div class="panel-footer">Arbi Inc. © 2026 • <a href="mailto:contact@creai.dev" style="color:inherit;">contact@creai.dev</a></div>
     </footer>
 
     <script>

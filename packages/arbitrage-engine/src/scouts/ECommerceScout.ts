@@ -15,6 +15,16 @@ export class ECommerceScout implements OpportunityScout {
   type = 'ecommerce_arbitrage' as const;
 
   async scan(config: ScoutConfig): Promise<Opportunity[]> {
+    // DISABLED: this scout returned a hardcoded demo list (AirPods, Switch,
+    // KitchenAid…) with placeholder buy/sell sources — not live, not real-
+    // supplier, not stock-checked. Real product discovery now comes from the
+    // live sourcing services (CJ Dropshipping trending + Amazon/Rainforest),
+    // which carry real supplier ids, prices, and demand signals. Returning []
+    // so no fake products enter the catalog or get advertised.
+    return [];
+  }
+
+  private async _legacyScanDisabled(config: ScoutConfig): Promise<Opportunity[]> {
     const opportunities: Opportunity[] = [];
 
     try {

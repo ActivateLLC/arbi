@@ -12,6 +12,9 @@ import { autonomousListing } from '../jobs/autonomousListing';
 import type { Request, Response } from 'express';
 import { getAutonomousSettings, setAutonomousSettings } from '../services/autonomousSettings';
 import { runCycleNow } from '../jobs/autonomousEngine';
+import { listCampaigns, campaignProductKey, productCampaignKey } from '../services/google-ads/campaignAutomation';
+import { checkAdvertisable } from '../services/google-ads/advertisability';
+import { getListings, MarketplaceListing } from '../routes/marketplace';
 const router = Router();
 
 /**
@@ -32,6 +35,87 @@ router.post('/settings', (req: Request, res: Response) => {
     void runCycleNow();
   }
   res.json({ success: true, settings });
+});
+
+/**
+ * GET /api/autonomous-control/go-live-preview — read-only diagnosis of what the
+ * AUTO_GO_LIVE pass WOULD do right now. Runs the SAME advertisability gate the
+ * engine uses, against live Google Ads campaigns + the active catalog, but never
+ * enables anything (no spend). For each PAUSED "Arbi - " campaign it reports
+ * whether it would go live and, if not, exactly why (no matching listing in the
+ * catalog, or the listing failed the sourcing/stock gate — with the reason).
+ */
+router.get('/go-live-preview', async (_req: Request, res: Response) => {
+  try {
+    const cap = Math.max(Number(process.env.AUTO_GO_LIVE_MAX) || 5, 1);
+    const campaigns = (await listCampaigns()) as any[];
+    const listings = (await getListings('active')) as MarketplaceListing[];
+
+    // Best listing per product key (highest demand), plus its gate result.
+    const byKey = new Map<string, { listing: MarketplaceListing; demand: number }>();
+    for (const l of listings) {
+      const k = productCampaignKey(String(l.productTitle || ''));
+      if (!k) continue;
+      const demand = Number((l as any).demandScore) || 0;
+      const cur = byKey.get(k);
+      if (!cur || demand > cur.demand) byKey.set(k, { listing: l, demand });
+    }
+
+    const liveKeys = new Set(campaigns.filter((c) => c.status === 'ENABLED').map((c) => campaignProductKey(c.name)));
+    const pausedArbi = campaigns
+      .filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''))
+      .sort((a, b) => (byKey.get(campaignProductKey(b.name))?.demand || 0) - (byKey.get(campaignProductKey(a.name))?.demand || 0));
+
+    let wouldEnable = 0;
+    const seen = new Set<string>();
+    const detail = pausedArbi.map((c) => {
+      const key = campaignProductKey(c.name);
+      const match = byKey.get(key);
+      let advertisable = false;
+      let reason: string | undefined;
+      if (!match) {
+        reason = 'no matching active listing in catalog';
+      } else {
+        const g = checkAdvertisable(match.listing);
+        advertisable = g.ok;
+        reason = g.ok ? undefined : g.reason;
+      }
+      let willGoLive = false;
+      if (advertisable && key && !liveKeys.has(key) && !seen.has(key) && wouldEnable < cap) {
+        willGoLive = true;
+        wouldEnable++;
+        seen.add(key);
+      }
+      return {
+        campaignId: c.id,
+        name: c.name,
+        productKey: key,
+        matchedListingId: match?.listing.listingId,
+        demandScore: match?.demand ?? 0,
+        advertisable,
+        alreadyLive: liveKeys.has(key),
+        willGoLive,
+        reason,
+      };
+    });
+
+    res.json({
+      success: true,
+      settings: getAutonomousSettings(),
+      cap,
+      counts: {
+        totalCampaigns: campaigns.length,
+        enabled: campaigns.filter((c) => c.status === 'ENABLED').length,
+        pausedArbi: pausedArbi.length,
+        advertisable: detail.filter((d) => d.advertisable).length,
+        wouldGoLiveThisPass: wouldEnable,
+        activeListings: listings.length,
+      },
+      campaigns: detail,
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
 });
 
 /**

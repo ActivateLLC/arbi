@@ -689,8 +689,10 @@ router.get('/orders', async (req: Request, res: Response) => {
  * 'expired' (reversible — not a hard delete) so they drop out of the catalog and
  * can never go live. ?preview=1 lists what WOULD be expired without changing it.
  */
-router.post('/purge-restricted', async (req: Request, res: Response) => {
-  const preview = req.query.preview === '1' || req.body?.preview === true;
+async function handlePurgeRestricted(req: Request, res: Response) {
+  // GET is always a safe dry-run (browser-clickable). POST mutates unless
+  // ?preview=1 / {preview:true} is set.
+  const preview = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
   const active = await getListings('active');
   const restricted = active.filter((l) => isBrandRestricted(l.productTitle));
 
@@ -703,11 +705,17 @@ router.post('/purge-restricted', async (req: Request, res: Response) => {
   res.status(200).json({
     success: true,
     preview,
+    method: req.method,
     matched: restricted.length,
     expired: preview ? 0 : restricted.length,
+    hint: preview ? 'This was a dry run. Send a POST (no ?preview) to actually expire these.' : undefined,
     listings: restricted.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle })),
   });
-});
+}
+
+// GET = browser-clickable dry run; POST = perform the purge.
+router.get('/purge-restricted', handlePurgeRestricted);
+router.post('/purge-restricted', handlePurgeRestricted);
 
 /**
  * GET /api/marketplace/health

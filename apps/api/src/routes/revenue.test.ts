@@ -2,7 +2,25 @@
  * Revenue rehydration test — proves the dashboard total survives redeploys by
  * reconciling to persisted orders (sum of actualProfit on non-refunded orders).
  */
-import { seedRevenueFromOrders, recordTrade } from './revenue';
+import { seedRevenueFromOrders, recordTrade, sumOrderRevenue } from './revenue';
+
+describe('sumOrderRevenue (read-time source of truth for /status)', () => {
+  it('sums non-refunded positive-profit orders', () => {
+    const r = sumOrderRevenue([
+      { actualProfit: 25, status: 'delivered' },
+      { actualProfit: 40, status: 'payment_received' },
+      { actualProfit: 30, status: 'refunded' },
+      { actualProfit: 0, status: 'delivered' },
+    ]);
+    expect(r.total).toBeCloseTo(65, 2);
+    expect(r.trades).toBe(2);
+  });
+
+  it('empty/undefined → zero, never throws', () => {
+    expect(sumOrderRevenue([])).toEqual({ total: 0, trades: 0 });
+    expect(sumOrderRevenue(undefined as any)).toEqual({ total: 0, trades: 0 });
+  });
+});
 
 describe('seedRevenueFromOrders (durable revenue, survives restarts)', () => {
   it('sums actualProfit across orders and sets the baseline total', () => {

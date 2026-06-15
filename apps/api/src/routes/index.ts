@@ -21,6 +21,7 @@ import cjRoutes from './cj';
 import tiktokRoutes from './tiktok';
 import tenantRoutes from './tenants';
 import sourcingRoutes from './sourcing';
+import alertsRoutes from './alerts';
 
 const router = Router();
 
@@ -84,5 +85,8 @@ router.use('/tenants', tenantRoutes);
 
 // Multi-source product sourcing (CJ + Amazon/Rainforest, extensible).
 router.use('/sourcing', sourcingRoutes);
+
+// Operator action items / alerts (what needs attention + quick links).
+router.use('/alerts', alertsRoutes);
 
 export default router;

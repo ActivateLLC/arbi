@@ -65,6 +65,33 @@ async function runColumnMigrations(db: DatabaseManager): Promise<void> {
       label: 'marketplace_listings.demandScore',
       sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "demandScore" DECIMAL DEFAULT 0;',
     },
+    // cjVariantId/cjProductId were in the type but never in the model, so they
+    // were being dropped on save — breaking CJ fulfillment. Add them.
+    {
+      label: 'marketplace_listings.cjVariantId',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "cjVariantId" VARCHAR(255);',
+    },
+    {
+      label: 'marketplace_listings.cjProductId',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "cjProductId" VARCHAR(255);',
+    },
+    {
+      label: 'marketplace_listings.variants',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "variants" JSONB;',
+    },
+    // Buyer-chosen size/color + quantity, so we fulfill the exact item ordered.
+    {
+      label: 'buyer_orders.quantity',
+      sql: 'ALTER TABLE "buyer_orders" ADD COLUMN IF NOT EXISTS "quantity" INTEGER DEFAULT 1;',
+    },
+    {
+      label: 'buyer_orders.variantId',
+      sql: 'ALTER TABLE "buyer_orders" ADD COLUMN IF NOT EXISTS "variantId" VARCHAR(255);',
+    },
+    {
+      label: 'buyer_orders.variantLabel',
+      sql: 'ALTER TABLE "buyer_orders" ADD COLUMN IF NOT EXISTS "variantLabel" VARCHAR(255);',
+    },
   ];
   for (const m of migrations) {
     try {

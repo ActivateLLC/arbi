@@ -61,6 +61,18 @@ const MarketplaceListingModel: ModelDefinition = {
       allowNull: true,
       defaultValue: 0
     },
+    cjVariantId: {
+      type: 'string', // CJ variant id (vid) — required for CJ auto-fulfillment
+      allowNull: true
+    },
+    cjProductId: {
+      type: 'string', // CJ product id (pid) — used to fetch variants/details
+      allowNull: true
+    },
+    variants: {
+      type: 'json', // selectable size/color variants [{ vid, label, price }]
+      allowNull: true
+    },
     status: {
       type: 'string',
       allowNull: false,
@@ -121,6 +133,19 @@ const BuyerOrderModel: ModelDefinition = {
     buyerEmail: {
       type: 'string',
       allowNull: false
+    },
+    quantity: {
+      type: 'integer',
+      allowNull: true,
+      defaultValue: 1
+    },
+    variantId: {
+      type: 'string',
+      allowNull: true
+    },
+    variantLabel: {
+      type: 'string',
+      allowNull: true
     },
     buyerShippingAddress: {
       type: 'json',

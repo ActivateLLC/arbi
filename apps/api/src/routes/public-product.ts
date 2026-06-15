@@ -15,6 +15,27 @@ import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
 import { getListings, getListing } from './marketplace';
 import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../services/google-ads/googleAdsConversions';
+import { cjClient, isCJConfigured } from '../services/cjDropshipping';
+import { extractVariants } from '../services/cjSourcing';
+
+/**
+ * Ensure a listing has its selectable variants (size/color) populated. Listings
+ * sourced before variant capture won't have them stored, so fetch live from CJ
+ * (best-effort, cached on the object) so older product pages still offer the
+ * size choice. Never throws — a product just shows no selector if CJ is down.
+ */
+async function ensureVariants(listing: any): Promise<{ vid: string; label: string; price?: number }[]> {
+  if (Array.isArray(listing?.variants) && listing.variants.length) return listing.variants;
+  if (!listing?.cjProductId || !isCJConfigured()) return [];
+  try {
+    const detail = await cjClient.getProductDetail(listing.cjProductId);
+    const variants = extractVariants(detail);
+    listing.variants = variants; // cache on the in-memory object for this request
+    return variants;
+  } catch {
+    return [];
+  }
+}
 
 const router = Router();
 
@@ -75,6 +96,9 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
     }
 
     console.log(`   Step 5: Generating page for: ${listing.productTitle}`);
+    // Pull size/color variants (from the listing, or live from CJ for older
+    // listings) so the customer can pick before buying.
+    await ensureVariants(listing);
     // Generate beautiful landing page HTML
     const html = generateProductLandingPage(listing);
     console.log(`   Step 6: HTML generated successfully (${html.length} chars)`);
@@ -107,7 +131,7 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
  */
 router.post('/product/:listingId/checkout', async (req: Request, res: Response) => {
   const { listingId } = req.params;
-  const { quantity } = req.body;
+  const { quantity, variantId, variantLabel } = req.body;
 
   try {
     // Validate quantity
@@ -123,6 +147,19 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
     if (!listing || listing.status !== 'active') {
       return res.status(404).json({ error: 'Product not found' });
     }
+
+    // Variant (size/color) handling: if the product has selectable variants, the
+    // customer MUST pick one, and it must be a real option — so we fulfill the
+    // exact supplier variant (vid) they ordered.
+    const variants = await ensureVariants(listing);
+    let chosen: { vid: string; label: string; price?: number } | undefined;
+    if (variants.length) {
+      chosen = variants.find((v) => v.vid === String(variantId || ''));
+      if (!chosen) {
+        return res.status(400).json({ error: 'Please select a valid option (e.g. size) before checkout.' });
+      }
+    }
+    const variantSuffix = chosen ? ` — ${chosen.label}` : '';
 
     if (!stripe) {
       return res.status(500).json({ error: 'Payment processing not configured' });
@@ -146,7 +183,7 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
           price_data: {
             currency: 'usd',
             product_data: {
-              name: listing.productTitle,
+              name: `${listing.productTitle}${variantSuffix}`,
               description: listing.productDescription,
               images: listing.productImages.length > 0 ? listing.productImages : undefined,
             },
@@ -165,6 +202,10 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
         supplierPrice: listing.supplierPrice.toString(),
         estimatedProfit: totalProfit.toString(),
         supplierUrl: listing.supplierUrl || '',
+        // The exact supplier variant (vid) + label the customer chose, so
+        // fulfillment orders the right size/color from CJ.
+        variantId: chosen?.vid || listing.cjVariantId || '',
+        variantLabel: chosen?.label || '',
       },
       shipping_address_collection: {
         allowed_countries: ['US'], // Collect shipping address for fulfillment
@@ -1022,6 +1063,17 @@ function generateProductLandingPage(listing: any): string {
             <!-- Product Description -->
             <p class="product-description">${listing.productDescription}</p>
 
+            ${(listing.variants && listing.variants.length) ? `
+            <!-- Variant (size/color) selector — required so we fulfill the right item -->
+            <div class="variant-select-wrap" style="margin: 0 0 18px;">
+                <label for="variantSelect" style="display:block; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#7c8db5; margin-bottom:8px; font-weight:700;">Select Option</label>
+                <select id="variantSelect" style="width:100%; padding:14px 16px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.14); border-radius:12px; color:#e8eefc; font-size:15px; font-weight:600; outline:none; appearance:none; -webkit-appearance:none; background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%237c8db5%22 stroke-width=%223%22><path d=%22M6 9l6 6 6-6%22/></svg>'); background-repeat:no-repeat; background-position:right 16px center;">
+                    <option value="" disabled selected>Choose an option…</option>
+                    ${listing.variants.map((v: any) => `<option value="${v.vid}" data-label="${(v.label || '').replace(/"/g, '&quot;')}">${v.label}</option>`).join('')}
+                </select>
+            </div>
+            ` : ''}
+
             <!-- Rotary Dial Quantity Selector -->
             <div class="inventory-dial">
                 <div class="dial-label">UNITS AVAILABLE: ${randomStock}</div>
@@ -1288,11 +1340,28 @@ function generateProductLandingPage(listing: any): string {
             async function handleCheckout() {
                 const quantity = parseInt(quantityInput.value);
 
+                // Variant (size/color) is required when the product has options.
+                const variantSelect = document.getElementById('variantSelect');
+                let variantId = '', variantLabel = '';
+                if (variantSelect) {
+                    variantId = variantSelect.value;
+                    if (!variantId) {
+                        alert('Please select an option (e.g. size) before checkout.');
+                        dispenseText.textContent = 'SECURE CHECKOUT';
+                        dispenseProgress.style.width = '0%';
+                        dispenseButton.disabled = false;
+                        variantSelect.focus();
+                        return;
+                    }
+                    const opt = variantSelect.options[variantSelect.selectedIndex];
+                    variantLabel = opt ? (opt.getAttribute('data-label') || opt.textContent || '') : '';
+                }
+
                 try {
                     const response = await fetch('/product/${listing.listingId}/checkout', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ quantity: quantity })
+                        body: JSON.stringify({ quantity: quantity, variantId: variantId, variantLabel: variantLabel })
                     });
 
                     if (!response.ok) {

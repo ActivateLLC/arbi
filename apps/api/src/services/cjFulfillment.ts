@@ -45,7 +45,10 @@ export async function fulfillBuyerOrderViaCJ(orderId: string): Promise<CJFulfill
   if (!order) return { attempted: false, reason: 'order not found' };
 
   const listing = await getListing(order.listingId);
-  if (!listing?.cjVariantId) {
+  // Order the EXACT variant (size/color) the customer chose at checkout; fall
+  // back to the listing's default variant for single-variant products.
+  const fulfillVid = order.variantId || listing?.cjVariantId;
+  if (!fulfillVid) {
     return { attempted: false, reason: 'listing has no CJ variant id (not CJ-sourced)' };
   }
 
@@ -66,7 +69,7 @@ export async function fulfillBuyerOrderViaCJ(orderId: string): Promise<CJFulfill
 
   const result = await cjClient.fulfill({
     orderNumber: order.orderId,
-    products: [{ vid: listing.cjVariantId, quantity: order.quantity || 1 }],
+    products: [{ vid: fulfillVid, quantity: order.quantity || 1 }],
     shippingAddress,
   });
 

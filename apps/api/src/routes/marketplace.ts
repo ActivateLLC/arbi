@@ -67,6 +67,9 @@ export interface MarketplaceListing {
   supplierPlatform: string; // "amazon" | "walmart" | "target" | "ebay" | "cj"
   cjVariantId?: string; // CJ Dropshipping variant id (vid) — enables supplier->customer auto-fulfillment
   cjProductId?: string; // CJ Dropshipping product id (pid), optional
+  // Selectable variants (e.g. size / color). When a product has more than one,
+  // the customer must choose at checkout so we fulfill the right supplier variant.
+  variants?: { vid: string; label: string; price?: number }[];
   marketplacePrice: number;
   estimatedProfit: number;
   demandScore?: number; // proven-demand proxy (Amazon reviews / CJ listed count)

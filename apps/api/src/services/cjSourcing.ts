@@ -30,6 +30,32 @@ const str = (...vals: any[]): string | undefined => {
   return undefined;
 };
 
+/**
+ * Turn a CJ product-detail payload into selectable variants (size/color), each
+ * with its supplier variant id (vid), a human label, and price. CJ exposes the
+ * label under several field names depending on the endpoint, so we try them in
+ * order. Returns [] when there's only a single (unnamed) variant — the product
+ * has no real choice to make.
+ */
+export function extractVariants(detail: any): { vid: string; label: string; price?: number }[] {
+  const list = detail?.variants || detail?.variantList || detail?.variantInfoList || [];
+  if (!Array.isArray(list)) return [];
+  const out = list
+    .map((v: any) => {
+      const vid = str(v?.vid, v?.variantId);
+      if (!vid) return null;
+      const label = str(v?.variantKey, v?.variantNameEn, v?.variantName, v?.variantStandard, v?.variantSku)
+        // CJ keys look like "Black-XL"; make it readable.
+        ?.replace(/[-_]+/g, ' ').replace(/\s+/g, ' ').trim();
+      const price = num(v?.variantSellPrice, v?.sellPrice);
+      return { vid, label: label || 'Default', price: price || undefined };
+    })
+    .filter(Boolean) as { vid: string; label: string; price?: number }[];
+  // A lone "Default" variant isn't a real choice — treat as no variants.
+  if (out.length <= 1) return [];
+  return out;
+}
+
 export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   if (!isCJConfigured()) return { success: false, error: 'CJ not configured (CJ_EMAIL + CJ_API_KEY)' };
 
@@ -79,6 +105,7 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     let image = str(p.bigImage, p.productImage, p.image);
     let price = num(p.sellPrice, p.productSellPrice);
     let vid = str(p.vid);
+    let variants: { vid: string; label: string; price?: number }[] = [];
 
     // Fill missing vid/price/image/name from product detail + first variant.
     // The catalog list omits vid, so a detail call is needed — pace it to avoid
@@ -89,8 +116,9 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
         const d = await cjClient.getProductDetail(pid);
         name = name || str(d.productNameEn, d.productName);
         image = image || str(d.productImage, Array.isArray(d.productImageSet) ? d.productImageSet[0] : undefined);
-        const variants = d.variants || d.variantList || [];
-        const v = Array.isArray(variants) ? variants[0] : null;
+        variants = extractVariants(d); // size/color choices, if any
+        const detailVariants = d.variants || d.variantList || [];
+        const v = Array.isArray(detailVariants) ? detailVariants[0] : null;
         if (v) {
           vid = vid || str(v.vid);
           price = price || num(v.variantSellPrice, v.sellPrice);
@@ -118,6 +146,7 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
       supplierPlatform: 'cj',
       cjVariantId: vid,
       cjProductId: pid,
+      variants: variants.length ? variants : undefined,
       marketplacePrice,
       estimatedProfit: Number((marketplacePrice - price).toFixed(2)),
       demandScore: num(p.listedNum, p.listedCount), // proven demand (CJ listed count)

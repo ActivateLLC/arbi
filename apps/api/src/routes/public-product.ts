@@ -16,24 +16,30 @@ import Stripe from 'stripe';
 import { getListings, getListing } from './marketplace';
 import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../services/google-ads/googleAdsConversions';
 import { cjClient, isCJConfigured } from '../services/cjDropshipping';
-import { extractVariants } from '../services/cjSourcing';
+import { extractVariants, extractImages } from '../services/cjSourcing';
 
 /**
- * Ensure a listing has its selectable variants (size/color) populated. Listings
- * sourced before variant capture won't have them stored, so fetch live from CJ
- * (best-effort, cached on the object) so older product pages still offer the
- * size choice. Never throws — a product just shows no selector if CJ is down.
+ * Ensure a listing has its selectable variants (size/color) AND its full image
+ * set populated. Listings sourced before these were captured won't have them
+ * stored, so we fetch live from CJ (best-effort, cached on the object) — one
+ * detail call fills both — so older product pages still get the size selector
+ * and a swipeable gallery. Never throws.
  */
-async function ensureVariants(listing: any): Promise<{ vid: string; label: string; price?: number }[]> {
-  if (Array.isArray(listing?.variants) && listing.variants.length) return listing.variants;
-  if (!listing?.cjProductId || !isCJConfigured()) return [];
+async function ensureProductDetail(listing: any): Promise<{ vid: string; label: string; price?: number }[]> {
+  const hasVariants = Array.isArray(listing?.variants) && listing.variants.length;
+  const hasGallery = Array.isArray(listing?.productImages) && listing.productImages.length > 1;
+  if (hasVariants && hasGallery) return listing.variants;
+  if (!listing?.cjProductId || !isCJConfigured()) return listing?.variants || [];
   try {
     const detail = await cjClient.getProductDetail(listing.cjProductId);
-    const variants = extractVariants(detail);
-    listing.variants = variants; // cache on the in-memory object for this request
-    return variants;
+    if (!hasVariants) listing.variants = extractVariants(detail);
+    if (!hasGallery) {
+      const imgs = extractImages(detail);
+      if (imgs.length) listing.productImages = imgs;
+    }
+    return listing.variants || [];
   } catch {
-    return [];
+    return listing?.variants || [];
   }
 }
 
@@ -96,9 +102,9 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
     }
 
     console.log(`   Step 5: Generating page for: ${listing.productTitle}`);
-    // Pull size/color variants (from the listing, or live from CJ for older
-    // listings) so the customer can pick before buying.
-    await ensureVariants(listing);
+    // Pull size/color variants + full image gallery (from the listing, or live
+    // from CJ for older listings) so the customer can pick + swipe before buying.
+    await ensureProductDetail(listing);
     // Generate beautiful landing page HTML
     const html = generateProductLandingPage(listing);
     console.log(`   Step 6: HTML generated successfully (${html.length} chars)`);
@@ -151,7 +157,7 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
     // Variant (size/color) handling: if the product has selectable variants, the
     // customer MUST pick one, and it must be a real option — so we fulfill the
     // exact supplier variant (vid) they ordered.
-    const variants = await ensureVariants(listing);
+    const variants = await ensureProductDetail(listing);
     let chosen: { vid: string; label: string; price?: number } | undefined;
     if (variants.length) {
       chosen = variants.find((v) => v.vid === String(variantId || ''));
@@ -517,6 +523,41 @@ function generateProductLandingPage(listing: any): string {
         .glass-panel:hover .product-image {
             transform: scale(1.02) translateY(-5px);
         }
+
+        /* Swipeable gallery */
+        .gallery-track {
+            display: flex;
+            width: 100%;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            scroll-behavior: smooth;
+        }
+        .gallery-track::-webkit-scrollbar { display: none; }
+        .gallery-slide {
+            flex: 0 0 100%;
+            scroll-snap-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .gallery-dots {
+            display: flex;
+            gap: 7px;
+            justify-content: center;
+            margin-top: 14px;
+        }
+        .gallery-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            border: none;
+            padding: 0;
+            background: rgba(255,255,255,0.22);
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+        .gallery-dot.active { background: #00f0ff; transform: scale(1.25); }
 
         /* Thumbnail Gallery */
         .thumbnail-gallery {
@@ -1023,12 +1064,21 @@ function generateProductLandingPage(listing: any): string {
 </head>
 <body>
     <div class="container">
-        <!-- Product Image with Black Glass Background -->
+        <!-- Product Image gallery — swipeable carousel (scroll-snap) -->
         <div class="product-display" id="productDisplay">
             <div class="glass-panel">
                 <div class="light-sweep"></div>
-                <img src="${mainImageUrl}" alt="${listing.productTitle}" class="product-image" id="productImage" onerror="this.onerror=null;this.src='${resolverUrl}'">
+                <div class="gallery-track" id="galleryTrack">
+                    ${productImages.map((img: string, idx: number) => `
+                    <div class="gallery-slide">
+                        <img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="product-image"${idx === 0 ? ' id="productImage"' : ''} loading="${idx === 0 ? 'eager' : 'lazy'}" onerror="this.onerror=null;this.src='${resolverUrl}'">
+                    </div>`).join('')}
+                </div>
             </div>
+            ${productImages.length > 1 ? `
+            <div class="gallery-dots" id="galleryDots">
+                ${productImages.map((_: string, idx: number) => `<button class="gallery-dot${idx === 0 ? ' active' : ''}" data-index="${idx}" aria-label="Image ${idx + 1}"></button>`).join('')}
+            </div>` : ''}
         </div>
 
         <!-- Product Info Section -->
@@ -1168,6 +1218,29 @@ function generateProductLandingPage(listing: any): string {
             }
 
             const maxQuantity = parseInt(quantityInput.max);
+
+            // Swipeable gallery: sync dots with scroll position; tap a dot to jump.
+            const galleryTrack = document.getElementById('galleryTrack');
+            const galleryDots = Array.prototype.slice.call(document.querySelectorAll('.gallery-dot'));
+            if (galleryTrack && galleryDots.length) {
+                const setActiveDot = function(i) {
+                    galleryDots.forEach(function(d, di) { d.classList.toggle('active', di === i); });
+                };
+                let scrollRaf = null;
+                galleryTrack.addEventListener('scroll', function() {
+                    if (scrollRaf) cancelAnimationFrame(scrollRaf);
+                    scrollRaf = requestAnimationFrame(function() {
+                        const i = Math.round(galleryTrack.scrollLeft / galleryTrack.clientWidth);
+                        setActiveDot(Math.max(0, Math.min(i, galleryDots.length - 1)));
+                    });
+                }, { passive: true });
+                galleryDots.forEach(function(dot, i) {
+                    dot.addEventListener('click', function() {
+                        galleryTrack.scrollTo({ left: i * galleryTrack.clientWidth, behavior: 'smooth' });
+                        if (navigator.vibrate) navigator.vibrate(8);
+                    });
+                });
+            }
 
             // Image Gallery - Thumbnail Click Handler
             thumbnails.forEach(function(thumbnail, index) {
@@ -1395,7 +1468,9 @@ function generateProductLandingPage(listing: any): string {
             });
 
             // Product image parallax tilt (subtle, on hover)
-            if (productImage && typeof gsap !== 'undefined') {
+            // Parallax tilt only for single-image products — it would fight the
+            // swipe carousel when there are multiple images.
+            if (productImage && typeof gsap !== 'undefined' && ${productImages.length} <= 1) {
                 const glassPanelEl = productImage.closest('.glass-panel');
                 if (glassPanelEl) {
                     glassPanelEl.addEventListener('mousemove', function(e) {

@@ -56,6 +56,25 @@ export function extractVariants(detail: any): { vid: string; label: string; pric
   return out;
 }
 
+/**
+ * Pull the full product image set (for a swipeable gallery) from a CJ detail
+ * payload. CJ exposes them as productImageSet[] (sometimes a comma string).
+ * De-duped, http(s) only, capped at 8.
+ */
+export function extractImages(detail: any): string[] {
+  let set: any = detail?.productImageSet ?? detail?.productImages ?? detail?.productImage;
+  if (typeof set === 'string') set = set.split(',');
+  if (!Array.isArray(set)) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const s of set) {
+    const u = typeof s === 'string' ? s.trim() : '';
+    if (/^https?:\/\//i.test(u) && !seen.has(u)) { seen.add(u); out.push(u); }
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   if (!isCJConfigured()) return { success: false, error: 'CJ not configured (CJ_EMAIL + CJ_API_KEY)' };
 
@@ -106,16 +125,18 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     let price = num(p.sellPrice, p.productSellPrice);
     let vid = str(p.vid);
     let variants: { vid: string; label: string; price?: number }[] = [];
+    let images: string[] = image ? [image] : [];
 
-    // Fill missing vid/price/image/name from product detail + first variant.
-    // The catalog list omits vid, so a detail call is needed — pace it to avoid
-    // CJ rate-limiting (which was silently dropping ~⅔ of candidates).
-    if (!vid || !price || !name || !image) {
+    // Fetch detail for vid/price/name AND for the full image set + variants
+    // (the catalog list only carries one image). Pace it to avoid CJ rate-limits.
+    if (!vid || !price || !name || !image || images.length <= 1) {
       try {
         await new Promise(r => setTimeout(r, 600));
         const d = await cjClient.getProductDetail(pid);
         name = name || str(d.productNameEn, d.productName);
         image = image || str(d.productImage, Array.isArray(d.productImageSet) ? d.productImageSet[0] : undefined);
+        const detailImages = extractImages(d);
+        if (detailImages.length) images = detailImages; // full gallery
         variants = extractVariants(d); // size/color choices, if any
         const detailVariants = d.variants || d.variantList || [];
         const v = Array.isArray(detailVariants) ? detailVariants[0] : null;
@@ -140,7 +161,7 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
       opportunityId: `cj_${pid}`,
       productTitle: name.slice(0, 200),
       productDescription: `${name} — fast shipping, satisfaction guaranteed.`,
-      productImages: image ? [image] : [],
+      productImages: images.length ? images : (image ? [image] : []),
       supplierPrice: Number(price.toFixed(2)),
       supplierUrl: `https://cjdropshipping.com/product/-p-${pid}.html`,
       supplierPlatform: 'cj',

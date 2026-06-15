@@ -13,7 +13,7 @@ import { Router, Request, Response } from 'express';
 const router = Router();
 
 const COMPANY = 'Arbi Inc.';
-const SUPPORT_EMAIL = 'support@arbi.creai.dev';
+const SUPPORT_EMAIL = 'contact@creai.dev';
 const UPDATED = 'June 15, 2026';
 
 /** Branded dark page shell matching the order-confirmation page. */

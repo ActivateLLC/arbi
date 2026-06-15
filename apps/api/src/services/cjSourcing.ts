@@ -11,6 +11,7 @@
 import { cjClient, isCJConfigured } from './cjDropshipping';
 import { saveListing, MarketplaceListing } from '../routes/marketplace';
 import { scoreExpectedValue } from '@arbi/arbitrage-engine';
+import { isBrandRestricted } from './google-ads/advertisability';
 
 export interface CJSourceOptions {
   keyword?: string;
@@ -100,6 +101,9 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     }
 
     if (!vid || !price || !name) { skipped.push({ pid, reason: 'missing vid/price/name' }); continue; }
+    // Never source trademarked/brand products — we can't fulfill them and Google
+    // Ads disapproves them. Keeps the catalog clean at the source.
+    if (isBrandRestricted(name)) { skipped.push({ pid, reason: 'brand/trademark' }); continue; }
 
     const marketplacePrice = Number((price * (1 + markup / 100)).toFixed(2));
     const listingId = `listing_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;

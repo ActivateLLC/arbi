@@ -18,7 +18,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { getAutonomousSettings } from '../services/autonomousSettings';
 import { listCampaigns } from '../services/google-ads/campaignAutomation';
-import { checkAdvertisable } from '../services/google-ads/advertisability';
+import { checkAdvertisable, isBrandRestricted } from '../services/google-ads/advertisability';
 import { getListings, MarketplaceListing } from '../routes/marketplace';
 
 const router = Router();
@@ -56,6 +56,17 @@ router.get('/', async (_req: Request, res: Response) => {
     alerts.push({ id: 'catalog-error', severity: 'warning', title: 'Could not read the catalog', message: e?.message || 'Database read failed.' });
   }
   const advertisable = listings.filter((l) => checkAdvertisable(l).ok);
+
+  // Leftover brand/trademark listings (old demo data) that can't be advertised.
+  const restricted = listings.filter((l) => isBrandRestricted(l.productTitle));
+  if (restricted.length > 0) {
+    alerts.push({
+      id: 'restricted-products', severity: 'warning',
+      title: `${restricted.length} restricted product${restricted.length === 1 ? '' : 's'} can't be advertised`,
+      message: `Brand/trademark items (e.g. ${restricted.slice(0, 2).map((l) => l.productTitle.slice(0, 28)).join(', ')}…) can't be sourced or advertised. Remove them to keep your catalog clean.`,
+      action: { label: 'Remove them', internal: 'purgeRestricted' },
+    });
+  }
 
   if (listings.length === 0) {
     alerts.push({

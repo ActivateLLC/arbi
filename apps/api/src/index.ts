@@ -19,6 +19,7 @@ import { seedRevenueFromOrders } from './routes/revenue';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
+import legalRoutes from './routes/legal';
 import stripeWebhookRoutes from './routes/stripe-webhooks';
 
 // Initialize logger
@@ -69,6 +70,9 @@ app.get('/health', (req, res) => {
 
 // Direct checkout links (shortest path: ad → checkout)
 app.use('/', directCheckoutRoutes);
+
+// Legal / policy pages (footer links — required for Google Ads, Stripe, stores)
+app.use('/', legalRoutes);
 
 // Public product landing pages (for ad destinations)
 app.use('/', publicProductRoutes);

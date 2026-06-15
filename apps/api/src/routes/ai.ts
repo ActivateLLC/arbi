@@ -45,7 +45,7 @@ router.post('/speak', async (req: Request, res: Response) => {
   if (!text) return res.status(400).json({ error: 'text required' });
   try {
     const r = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent`,
       {
         contents: [{ parts: [{ text }] }],
         generationConfig: {
@@ -53,7 +53,7 @@ router.post('/speak', async (req: Request, res: Response) => {
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
         },
       },
-      { timeout: 30000 }
+      { timeout: 30000, headers: { 'x-goog-api-key': key } }
     );
     const part = (r.data?.candidates?.[0]?.content?.parts || []).find((p: any) => p.inlineData);
     const b64 = part?.inlineData?.data;
@@ -91,13 +91,13 @@ Rules:
 
   try {
     const r = await axios.post(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
       {
         systemInstruction: { parts: [{ text: systemPrompt }] },
         contents: [{ role: 'user', parts: [{ text: query }] }],
         generationConfig: { temperature: 0.4, maxOutputTokens: 600 },
       },
-      { timeout: 25000 }
+      { timeout: 25000, headers: { 'x-goog-api-key': key } }
     );
     const reply = r.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     res.json({ reply: reply || 'I could not generate a response just now.' });

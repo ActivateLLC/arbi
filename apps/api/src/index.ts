@@ -13,6 +13,9 @@ import morgan from 'morgan';
 
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { initializeDatabase } from './config/database';
+import { getOrders } from './routes/marketplace';
+import { seedRevenueFromOrders } from './routes/revenue';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
@@ -82,6 +85,26 @@ const server = app.listen(port, '0.0.0.0', () => {
   logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
   logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+
+  // Connect + sync the database so orders/listings PERSIST across redeploys,
+  // then rehydrate the revenue tracker from those orders so the dashboard total
+  // is durable and reconciles to logged sales. Non-fatal: if the DB is
+  // unavailable we keep running on the in-memory fallback.
+  (async () => {
+    try {
+      await initializeDatabase();
+      logger.info('✅ Database connected + models synced (orders will persist)');
+    } catch (e: any) {
+      logger.error('⚠️  Database not available — using in-memory storage (no persistence):', e?.message || e);
+    }
+    try {
+      const orders = await getOrders();
+      const { totalRevenue, tradesExecuted } = seedRevenueFromOrders(orders as any);
+      logger.info(`✅ Revenue rehydrated: $${totalRevenue.toFixed(2)} from ${tradesExecuted} order(s)`);
+    } catch (e: any) {
+      logger.error('⚠️  Revenue rehydration failed:', e?.message || e);
+    }
+  })();
 
   // 24/7 autonomous engine (no-op unless ENABLE_AUTONOMOUS=true).
   try {

@@ -273,6 +273,45 @@ export function recordTrade(params: { tradeId?: string; productTitle?: string; g
 }
 
 /**
+ * Rehydrate the in-memory revenue tracker from persisted orders on boot, so the
+ * dashboard total SURVIVES redeploys and always reconciles to logged sales.
+ * Sums actualProfit across non-refunded orders. Called once at startup, before
+ * any live trades are recorded this run, so it sets the baseline (not additive).
+ */
+export function seedRevenueFromOrders(
+  orders: Array<{ actualProfit?: number; status?: string; orderId?: string; listingId?: string; productTitle?: string; createdAt?: Date | string }>
+): { totalRevenue: number; tradesExecuted: number } {
+  let total = 0;
+  let count = 0;
+  const history: RevenueState['history'] = [];
+
+  for (const o of orders || []) {
+    if (o?.status === 'refunded') continue; // refunds are not revenue
+    const profit = Number(o?.actualProfit);
+    if (!Number.isFinite(profit) || profit <= 0) continue;
+    total += profit;
+    count += 1;
+    history.push({
+      timestamp: o.createdAt ? new Date(o.createdAt) : new Date(),
+      tradeId: o.orderId || `order_${count}`,
+      productTitle: o.productTitle || o.listingId || 'Recorded sale',
+      grossProfit: profit,
+      platformCommission: profit * PLATFORM_COMMISSION_RATE,
+      netUserProfit: profit * USER_SHARE_RATE,
+    });
+  }
+
+  revenueState.currentRevenue = parseFloat(total.toFixed(2));
+  revenueState.platformCommission = parseFloat((total * PLATFORM_COMMISSION_RATE).toFixed(2));
+  revenueState.tradesExecuted = count;
+  revenueState.avgProfitPerTrade = count > 0 ? parseFloat((total / count).toFixed(2)) : 0;
+  revenueState.history = history;
+
+  console.log(`💰 Revenue rehydrated from ${count} persisted order(s): $${revenueState.currentRevenue.toFixed(2)}`);
+  return { totalRevenue: revenueState.currentRevenue, tradesExecuted: count };
+}
+
+/**
  * POST /api/revenue/record-trade
  * Record a completed trade toward the revenue target
  */

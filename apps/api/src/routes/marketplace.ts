@@ -212,7 +212,7 @@ async function getOrder(orderId: string): Promise<BuyerOrder | null> {
   return orders.get(orderId) || null;
 }
 
-async function getOrders(): Promise<BuyerOrder[]> {
+export async function getOrders(): Promise<BuyerOrder[]> {
   if (db) {
     try {
       const results = await db.find('BuyerOrder', {

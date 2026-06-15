@@ -1430,7 +1430,9 @@ function generateSuccessPage(session: any, conversionValue?: number): string {
         .rows { display: flex; flex-direction: column; gap: 10px; text-align: left; }
         .row { display: flex; gap: 12px; align-items: flex-start; background: rgba(255,255,255,.04);
             border: 1px solid rgba(255,255,255,.07); border-radius: 12px; padding: 14px 16px; }
-        .row .ic { font-size: 20px; line-height: 1.2; }
+        .check svg { width: 40px; height: 40px; }
+        .row .ic { color: #38bdf8; flex-shrink: 0; display: flex; align-items: center; padding-top: 1px; }
+        .row .ic svg { width: 22px; height: 22px; display: block; }
         .row b { display: block; color: #fff; font-size: 13px; margin-bottom: 3px; font-weight: 600; }
         .row p { color: #94a3b8; font-size: 13px; line-height: 1.5; }
         .paid { color: #34d399; font-weight: 700; }
@@ -1445,16 +1447,25 @@ function generateSuccessPage(session: any, conversionValue?: number): string {
     <div class="brand"><div class="logo"><span>A</span></div><b>ARBI</b></div>
 
     <div class="card">
-        <div class="check">✓</div>
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
         <h1>Order Confirmed</h1>
         <p class="sub">Thank you for your purchase — your order is confirmed and will ship soon. A receipt is on its way to your inbox.</p>
 
         <div class="order">Order #${orderRef}</div>
 
         <div class="rows">
-            <div class="row"><span class="ic">📧</span><div><b>Confirmation email</b><p>Sent to ${email}</p></div></div>
-            <div class="row"><span class="ic">🚚</span><div><b>Shipping</b><p>Ships within 1–2 business days. Tracking will be emailed to you.</p></div></div>
-            <div class="row"><span class="ic">💳</span><div><b>Payment</b><p class="paid">$${amount} paid</p></div></div>
+            <div class="row">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg></span>
+                <div><b>Confirmation email</b><p>Sent to ${email}</p></div>
+            </div>
+            <div class="row">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></span>
+                <div><b>Shipping</b><p>Ships within 1–2 business days. Tracking will be emailed to you.</p></div>
+            </div>
+            <div class="row">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+                <div><b>Payment</b><p class="paid">$${amount} paid</p></div>
+            </div>
         </div>
     </div>
 

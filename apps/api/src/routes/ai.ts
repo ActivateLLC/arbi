@@ -65,6 +65,8 @@ router.post('/speak', async (req: Request, res: Response) => {
     res.status(502).json({ error: 'tts_failed' });
   }
 });
+
+router.post('/assistant', async (req: Request, res: Response) => {
   const key = geminiKey();
   const { query, context } = req.body || {};
   if (!query || typeof query !== 'string') {

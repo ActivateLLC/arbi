@@ -55,6 +55,28 @@ export function getDatabase(): DatabaseManager {
 }
 
 /**
+ * Idempotent additive column migrations for columns added to models after their
+ * tables already existed. Each is ADD COLUMN IF NOT EXISTS (no-op if present,
+ * never destructive). Failures are logged but non-fatal.
+ */
+async function runColumnMigrations(db: DatabaseManager): Promise<void> {
+  const migrations: Array<{ label: string; sql: string }> = [
+    {
+      label: 'marketplace_listings.demandScore',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "demandScore" DECIMAL DEFAULT 0;',
+    },
+  ];
+  for (const m of migrations) {
+    try {
+      await (db as any).query(m.sql);
+      console.log(`✅ Migration ok: ${m.label}`);
+    } catch (e: any) {
+      console.error(`⚠️  Migration failed (${m.label}):`, e?.message || e);
+    }
+  }
+}
+
+/**
  * Initialize database connection and sync models
  */
 export async function initializeDatabase(): Promise<DatabaseManager> {
@@ -67,6 +89,13 @@ export async function initializeDatabase(): Promise<DatabaseManager> {
     // Sync models (create tables if they don't exist)
     await db.syncModels(false); // false = don't drop existing tables
     console.log('✅ Database models synchronized');
+
+    // Lightweight idempotent migrations. syncModels(false) creates missing
+    // tables but does NOT add new columns to existing ones, so a model field
+    // added after a table already exists (e.g. demandScore) would make every
+    // SELECT fail ("column does not exist"). ADD COLUMN IF NOT EXISTS is safe
+    // on both fresh and pre-existing tables and never drops data.
+    await runColumnMigrations(db);
 
     return db;
   } catch (error: any) {

@@ -24,7 +24,17 @@ export class FacebookMarketplaceScout implements OpportunityScout {
   name = 'Facebook Marketplace Scout';
   type = 'ecommerce_arbitrage' as const;
 
-  async scan(config: ScoutConfig): Promise<Opportunity[]> {
+  async scan(_config: ScoutConfig): Promise<Opportunity[]> {
+    // DISABLED: this scout returned hardcoded MOCK listings (e.g. "KitchenAid
+    // Stand Mixer - Wedding Gift Duplicate") — fake products with no real
+    // supplier, which polluted the catalog and ads. Real discovery now comes
+    // from live sourcing (CJ trending + Amazon/Rainforest). Return [] so no fake
+    // products enter the catalog. (FB has no public API; real scraping would
+    // replace this.)
+    return [];
+  }
+
+  private async _legacyScanDisabled(config: ScoutConfig): Promise<Opportunity[]> {
     const opportunities: Opportunity[] = [];
 
     try {

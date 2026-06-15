@@ -1,6 +1,9 @@
 import { AutonomousEngine, AutonomousConfig } from '@arbi/arbitrage-engine';
 import { AdCampaignManager } from '../services/adCampaigns';
 import { saveListing, MarketplaceListing } from '../routes/marketplace';
+import { isBrandRestricted } from '../services/google-ads/advertisability';
+
+const PLACEHOLDER_URL = /(^$)|example\.(com|org|net)|localhost|placeholder/i;
 
 class AutonomousListingJob {
   private running = false;
@@ -72,6 +75,15 @@ class AutonomousListingJob {
 
       // 2. Process each opportunity
       for (const opp of opportunities) {
+        // Guard: never list brand/trademark products or ones without a real,
+        // non-placeholder supplier URL. Stops hardcoded/demo junk (KitchenAid,
+        // AirPods, example.com…) from entering the catalog or getting ads.
+        const buyUrl = opp.metadata?.buyUrl || '';
+        if (isBrandRestricted(opp.product?.title) || PLACEHOLDER_URL.test(buyUrl)) {
+          console.log(`   ⏭️  Skipping non-advertisable opportunity: ${opp.product?.title}`);
+          continue;
+        }
+
         // TODO: Check if already listed
 
         // 3. Create Listing and save to marketplace storage

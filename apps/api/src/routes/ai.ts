@@ -76,11 +76,12 @@ router.post('/assistant', async (req: Request, res: Response) => {
     return res.json({ reply: 'ARBI AI is not configured yet — set GEMINI_API_KEY on the API to enable me.' });
   }
 
+  const contextSnapshot = JSON.stringify(context != null ? context : {});
   const systemPrompt = `You are ARBI, the operator's AI co-pilot for an autonomous arbitrage/dropshipping business.
 Use ONLY the live snapshot below (pulled from the database) as the source of truth for revenue, what's
 selling, the catalog, ad campaigns, opportunities, automation state, and integrations.
 
-Live snapshot (JSON): ${JSON.stringify(context ?? {})}
+Live snapshot (JSON): ${contextSnapshot}
 
 Rules:
 - Be concise, specific, data-driven; cite real numbers from the snapshot.

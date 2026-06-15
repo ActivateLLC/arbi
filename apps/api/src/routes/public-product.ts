@@ -1382,144 +1382,91 @@ function generateProductLandingPage(listing: any): string {
  * Generate success page after payment
  */
 function generateSuccessPage(session: any, conversionValue?: number): string {
+  // Friendly short order reference — never expose the raw Stripe session id.
+  const orderRef = String(session.id || '').replace(/^cs_(live|test)_/, '').slice(0, 8).toUpperCase() || 'CONFIRMED';
+  const email = session.customer_details?.email || 'your email';
+  const amount = ((session.amount_total || 0) / 100).toFixed(2);
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Confirmed!</title>
+    <title>Order Confirmed — ARBI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
     ${googleAdsGlobalTagHtml()}
     ${googleAdsConversionEventHtml(conversionValue ?? (session.amount_total || 0) / 100, session.id)}
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(1100px 560px at 50% -8%, #15203f 0%, #0b0f22 62%);
+            color: #e2e8f0;
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            padding: 20px;
+            padding: 26px 16px 40px;
         }
-        .success-container {
-            max-width: 600px;
-            background: white;
-            border-radius: 20px;
-            padding: 60px 40px;
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        .checkmark {
-            font-size: 80px;
-            margin-bottom: 20px;
-        }
-        h1 {
-            font-size: 32px;
-            color: #1a202c;
-            margin-bottom: 16px;
-        }
-        p {
-            font-size: 18px;
-            color: #4a5568;
-            line-height: 1.6;
-            margin-bottom: 30px;
-        }
-        .order-id {
-            background: #f7fafc;
-            padding: 16px;
-            border-radius: 8px;
-            font-family: monospace;
-            margin-bottom: 30px;
-        }
-        .info-box {
-            background: #ebf8ff;
-            border-left: 4px solid #4299e1;
-            padding: 20px;
-            text-align: left;
-            margin-bottom: 20px;
-            border-radius: 4px;
-        }
-        .info-box strong {
-            display: block;
-            margin-bottom: 8px;
-            color: #2c5282;
-        }
-
-        .footer {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            padding: 16px 20px;
-            text-align: center;
-            border-top: 1px solid rgba(0, 0, 0, 0.1);
-            box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .footer-links {
-            display: flex;
-            justify-content: center;
-            flex-wrap: wrap;
-            gap: 15px;
-            margin-bottom: 10px;
-        }
-
-        .footer-links a {
-            color: #48bb78;
-            font-size: 13px;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .footer-links a:hover {
-            text-decoration: underline;
-        }
-
-        .footer p {
-            margin: 4px 0;
-            font-size: 13px;
-            color: #4a5568;
-        }
+        .brand { display: flex; align-items: center; gap: 10px; margin: 4px 0 26px; }
+        .logo { width: 34px; height: 34px; background: #00f0ff; border-radius: 7px; transform: rotate(45deg);
+            display: flex; align-items: center; justify-content: center; box-shadow: 0 0 18px rgba(0,240,255,.45); }
+        .logo span { transform: rotate(-45deg); color: #04121f; font-weight: 800; font-size: 17px; }
+        .brand b { font-size: 17px; letter-spacing: .2em; color: #fff; }
+        .card { width: 100%; max-width: 500px; background: rgba(18,24,48,.72);
+            -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,.10); border-radius: 20px; padding: 38px 26px;
+            text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+        .check { width: 74px; height: 74px; border-radius: 50%; margin: 0 auto 18px; display: flex;
+            align-items: center; justify-content: center; background: rgba(16,185,129,.15);
+            border: 1px solid rgba(16,185,129,.5); color: #34d399; font-size: 38px;
+            box-shadow: 0 0 30px rgba(16,185,129,.25); }
+        h1 { font-size: 25px; color: #fff; margin-bottom: 10px; }
+        .sub { font-size: 14px; color: #94a3b8; line-height: 1.6; margin-bottom: 22px; }
+        .order { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,240,255,.08);
+            border: 1px solid rgba(0,240,255,.25); color: #00f0ff; font-family: 'JetBrains Mono', monospace;
+            font-size: 14px; font-weight: 600; padding: 9px 16px; border-radius: 10px; margin-bottom: 22px; }
+        .rows { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+        .row { display: flex; gap: 12px; align-items: flex-start; background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.07); border-radius: 12px; padding: 14px 16px; }
+        .row .ic { font-size: 20px; line-height: 1.2; }
+        .row b { display: block; color: #fff; font-size: 13px; margin-bottom: 3px; font-weight: 600; }
+        .row p { color: #94a3b8; font-size: 13px; line-height: 1.5; }
+        .paid { color: #34d399; font-weight: 700; }
+        .footer { margin-top: 26px; text-align: center; }
+        .footer-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
+        .footer-links a { color: #64748b; font-size: 12px; text-decoration: none; }
+        .footer-links a:hover { color: #00f0ff; }
+        .footer small { color: #475569; font-size: 12px; }
     </style>
 </head>
 <body>
-    <div class="success-container">
-        <div class="checkmark">✅</div>
-        <h1>Order Confirmed!</h1>
-        <p>Thank you for your purchase. Your order has been confirmed and will be shipped soon.</p>
+    <div class="brand"><div class="logo"><span>A</span></div><b>ARBI</b></div>
 
-        <div class="order-id">
-            Order ID: ${session.id}
-        </div>
+    <div class="card">
+        <div class="check">✓</div>
+        <h1>Order Confirmed</h1>
+        <p class="sub">Thank you for your purchase — your order is confirmed and will ship soon. A receipt is on its way to your inbox.</p>
 
-        <div class="info-box">
-            <strong>📧 Confirmation Email</strong>
-            A confirmation email has been sent to ${session.customer_details?.email || 'your email'}
-        </div>
+        <div class="order">Order #${orderRef}</div>
 
-        <div class="info-box">
-            <strong>🚚 Shipping</strong>
-            Your order will be shipped within 1-2 business days. You'll receive tracking information via email.
-        </div>
-
-        <div class="info-box">
-            <strong>💳 Payment</strong>
-            Charged: $${(session.amount_total! / 100).toFixed(2)}
+        <div class="rows">
+            <div class="row"><span class="ic">📧</span><div><b>Confirmation email</b><p>Sent to ${email}</p></div></div>
+            <div class="row"><span class="ic">🚚</span><div><b>Shipping</b><p>Ships within 1–2 business days. Tracking will be emailed to you.</p></div></div>
+            <div class="row"><span class="ic">💳</span><div><b>Payment</b><p class="paid">$${amount} paid</p></div></div>
         </div>
     </div>
 
     <footer class="footer">
         <div class="footer-links">
             <a href="https://api.arbi.creai.dev/contact">Contact</a>
-            <a href="https://api.arbi.creai.dev/returns">Returns & Refunds</a>
+            <a href="https://api.arbi.creai.dev/returns">Returns &amp; Refunds</a>
             <a href="https://api.arbi.creai.dev/shipping">Shipping</a>
             <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
             <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
         </div>
-        <p>&copy; 2026 Arbi Inc. All rights reserved.</p>
+        <small>&copy; 2026 Arbi Inc. All rights reserved.</small>
     </footer>
 </body>
 </html>

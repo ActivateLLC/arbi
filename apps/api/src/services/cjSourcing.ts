@@ -9,7 +9,7 @@
  */
 
 import { cjClient, isCJConfigured } from './cjDropshipping';
-import { saveListing, MarketplaceListing } from '../routes/marketplace';
+import { saveListing, getListings, MarketplaceListing } from '../routes/marketplace';
 import { scoreExpectedValue } from '@arbi/arbitrage-engine';
 import { isBrandRestricted } from './google-ads/advertisability';
 
@@ -152,11 +152,20 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   const created: any[] = [];
   const skipped: any[] = [];
 
+  // De-dupe against the existing catalog so we never re-add a product that's
+  // already listed (CJ Trending returns the same items every cycle → this was
+  // the source of the duplicate listings + duplicate campaigns).
+  const existing = await getListings('active').catch(() => [] as MarketplaceListing[]);
+  const existingPids = new Set(existing.map((l) => String(l.opportunityId || '')));
+  const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 60);
+  const existingTitles = new Set(existing.map((l) => norm(l.productTitle)));
+
   for (const { p } of ranked) {
     if (created.length >= count) break;
 
     const pid = str(p.pid, p.id);
     if (!pid) { skipped.push({ reason: 'no pid' }); continue; }
+    if (existingPids.has(`cj_${pid}`)) { skipped.push({ pid, reason: 'already in catalog' }); continue; }
 
     let name = str(p.productNameEn, p.nameEn, p.productName);
     let image = str(p.bigImage, p.productImage, p.image);
@@ -188,6 +197,8 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     }
 
     if (!vid || !price || !name) { skipped.push({ pid, reason: 'missing vid/price/name' }); continue; }
+    // Same product under a different pid → skip (title-level de-dupe).
+    if (existingTitles.has(norm(name))) { skipped.push({ pid, reason: 'duplicate title' }); continue; }
     // Never source trademarked/brand products — we can't fulfill them and Google
     // Ads disapproves them. Keeps the catalog clean at the source.
     if (isBrandRestricted(name)) { skipped.push({ pid, reason: 'brand/trademark' }); continue; }
@@ -215,6 +226,9 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     };
 
     if (!opts.preview) await saveListing(listing);
+    // Track within this run so two trending entries for the same item don't both list.
+    existingPids.add(`cj_${pid}`);
+    existingTitles.add(norm(name));
     created.push({
       listingId, productTitle: listing.productTitle, supplierPrice: listing.supplierPrice,
       marketplacePrice, estimatedProfit: listing.estimatedProfit, cjVariantId: vid, preview: !!opts.preview,

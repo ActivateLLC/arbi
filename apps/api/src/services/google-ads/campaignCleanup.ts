@@ -19,6 +19,37 @@
 
 import { listCampaigns, setCampaignStatus, campaignProductKey, campaignProductName } from './campaignAutomation';
 import { isBrandRestricted } from './advertisability';
+import { getListings, updateListing } from '../../routes/marketplace';
+
+/**
+ * Expire duplicate active listings — keep one per normalized title (prefer the
+ * one with a real image, else the newest), expire the rest. This clears the
+ * duplicate products that pile up in the catalog (and that feed duplicate
+ * campaigns). Reversible (status 'expired', not deleted). dryRun lists only.
+ */
+export async function dedupeListings(opts: { dryRun?: boolean } = {}): Promise<{ duplicates: number; expired: number }> {
+  const dryRun = opts.dryRun ?? false;
+  const active = (await getListings('active')) as any[];
+  const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 60);
+  const byKey = new Map<string, any[]>();
+  for (const l of active) {
+    const k = norm(l.productTitle) || l.listingId;
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k)!.push(l);
+  }
+  const hasImg = (l: any) => Array.isArray(l.productImages) && l.productImages.some((i: string) => /^https?:\/\//i.test(i || ''));
+  let expired = 0, duplicates = 0;
+  for (const group of byKey.values()) {
+    if (group.length <= 1) continue;
+    // Keeper: image first, then newest (highest listedAt).
+    group.sort((a, b) => (hasImg(b) ? 1 : 0) - (hasImg(a) ? 1 : 0) || (new Date(b.listedAt).getTime() - new Date(a.listedAt).getTime()));
+    for (const dup of group.slice(1)) {
+      duplicates++;
+      if (!dryRun) { try { await updateListing(dup.listingId, { status: 'expired' as any }); expired++; } catch { /* keep going */ } }
+    }
+  }
+  return { duplicates, expired };
+}
 
 export interface CleanupPlanItem {
   campaignId: string;
@@ -32,6 +63,8 @@ export interface CleanupResult {
   toRemove: CleanupPlanItem[];
   removed: number;
   failed: number;
+  duplicateListings: number;   // duplicate catalog products found
+  expiredListings: number;     // duplicate catalog products expired
 }
 
 /** Score a campaign for "which duplicate to keep": enabled + impressions win. */
@@ -81,5 +114,8 @@ export async function cleanupCampaigns(opts: { dryRun?: boolean; customerId?: st
     }
   }
 
-  return { dryRun, totalCampaigns: ours.length, keep, toRemove, removed, failed };
+  // Also de-duplicate the catalog (the root cause of duplicate campaigns).
+  const dl = await dedupeListings({ dryRun }).catch(() => ({ duplicates: 0, expired: 0 }));
+
+  return { dryRun, totalCampaigns: ours.length, keep, toRemove, removed, failed, duplicateListings: dl.duplicates, expiredListings: dl.expired };
 }

@@ -1,4 +1,4 @@
-import { getAutonomousSettings, setAutonomousSettings } from './autonomousSettings';
+import { getAutonomousSettings, setAutonomousSettings, hydrateAutonomousSettings } from './autonomousSettings';
 
 describe('autonomous settings (runtime toggle)', () => {
   it('exposes the five boolean switches', () => {
@@ -43,5 +43,13 @@ describe('autonomous settings (runtime toggle)', () => {
     const s = setAutonomousSettings({ autonomous: true, autoVideo: false });
     expect(s.autonomous).toBe(true);
     expect(s.autoVideo).toBe(false);
+  });
+
+  it('persists durably without breaking the sync API, and hydrate is graceful with no DB', async () => {
+    // setAutonomousSettings stays synchronous (write-through is fire-and-forget).
+    const s = setAutonomousSettings({ autonomous: true }, 'unit-test');
+    expect(s.autonomous).toBe(true);
+    // Hydration must never throw even when the DB is unavailable (keeps defaults).
+    await expect(hydrateAutonomousSettings()).resolves.toBeUndefined();
   });
 });

@@ -98,6 +98,13 @@ const server = app.listen(port, '0.0.0.0', () => {
     try {
       await initializeDatabase();
       logger.info('✅ Database connected + models synced (orders will persist)');
+      // Restore the operator's last stated intent from the DB so a redeploy/crash
+      // never resets the engine to env defaults (intent is sticky until stopped).
+      try {
+        await require('./services/autonomousSettings').hydrateAutonomousSettings();
+      } catch (e: any) {
+        logger.error('⚠️  Engine-state rehydration failed (keeping env defaults):', e?.message || e);
+      }
     } catch (e: any) {
       logger.error('⚠️  Database not available — using in-memory storage (no persistence):', e?.message || e);
     }

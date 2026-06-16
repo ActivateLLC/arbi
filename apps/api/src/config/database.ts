@@ -1,6 +1,7 @@
 import { DatabaseManager } from '@arbi/data';
 import { initializeMarketplaceModels } from '../models/marketplace';
 import { initializeTenantModels } from '../models/tenant';
+import { initializeEngineModels } from '../models/engine';
 
 // Singleton database instance
 let dbInstance: DatabaseManager | null = null;
@@ -50,6 +51,8 @@ export function getDatabase(): DatabaseManager {
   initializeMarketplaceModels(dbInstance);
   // Initialize tenant (advertiser) model — multi-tenant ad accounts
   initializeTenantModels(dbInstance);
+  // Autonomous-engine state (durable intent) + exactly-once campaign mapping.
+  initializeEngineModels(dbInstance);
 
   return dbInstance;
 }
@@ -99,6 +102,40 @@ async function runColumnMigrations(db: DatabaseManager): Promise<void> {
     {
       label: 'buyer_orders.variantLabel',
       sql: 'ALTER TABLE "buyer_orders" ADD COLUMN IF NOT EXISTS "variantLabel" VARCHAR(255);',
+    },
+    // Autonomous-engine tables. syncModels creates them from the model defs on a
+    // fresh DB; these CREATE ... IF NOT EXISTS are the idempotent backstop for
+    // pre-existing DBs (sync never alters existing tables). The UNIQUE INDEX is
+    // the load-bearing line: it makes a duplicate campaign structurally impossible.
+    {
+      label: 'engine_state table',
+      sql: `CREATE TABLE IF NOT EXISTS "engine_state" (
+        "tenantId" VARCHAR(255) PRIMARY KEY,
+        "settings" JSONB NOT NULL,
+        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        "updatedBy" VARCHAR(255)
+      );`,
+    },
+    {
+      label: 'tenant_campaigns table',
+      sql: `CREATE TABLE IF NOT EXISTS "tenant_campaigns" (
+        "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        "tenantId" VARCHAR(255) NOT NULL,
+        "listingId" VARCHAR(255) NOT NULL,
+        "channel" VARCHAR(16) NOT NULL,
+        "googleCampaignId" VARCHAR(64),
+        "campaignName" TEXT,
+        "status" VARCHAR(24) NOT NULL DEFAULT 'reserved',
+        "customerId" VARCHAR(32),
+        "reservedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        "createdGoogleAt" TIMESTAMPTZ,
+        "lastError" TEXT
+      );`,
+    },
+    {
+      label: 'tenant_campaigns unique slot index',
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS "uq_tenant_campaigns_slot"
+        ON "tenant_campaigns" ("tenantId", "listingId", "channel");`,
     },
   ];
   for (const m of migrations) {

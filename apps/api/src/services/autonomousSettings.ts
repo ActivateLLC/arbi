@@ -1,13 +1,21 @@
 /**
- * Runtime autonomous-engine settings.
+ * Runtime autonomous-engine settings — now DURABLE.
  *
- * Seeded from env at boot, but mutable at runtime so the dashboard can toggle
- * autonomy on/off (and the real-spend AUTO_GO_LIVE switch) WITHOUT a redeploy.
- * Both the engine and the API read from here, so it's the single source of truth.
+ * Seeded from env at first boot, but the source of truth is the `engine_state`
+ * table (a write-through cache). The dashboard can toggle autonomy at runtime AND
+ * that intent SURVIVES redeploys/crashes — a restart rehydrates the last stated
+ * intent instead of silently reverting to env defaults. (Prime directive: the bot
+ * runs and earns until a human EXPLICITLY stops it; nothing transient resets it.)
+ *
+ * The public API stays synchronous (callers read a cache); persistence is
+ * write-through and best-effort, with an in-memory fallback when there's no DB.
  */
 
+import { getDatabase } from '../config/database';
+import { DEFAULT_TENANT_ID } from './tenantContext';
+
 export interface AutonomousSettings {
-  autonomous: boolean;   // master switch — engine acts only when true
+  autonomous: boolean;   // master switch / intent — engine acts only when true
   autoSource: boolean;   // scan retailers each cycle
   autoCreate: boolean;   // create PAUSED campaigns for new products
   autoGoLive: boolean;   // enable campaigns (REAL SPEND)
@@ -31,27 +39,76 @@ let settings: AutonomousSettings = {
   autoVideo: envFlag('AUTO_VIDEO'),
 };
 
+let db: ReturnType<typeof getDatabase> | null = null;
+try { db = getDatabase(); } catch { db = null; }
+
+/** Write-through persist of the current settings to engine_state (best-effort). */
+async function persistEngineState(updatedBy?: string): Promise<void> {
+  if (!db) return;
+  try {
+    await (db as any).query(
+      `INSERT INTO "engine_state" ("tenantId","settings","updatedAt","updatedBy")
+       VALUES (:tid, CAST(:settings AS JSONB), NOW(), :by)
+       ON CONFLICT ("tenantId") DO UPDATE SET "settings"=CAST(:settings AS JSONB), "updatedAt"=NOW(), "updatedBy"=:by;`,
+      { replacements: { tid: DEFAULT_TENANT_ID, settings: JSON.stringify(settings), by: updatedBy || 'system' } }
+    );
+  } catch (e: any) {
+    console.error('⚠️  engine_state persist failed (settings kept in memory):', e?.message || e);
+  }
+}
+
+/**
+ * Rehydrate settings from the DB at boot. If a row exists, the persisted intent
+ * wins over env (that's the whole point — no reset on redeploy). If none exists,
+ * seed the env-derived defaults so intent persists from here on. Call once after
+ * the database is initialized.
+ */
+export async function hydrateAutonomousSettings(): Promise<void> {
+  if (!db) return;
+  try {
+    const r: any = await (db as any).query(
+      `SELECT "settings" FROM "engine_state" WHERE "tenantId"=:tid LIMIT 1;`,
+      { replacements: { tid: DEFAULT_TENANT_ID } }
+    );
+    const rows = Array.isArray(r) ? r[0] : r?.rows;
+    const row = Array.isArray(rows) ? rows[0] : undefined;
+    if (row && row.settings) {
+      const persisted = typeof row.settings === 'string' ? JSON.parse(row.settings) : row.settings;
+      // Merge persisted over current so flags added in future code still get a value.
+      settings = { ...settings, ...persisted };
+      console.log(`✅ Engine intent restored from DB: autonomous=${settings.autonomous}, autoGoLive=${settings.autoGoLive}`);
+    } else {
+      await persistEngineState('env-seed');
+      console.log('🌱 Seeded engine_state from env defaults');
+    }
+  } catch (e: any) {
+    // Money-safe: on read failure we keep the (typically off) env defaults rather
+    // than inventing an "on" state.
+    console.error('⚠️  hydrateAutonomousSettings failed (keeping env defaults):', e?.message || e);
+  }
+}
+
 export function getAutonomousSettings(): AutonomousSettings {
   return { ...settings };
 }
 
-/** Apply a partial update (only boolean fields are accepted). */
-export function setAutonomousSettings(patch: Partial<AutonomousSettings>): AutonomousSettings {
+/** Apply a partial update (only boolean fields are accepted) and PERSIST it. */
+export function setAutonomousSettings(patch: Partial<AutonomousSettings>, updatedBy?: string): AutonomousSettings {
   const keys: (keyof AutonomousSettings)[] = ['autonomous', 'autoSource', 'autoCreate', 'autoGoLive', 'optimize', 'autoVideo'];
   for (const k of keys) {
     if (typeof patch[k] === 'boolean') settings[k] = patch[k] as boolean;
   }
   // Master switch cascades the no-spend build pipeline: turning Autonomous ON
-  // means "run the whole thing" — source products, create campaigns, generate
-  // UGC videos, and optimize — automatically, so the operator never has to also
-  // hunt for sub-toggles or tap YouTube/TikTok. Only autoGoLive (REAL SPEND) is
-  // left out: that stays an explicit, separately-confirmed decision. A caller can
-  // still opt a build step OUT in the same patch (e.g. {autonomous:true, autoVideo:false}).
+  // means "run the whole thing" — source, create, generate UGC videos, optimize —
+  // automatically. Only autoGoLive (REAL SPEND) is left out: explicit decision.
+  // A caller can still opt a build step OUT in the same patch.
   if (patch.autonomous === true) {
     if (patch.autoSource === undefined) settings.autoSource = true;
     if (patch.autoCreate === undefined) settings.autoCreate = true;
     if (patch.autoVideo === undefined) settings.autoVideo = true;
     if (patch.optimize === undefined) settings.optimize = true;
   }
+  // Write-through so the intent survives a redeploy/crash (fire-and-forget).
+  void persistEngineState(updatedBy);
   return getAutonomousSettings();
 }

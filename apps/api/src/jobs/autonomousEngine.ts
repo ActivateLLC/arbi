@@ -31,6 +31,12 @@ import {
 } from '../services/google-ads/campaignAutomation';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { enforceAdvertisable, cleanupCampaigns } from '../services/google-ads/campaignCleanup';
+import { reserveCampaignSlot, markCampaignCreated, releaseFailedReservation } from '../services/google-ads/campaignRegistry';
+import { DEFAULT_TENANT_ID } from '../services/tenantContext';
+
+// Exactly-once campaign creation via the DB-backed registry (reserve-before-create).
+// Kill switch: USE_CAMPAIGN_REGISTRY=false reverts to the legacy fuzzy-name dedup.
+const USE_REGISTRY = (process.env.USE_CAMPAIGN_REGISTRY || 'true').toLowerCase() !== 'false';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
 import { isAdvertisable, advertisableListings } from '../services/google-ads/advertisability';
 import { isConfigured as isVideoConfigured } from '../services/google-ads/higgsfieldVideo';
@@ -123,11 +129,35 @@ async function cycle(): Promise<void> {
       const products = activeProducts(eligible, 5, 30);
       const existing = await listCampaigns();
       const existingNames = (existing as any[]).map((c) => (c.name || '').toLowerCase());
-      const toCreate = products.filter(
+      let toCreate = products.filter(
         (p) => !existingNames.some((n) => n.includes(p.productName.toLowerCase().slice(0, 30)))
       );
+      // EXACTLY-ONCE: reserve a SEARCH slot per product BEFORE creating. Only the
+      // writer that wins the unique (tenant,listing,SEARCH) reservation creates the
+      // campaign; a concurrent cycle / second instance / retry hits the slot and
+      // skips — a duplicate is impossible, no fuzzy name-matching needed.
+      if (USE_REGISTRY) {
+        const won: typeof toCreate = [];
+        for (const p of toCreate) {
+          if ((await reserveCampaignSlot(DEFAULT_TENANT_ID, p.productId, 'SEARCH')) === 'won') won.push(p);
+        }
+        toCreate = won;
+      }
       if (toCreate.length) {
         const r = await createBulkCampaigns(toCreate, CAMPAIGN_CONFIG);
+        if (USE_REGISTRY) {
+          // Record the outcome on each reserved slot (create→mark, fail/skip→release).
+          const byName = new Map(toCreate.map((p) => [p.productName, p.productId]));
+          for (const res of r.results) {
+            const listingId = byName.get(res.product);
+            if (!listingId) continue;
+            if (res.status === 'success' && res.campaignId) {
+              await markCampaignCreated(DEFAULT_TENANT_ID, listingId, 'SEARCH', res.campaignId, `Arbi - ${res.product}`);
+            } else {
+              await releaseFailedReservation(DEFAULT_TENANT_ID, listingId, 'SEARCH', res.error || res.reason || 'not created');
+            }
+          }
+        }
         logger.info(`🤖 AUTO_CREATE: created ${r.success} PAUSED campaign(s), ${r.failed} failed`);
       }
     } catch (e: any) {
@@ -219,10 +249,25 @@ async function cycle(): Promise<void> {
         const worker = async (): Promise<void> => {
           while (idx < queue.length) {
             const listing = queue[idx++];
+            // EXACTLY-ONCE: reserve the VIDEO slot before rendering. If a concurrent
+            // cycle/instance already holds it, skip (no duplicate render, no dup
+            // campaign). The videoUrl guard above is the credit backstop.
+            if (USE_REGISTRY && (await reserveCampaignSlot(DEFAULT_TENANT_ID, listing.listingId, 'VIDEO')) === 'exists') continue;
             try {
               const r = await createVideoAdForListing(listing);
+              // Slot represents a real VIDEO campaign: mark when one was created,
+              // release otherwise (rendered-but-not-posted keeps no slot — the
+              // persisted videoUrl independently prevents a re-render).
+              if (USE_REGISTRY) {
+                if (r.videoCampaign?.status === 'created_paused' && r.videoCampaign.campaignId) {
+                  await markCampaignCreated(DEFAULT_TENANT_ID, listing.listingId, 'VIDEO', r.videoCampaign.campaignId, `Arbi Video - ${listing.productTitle}`);
+                } else {
+                  await releaseFailedReservation(DEFAULT_TENANT_ID, listing.listingId, 'VIDEO', r.videoCampaign?.error || 'no campaign');
+                }
+              }
               logger.info(`🎬 AUTO_VIDEO "${listing.productTitle}": youtube=${r.youtube?.watchUrl ? 'ok' : 'none'} campaign=${r.videoCampaign?.status}${r.videoCampaign?.error ? ` (${r.videoCampaign.error})` : ''}`);
             } catch (e: any) {
+              if (USE_REGISTRY) await releaseFailedReservation(DEFAULT_TENANT_ID, listing.listingId, 'VIDEO', e?.message || 'render failed');
               logger.error(`🎬 AUTO_VIDEO "${listing.productTitle}" failed:`, e?.message || e);
             }
           }

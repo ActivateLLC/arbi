@@ -18,46 +18,64 @@ import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../service
 import { cjClient, isCJConfigured } from '../services/cjDropshipping';
 import { extractVariants, extractImages, extractReviews, SupplierReview } from '../services/cjSourcing';
 
-/**
- * Fetch supplier (CJ) product reviews for the page, best-effort + cached on the
- * object. These are REAL supplier reviews, shown clearly attributed — not
- * fabricated. Returns [] when CJ is down or the product has none.
- */
-async function ensureReviews(listing: any): Promise<SupplierReview[]> {
-  if (Array.isArray(listing?.reviews)) return listing.reviews;
-  if (!listing?.cjProductId || !isCJConfigured()) return [];
-  try {
-    const data = await cjClient.getProductReviews(listing.cjProductId);
-    listing.reviews = extractReviews(data);
-    return listing.reviews;
-  } catch {
-    return [];
-  }
-}
+// --- CJ response cache (keyed by cjProductId) ---------------------------------
+// Product pages are ad destinations hit repeatedly; without caching, each view
+// fires up to 2 CJ calls (detail + reviews) and would rate-limit under traffic.
+// Cache the extracted results in-memory with a TTL, INCLUDING empty results
+// (negative cache) so products CJ has no data for aren't retried every hit.
+// ~1h is fine — product detail/reviews change slowly.
+const CJ_CACHE_TTL_MS = 60 * 60 * 1000;
+const detailCache = new Map<string, { at: number; variants: any[]; images: string[] }>();
+const reviewsCache = new Map<string, { at: number; reviews: SupplierReview[] }>();
+const fresh = (e?: { at: number }) => !!e && (Date.now() - e.at) < CJ_CACHE_TTL_MS;
 
 /**
  * Ensure a listing has its selectable variants (size/color) AND its full image
- * set populated. Listings sourced before these were captured won't have them
- * stored, so we fetch live from CJ (best-effort, cached on the object) — one
- * detail call fills both — so older product pages still get the size selector
- * and a swipeable gallery. Never throws.
+ * set populated — from the listing, the cache, or one live CJ detail call.
+ * Never throws.
  */
 async function ensureProductDetail(listing: any): Promise<{ vid: string; label: string; price?: number }[]> {
   const hasVariants = Array.isArray(listing?.variants) && listing.variants.length;
   const hasGallery = Array.isArray(listing?.productImages) && listing.productImages.length > 1;
   if (hasVariants && hasGallery) return listing.variants;
-  if (!listing?.cjProductId || !isCJConfigured()) return listing?.variants || [];
-  try {
-    const detail = await cjClient.getProductDetail(listing.cjProductId);
-    if (!hasVariants) listing.variants = extractVariants(detail);
-    if (!hasGallery) {
-      const imgs = extractImages(detail);
-      if (imgs.length) listing.productImages = imgs;
+  const pid = listing?.cjProductId;
+  if (!pid || !isCJConfigured()) return listing?.variants || [];
+
+  let entry = detailCache.get(pid);
+  if (!fresh(entry)) {
+    try {
+      const detail = await cjClient.getProductDetail(pid);
+      entry = { at: Date.now(), variants: extractVariants(detail), images: extractImages(detail) };
+    } catch {
+      entry = { at: Date.now(), variants: [], images: [] }; // negative cache
     }
-    return listing.variants || [];
-  } catch {
-    return listing?.variants || [];
+    detailCache.set(pid, entry);
   }
+  if (!hasVariants && entry!.variants.length) listing.variants = entry!.variants;
+  if (!hasGallery && entry!.images.length) listing.productImages = entry!.images;
+  return listing.variants || [];
+}
+
+/**
+ * Fetch supplier (CJ) product reviews — from cache or one live call. REAL
+ * supplier reviews, shown clearly attributed; [] when none / CJ down.
+ */
+async function ensureReviews(listing: any): Promise<SupplierReview[]> {
+  if (Array.isArray(listing?.reviews)) return listing.reviews;
+  const pid = listing?.cjProductId;
+  if (!pid || !isCJConfigured()) return [];
+
+  let entry = reviewsCache.get(pid);
+  if (!fresh(entry)) {
+    try {
+      entry = { at: Date.now(), reviews: extractReviews(await cjClient.getProductReviews(pid)) };
+    } catch {
+      entry = { at: Date.now(), reviews: [] }; // negative cache
+    }
+    reviewsCache.set(pid, entry);
+  }
+  listing.reviews = entry!.reviews;
+  return listing.reviews;
 }
 
 const router = Router();

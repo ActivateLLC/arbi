@@ -40,7 +40,9 @@ export async function sourceTrendingFromAmazon(opts: AmazonSourceOptions = {}) {
   const count = Math.min(Math.max(opts.count ?? 5, 1), 20);
   const markup = opts.markupPercentage ?? 100;
   const minReviews = opts.minReviews ?? 50;
-  const maxPrice = opts.maxPrice ?? 200;
+  // Cost/ticket doesn't matter — don't cap by price. High-ticket items are welcome;
+  // expected-ROI ranking (demand × margin-after-CPA) sorts them, not a price ceiling.
+  const maxPrice = opts.maxPrice ?? (Number(process.env.AMAZON_MAX_PRICE) || 1_000_000);
   const searchTerm = (opts.keyword || 'best sellers').trim();
 
   let results: any[] = [];

@@ -12,6 +12,8 @@ import { cjClient, isCJConfigured } from './cjDropshipping';
 import { saveListing, getListings, MarketplaceListing } from '../routes/marketplace';
 import { scoreExpectedValue } from '@arbi/arbitrage-engine';
 import { isBrandRestricted } from './google-ads/advertisability';
+import { getAutonomousSettings, DEFAULT_SOURCING } from './autonomousSettings';
+import { cpaAdjustedEV, viableForPaidAds, thresholdsFromConfig } from './scoring/unitEconomics';
 
 export interface CJSourceOptions {
   keyword?: string;
@@ -117,7 +119,11 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   if (!isCJConfigured()) return { success: false, error: 'CJ not configured (CJ_EMAIL + CJ_API_KEY)' };
 
   const count = Math.min(Math.max(opts.count || 5, 1), 20);
-  const markup = opts.markupPercentage ?? 100;
+  // Markup is the MARGIN dial: raising it widens profit so even cheap CJ items can
+  // clear the ad CPA. Explicit opt overrides; else the runtime sourcing config.
+  const srcCfg = getAutonomousSettings().sourcing || DEFAULT_SOURCING;
+  const markup = opts.markupPercentage ?? srcCfg.markupPercent ?? 100;
+  const thresholds = thresholdsFromConfig(srcCfg);
 
   // Over-fetch a real pool so selection is by expected value, not by whatever
   // CJ returns first (which trends cheap). Ordered by listed-count (demand), not price.
@@ -138,16 +144,24 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
       const price = num(p.sellPrice, p.nowPrice);
       const marketplacePrice = price * (1 + markup / 100);
       const marginPercent = marketplacePrice > 0 ? ((marketplacePrice - price) / marketplacePrice) * 100 : 0;
+      const profitPerUnit = marketplacePrice - price;
       const ev = scoreExpectedValue({
-        profitPerUnit: marketplacePrice - price,
+        profitPerUnit,
         marginPercent,
         monthlySalesProxy: num(p.listedNum, p.listedCount, p.listedNum),
         trending: true,
       });
-      return { p, score: ev.lucrativeScore, expectedMonthlyProfit: ev.expectedMonthlyProfit };
+      // EXPECTED-ROI rank key: demand units × profit-AFTER-CPA. This optimizes
+      // margin — a high-demand item whose margin beats the ad cost outranks a
+      // cheap trinket whose $2 profit can't survive a paid click (net clamped to 0).
+      const demandUnits = profitPerUnit > 0 ? ev.expectedMonthlyProfit / profitPerUnit : 0;
+      const roi = cpaAdjustedEV(profitPerUnit, demandUnits, thresholds.expectedCpa);
+      return { p, score: ev.lucrativeScore, roi };
     })
     .filter((x) => num(x.p.sellPrice, x.p.nowPrice) > 0)
-    .sort((a, b) => b.score - a.score);
+    // Best expected-ROI first; lucrativeScore breaks ties (and orders the tail
+    // where every item is sub-CPA, roi==0).
+    .sort((a, b) => (b.roi - a.roi) || (b.score - a.score));
 
   const created: any[] = [];
   const skipped: any[] = [];
@@ -204,6 +218,13 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     if (isBrandRestricted(name)) { skipped.push({ pid, reason: 'brand/trademark' }); continue; }
 
     const marketplacePrice = Number((price * (1 + markup / 100)).toFixed(2));
+    // Opt-in unit-economics floor (default OFF — never empties the catalog).
+    // Price/ticket is NOT a factor; only profit-vs-CPA. Uses the REAL price now
+    // that detail is fetched. When off, ranking alone steers toward best margins.
+    if (srcCfg.gateEnabled && !viableForPaidAds(marketplacePrice, marketplacePrice - price, thresholds)) {
+      skipped.push({ pid, reason: 'below unit-economics floor (profit vs CPA)' });
+      continue;
+    }
     const listingId = `listing_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const listing: MarketplaceListing = {
       listingId,

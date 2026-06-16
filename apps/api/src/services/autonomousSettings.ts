@@ -25,6 +25,15 @@ export interface GovernorConfig {
   staleHours: number;            // metrics older than this => no scale-ups
 }
 
+export interface SourcingConfig {
+  minProfitPerUnit: number;    // hard floor on profit-per-unit (only when gateEnabled)
+  minTicket: number;           // 0 = price/ticket doesn't matter (default); a floor only if you want one
+  targetCpa: number;           // estimated cost-per-acquisition the margin must beat
+  profitCpaMultiple: number;   // require profit >= targetCpa * this (e.g. 3x)
+  markupPercent: number;       // retail markup over supplier cost — the MARGIN dial
+  gateEnabled: boolean;        // hard profit floor on/off (off = rank-only, never empties catalog)
+}
+
 export interface AutonomousSettings {
   autonomous: boolean;   // master switch / intent — engine acts only when true
   autoSource: boolean;   // scan retailers each cycle
@@ -35,6 +44,7 @@ export interface AutonomousSettings {
   profitGovernor: boolean; // use the reinvestment governor (account cap + reallocation) instead of the bare optimizer
   learningRank: boolean;   // rank create/go-live/render by realized performance, not just predicted demand/virality
   governor?: GovernorConfig; // reinvestment guardrails (persisted in the same JSON blob)
+  sourcing?: SourcingConfig; // unit-economics sourcing config (margin optimizer + opt-in floor)
 }
 
 const num = (k: string, d: number) => { const v = Number(process.env[k]); return Number.isFinite(v) && v > 0 ? v : d; };
@@ -48,6 +58,24 @@ export const DEFAULT_GOVERNOR: GovernorConfig = {
   minSpendToAct: num('OPTIMIZER_MIN_SPEND', 20),
   staleHours: num('GOVERNOR_STALE_HOURS', 26),
 };
+
+// Sourcing toward EXPECTED ROI (demand × margin-after-CPA; virality + realized
+// performance layer in at the funnel ranking). Price/ticket is NOT a factor
+// (minTicket default 0). The hard profit floor is opt-in so it never empties the
+// catalog; markupPercent is the margin dial that makes cheap CJ items clear CPA.
+export const DEFAULT_SOURCING: SourcingConfig = {
+  minProfitPerUnit: num('SOURCING_MIN_PROFIT_PER_UNIT', 8),
+  minTicket: num('SOURCING_MIN_TICKET', 0),
+  targetCpa: num('SOURCING_TARGET_CPA', 8),
+  profitCpaMultiple: num('SOURCING_PROFIT_CPA_MULTIPLE', 1.5),
+  markupPercent: num('SOURCING_MARKUP_PERCENT', 100),
+  // Inline (not envFlag) — DEFAULT_SOURCING is initialized before envFlag below.
+  gateEnabled: (process.env.SOURCING_GATE_ENABLED || '').toLowerCase() === 'true',
+};
+
+/** Clamp a numeric setting to a sane range; non-finite → default. Money-safe. */
+const clampNum = (v: any, lo: number, hi: number, dflt: number) =>
+  Number.isFinite(Number(v)) ? Math.min(Math.max(Number(v), lo), hi) : dflt;
 
 const envFlag = (k: string, dflt = false) => {
   const v = (process.env[k] || '').toLowerCase();
@@ -70,6 +98,7 @@ let settings: AutonomousSettings = {
   profitGovernor: envFlag('PROFIT_GOVERNOR', true),
   learningRank: envFlag('LEARNING_RANK'),
   governor: { ...DEFAULT_GOVERNOR },
+  sourcing: { ...DEFAULT_SOURCING },
 };
 
 let db: ReturnType<typeof getDatabase> | null = null;
@@ -136,8 +165,6 @@ export function setAutonomousSettings(patch: Partial<AutonomousSettings>, update
     const merged = { ...DEFAULT_GOVERNOR, ...settings.governor, ...patch.governor };
     // VALIDATE money-affecting fields — a negative/NaN/absurd cap must never reach
     // the governor's budget math. Clamp to a sane range; ignore non-finite values.
-    const clampNum = (v: any, lo: number, hi: number, dflt: number) =>
-      Number.isFinite(Number(v)) ? Math.min(Math.max(Number(v), lo), hi) : dflt;
     merged.accountMaxDailySpend = clampNum(merged.accountMaxDailySpend, 0, 1_000_000, DEFAULT_GOVERNOR.accountMaxDailySpend);
     merged.maxDailyBudget = clampNum(merged.maxDailyBudget, 1, 100_000, DEFAULT_GOVERNOR.maxDailyBudget);
     merged.minDailyBudget = clampNum(merged.minDailyBudget, 1, merged.maxDailyBudget, DEFAULT_GOVERNOR.minDailyBudget);
@@ -145,6 +172,18 @@ export function setAutonomousSettings(patch: Partial<AutonomousSettings>, update
     merged.maxStepPct = clampNum(merged.maxStepPct, 0, 1, DEFAULT_GOVERNOR.maxStepPct);
     merged.minStepPct = clampNum(merged.minStepPct, 0, merged.maxStepPct, DEFAULT_GOVERNOR.minStepPct);
     settings.governor = merged;
+  }
+  // Sourcing config (unit-economics / margin optimizer). Clamps fail toward FEWER
+  // sourced items (profitCpaMultiple >= 1), never flooding spend.
+  if (patch.sourcing && typeof patch.sourcing === 'object') {
+    const m = { ...DEFAULT_SOURCING, ...settings.sourcing, ...patch.sourcing };
+    m.minProfitPerUnit = clampNum(m.minProfitPerUnit, 0, 1_000_000, DEFAULT_SOURCING.minProfitPerUnit);
+    m.minTicket = clampNum(m.minTicket, 0, 1_000_000, DEFAULT_SOURCING.minTicket);
+    m.targetCpa = clampNum(m.targetCpa, 0, 100_000, DEFAULT_SOURCING.targetCpa);
+    m.profitCpaMultiple = clampNum(m.profitCpaMultiple, 1, 100, DEFAULT_SOURCING.profitCpaMultiple);
+    m.markupPercent = clampNum(m.markupPercent, 0, 5_000, DEFAULT_SOURCING.markupPercent);
+    if (typeof patch.sourcing.gateEnabled === 'boolean') m.gateEnabled = patch.sourcing.gateEnabled;
+    settings.sourcing = m;
   }
   // Master switch cascades the no-spend build pipeline: turning Autonomous ON
   // means "run the whole thing" — source, create, generate UGC videos, optimize —

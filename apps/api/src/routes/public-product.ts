@@ -986,19 +986,19 @@ function generateProductLandingPage(listing: any): string {
             color: #d1d5db;
         }
 
-        /* Supplier reviews */
-        .reviews-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.08); }
+        /* Supplier reviews (on the white info card) */
+        .reviews-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid #e5e7eb; }
         .reviews-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
-        .reviews-title { font-size: 18px; font-weight: 800; color: #e8eefc; margin: 0; letter-spacing: 0.01em; }
-        .reviews-attrib { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; font-weight: 700; }
-        .review-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+        .reviews-title { font-size: 18px; font-weight: 800; color: #1a202c; margin: 0; letter-spacing: 0.01em; }
+        .reviews-attrib { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #667eea; font-weight: 700; }
+        .review-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
         .review-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
-        .review-author { font-size: 12px; font-weight: 700; color: #cbd5e1; }
-        .review-stars { font-size: 13px; color: #ffb020; letter-spacing: 1px; white-space: nowrap; }
-        .review-text { font-size: 13px; line-height: 1.55; color: #aab6cf; margin: 0; }
+        .review-author { font-size: 12px; font-weight: 700; color: #374151; }
+        .review-stars { font-size: 13px; color: #f59e0b; letter-spacing: 1px; white-space: nowrap; }
+        .review-text { font-size: 13px; line-height: 1.55; color: #4b5563; margin: 0; }
         .review-imgs { display: flex; gap: 6px; margin-top: 8px; }
-        .review-imgs img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
-        .review-date { display: block; font-size: 10px; color: #5b6680; margin-top: 8px; }
+        .review-imgs img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; }
+        .review-date { display: block; font-size: 10px; color: #9ca3af; margin-top: 8px; }
 
         @media (max-width: 768px) {
             .trust-layer {
@@ -1192,8 +1192,8 @@ function generateProductLandingPage(listing: any): string {
             ${(listing.variants && listing.variants.length) ? `
             <!-- Variant (size/color) selector — required so we fulfill the right item -->
             <div class="variant-select-wrap" style="margin: 0 0 18px;">
-                <label for="variantSelect" style="display:block; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#7c8db5; margin-bottom:8px; font-weight:700;">Select Option</label>
-                <select id="variantSelect" style="width:100%; padding:14px 16px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.14); border-radius:12px; color:#e8eefc; font-size:15px; font-weight:600; outline:none; appearance:none; -webkit-appearance:none; background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%237c8db5%22 stroke-width=%223%22><path d=%22M6 9l6 6 6-6%22/></svg>'); background-repeat:no-repeat; background-position:right 16px center;">
+                <label for="variantSelect" style="display:block; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#6b7280; margin-bottom:8px; font-weight:700;">Select Option</label>
+                <select id="variantSelect" style="width:100%; padding:14px 16px; background:#f8f9fa; border:1px solid #d1d5db; border-radius:12px; color:#1a202c; font-size:15px; font-weight:600; outline:none; appearance:none; -webkit-appearance:none; background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%223%22><path d=%22M6 9l6 6 6-6%22/></svg>'); background-repeat:no-repeat; background-position:right 16px center;">
                     <option value="" disabled selected>Choose an option…</option>
                     ${listing.variants.map((v: any) => `<option value="${v.vid}" data-label="${(v.label || '').replace(/"/g, '&quot;')}">${v.label}</option>`).join('')}
                 </select>

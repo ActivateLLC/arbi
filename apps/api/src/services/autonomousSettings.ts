@@ -14,6 +14,16 @@
 import { getDatabase } from '../config/database';
 import { DEFAULT_TENANT_ID } from './tenantContext';
 
+export interface GovernorConfig {
+  targetRoas: number;            // scale at/above this ROAS
+  minDailyBudget: number;        // per-campaign floor
+  maxDailyBudget: number;        // per-campaign ceiling
+  maxStepPct: number;            // max % budget change per cycle (ramp, not lurch)
+  accountMaxDailySpend: number;  // HARD global daily-spend cap
+  minSpendToAct: number;         // learning floor
+  staleHours: number;            // metrics older than this => no scale-ups
+}
+
 export interface AutonomousSettings {
   autonomous: boolean;   // master switch / intent — engine acts only when true
   autoSource: boolean;   // scan retailers each cycle
@@ -21,7 +31,21 @@ export interface AutonomousSettings {
   autoGoLive: boolean;   // enable campaigns (REAL SPEND)
   optimize: boolean;     // run the optimization pass
   autoVideo: boolean;    // auto-generate UGC video ads for top products (Higgsfield credits)
+  profitGovernor: boolean; // use the reinvestment governor (account cap + reallocation) instead of the bare optimizer
+  learningRank: boolean;   // rank create/go-live/render by realized performance, not just predicted demand/virality
+  governor?: GovernorConfig; // reinvestment guardrails (persisted in the same JSON blob)
 }
+
+const num = (k: string, d: number) => { const v = Number(process.env[k]); return Number.isFinite(v) && v > 0 ? v : d; };
+export const DEFAULT_GOVERNOR: GovernorConfig = {
+  targetRoas: num('OPTIMIZER_TARGET_ROAS', 3.0),
+  minDailyBudget: num('OPTIMIZER_MIN_BUDGET', 5),
+  maxDailyBudget: num('OPTIMIZER_MAX_BUDGET', 200),
+  maxStepPct: num('GOVERNOR_MAX_STEP_PCT', 0.2),
+  accountMaxDailySpend: num('GOVERNOR_ACCOUNT_MAX_DAILY', 500),
+  minSpendToAct: num('OPTIMIZER_MIN_SPEND', 20),
+  staleHours: num('GOVERNOR_STALE_HOURS', 26),
+};
 
 const envFlag = (k: string, dflt = false) => {
   const v = (process.env[k] || '').toLowerCase();
@@ -37,6 +61,9 @@ let settings: AutonomousSettings = {
   autoGoLive: envFlag('AUTO_GO_LIVE'),
   optimize: envFlag('AUTO_OPTIMIZE', true),
   autoVideo: envFlag('AUTO_VIDEO'),
+  profitGovernor: envFlag('PROFIT_GOVERNOR'),
+  learningRank: envFlag('LEARNING_RANK'),
+  governor: { ...DEFAULT_GOVERNOR },
 };
 
 let db: ReturnType<typeof getDatabase> | null = null;
@@ -94,9 +121,13 @@ export function getAutonomousSettings(): AutonomousSettings {
 
 /** Apply a partial update (only boolean fields are accepted) and PERSIST it. */
 export function setAutonomousSettings(patch: Partial<AutonomousSettings>, updatedBy?: string): AutonomousSettings {
-  const keys: (keyof AutonomousSettings)[] = ['autonomous', 'autoSource', 'autoCreate', 'autoGoLive', 'optimize', 'autoVideo'];
+  const keys: (keyof AutonomousSettings)[] = ['autonomous', 'autoSource', 'autoCreate', 'autoGoLive', 'optimize', 'autoVideo', 'profitGovernor', 'learningRank'];
   for (const k of keys) {
-    if (typeof patch[k] === 'boolean') settings[k] = patch[k] as boolean;
+    if (typeof patch[k] === 'boolean') (settings as any)[k] = patch[k] as boolean;
+  }
+  // Nested governor guardrails merge over defaults (keeps unknown/future keys).
+  if (patch.governor && typeof patch.governor === 'object') {
+    settings.governor = { ...DEFAULT_GOVERNOR, ...settings.governor, ...patch.governor };
   }
   // Master switch cascades the no-spend build pipeline: turning Autonomous ON
   // means "run the whole thing" — source, create, generate UGC videos, optimize —

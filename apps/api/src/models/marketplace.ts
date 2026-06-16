@@ -61,6 +61,16 @@ const MarketplaceListingModel: ModelDefinition = {
       allowNull: true,
       defaultValue: 0
     },
+    // Realized-performance feedback (from campaign snapshots). Null = no data yet,
+    // so ranking falls back to the predicted demand/virality priors.
+    realizedScore: {
+      type: 'decimal',
+      allowNull: true
+    },
+    realizedConfidence: {
+      type: 'decimal',
+      allowNull: true
+    },
     cjVariantId: {
       type: 'string', // CJ variant id (vid) — required for CJ auto-fulfillment
       allowNull: true

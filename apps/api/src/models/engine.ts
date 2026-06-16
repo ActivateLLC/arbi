@@ -58,11 +58,47 @@ const TenantCampaignModel: ModelDefinition = {
   },
 };
 
+/**
+ * Per-campaign performance SNAPSHOT — one row per campaign per UTC day. The
+ * memory the learning loops need: realized impressions/clicks/conversions/spend/
+ * ROAS over time, joined to the listing + creative via tenant_campaigns. The
+ * unique (tenantId, googleCampaignId, snapshotDate) grain makes a same-day
+ * re-capture an idempotent upsert.
+ */
+const CampaignPerformanceSnapshotModel: ModelDefinition = {
+  name: 'CampaignPerformanceSnapshot',
+  attributes: {
+    id: { type: 'uuid', primaryKey: true, defaultValue: 'gen_random_uuid()', allowNull: false },
+    tenantId: { type: 'string', allowNull: false },
+    googleCampaignId: { type: 'string', allowNull: false },
+    listingId: { type: 'string', allowNull: true },
+    channel: { type: 'string', allowNull: true },
+    snapshotDate: { type: 'dateonly', allowNull: false },
+    impressions: { type: 'number', allowNull: true },
+    clicks: { type: 'number', allowNull: true },
+    conversions: { type: 'number', allowNull: true },
+    spend: { type: 'number', allowNull: true },
+    conversionValue: { type: 'number', allowNull: true },
+    roas: { type: 'number', allowNull: true },
+    ctr: { type: 'number', allowNull: true },
+    capturedAt: { type: 'date', allowNull: false, defaultValue: 'NOW()' },
+  },
+  options: {
+    tableName: 'campaign_performance_snapshots',
+    timestamps: false,
+    indexes: [
+      { unique: true, fields: ['tenantId', 'googleCampaignId', 'snapshotDate'], name: 'uq_perf_snapshot_day' } as any,
+      { fields: ['tenantId', 'listingId'] },
+    ],
+  },
+};
+
 export function initializeEngineModels(db: DatabaseManager): void {
   console.log('🗄️  Defining autonomous-engine models...');
   db.defineModel(EngineStateModel);
   db.defineModel(TenantCampaignModel);
-  console.log('✅ Engine models defined (engine_state, tenant_campaigns)');
+  db.defineModel(CampaignPerformanceSnapshotModel);
+  console.log('✅ Engine models defined (engine_state, tenant_campaigns, campaign_performance_snapshots)');
 }
 
-export { EngineStateModel, TenantCampaignModel };
+export { EngineStateModel, TenantCampaignModel, CampaignPerformanceSnapshotModel };

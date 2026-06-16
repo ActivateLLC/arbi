@@ -159,6 +159,47 @@ async function runColumnMigrations(db: DatabaseManager): Promise<void> {
       label: 'tenant_campaigns.updatedAt default',
       sql: `ALTER TABLE "tenant_campaigns" ALTER COLUMN "updatedAt" SET DEFAULT NOW();`,
     },
+    // Performance snapshots — the memory the learning loops + reinvestment
+    // freshness check read. One row per campaign per UTC day (idempotent upsert).
+    {
+      label: 'campaign_performance_snapshots table',
+      sql: `CREATE TABLE IF NOT EXISTS "campaign_performance_snapshots" (
+        "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        "tenantId" VARCHAR(255) NOT NULL,
+        "googleCampaignId" VARCHAR(64) NOT NULL,
+        "listingId" VARCHAR(255),
+        "channel" VARCHAR(16),
+        "snapshotDate" DATE NOT NULL,
+        "impressions" BIGINT DEFAULT 0,
+        "clicks" BIGINT DEFAULT 0,
+        "conversions" DECIMAL DEFAULT 0,
+        "spend" DECIMAL DEFAULT 0,
+        "conversionValue" DECIMAL DEFAULT 0,
+        "roas" DECIMAL DEFAULT 0,
+        "ctr" DECIMAL DEFAULT 0,
+        "capturedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );`,
+    },
+    {
+      label: 'campaign_performance_snapshots unique day index',
+      sql: `CREATE UNIQUE INDEX IF NOT EXISTS "uq_perf_snapshot_day"
+        ON "campaign_performance_snapshots" ("tenantId","googleCampaignId","snapshotDate");`,
+    },
+    {
+      label: 'campaign_performance_snapshots listing index',
+      sql: `CREATE INDEX IF NOT EXISTS "ix_perf_snapshot_listing"
+        ON "campaign_performance_snapshots" ("tenantId","listingId");`,
+    },
+    // Realized-performance feedback persisted on the listing (nullable so absence
+    // is distinguishable from a genuine zero — ranking ignores null confidence).
+    {
+      label: 'marketplace_listings.realizedScore',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "realizedScore" DECIMAL DEFAULT NULL;',
+    },
+    {
+      label: 'marketplace_listings.realizedConfidence',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "realizedConfidence" DECIMAL DEFAULT NULL;',
+    },
   ];
   for (const m of migrations) {
     try {

@@ -30,6 +30,9 @@ import {
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
+import { runProfitGovernor } from '../services/google-ads/profitGovernor';
+import { captureSnapshots, latestSnapshotAgeHours, persistRealizedScores } from '../services/google-ads/performanceSnapshots';
+import { blendedScore } from '../services/scoring/realizedPerformance';
 import { enforceAdvertisable, cleanupCampaigns } from '../services/google-ads/campaignCleanup';
 import { reserveCampaignSlot, markCampaignCreated, releaseFailedReservation } from '../services/google-ads/campaignRegistry';
 import { DEFAULT_TENANT_ID } from '../services/tenantContext';
@@ -47,6 +50,15 @@ import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../service
 import { getAutonomousSettings } from '../services/autonomousSettings';
 
 const logger = createLogger();
+
+/** Demand score used for ranking. When learningRank is on, blend in realized
+ *  performance (confidence-weighted) so we promote what actually converts; with
+ *  no data the blend == predicted demand, so behavior is unchanged. */
+function effectiveDemand(l: any): number {
+  const demand = Number(l.demandScore) || 0;
+  if (!getAutonomousSettings().learningRank) return demand;
+  return blendedScore(demand, l.realizedScore, l.realizedConfidence);
+}
 
 const CAMPAIGN_CONFIG: CampaignConfig = {
   dailyBudget: DEFAULT_DAILY_BUDGET,
@@ -73,7 +85,7 @@ function activeProducts(listings: any[], limit: number, minMargin: number): Prod
           imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
           landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
         } as ProductAdData,
-        demandScore: Number(l.demandScore) || 0,
+        demandScore: effectiveDemand(l),
         profit,
       };
     })
@@ -184,7 +196,7 @@ async function cycle(): Promise<void> {
       for (const l of (await getListings('active')) as any[]) {
         const k = productCampaignKey(String(l.productTitle || ''));
         if (!k) continue;
-        demandByKey.set(k, Math.max(demandByKey.get(k) || 0, Number(l.demandScore) || 0));
+        demandByKey.set(k, Math.max(demandByKey.get(k) || 0, effectiveDemand(l)));
         if (isAdvertisable(l)) advertisableKeys.add(k);
       }
       const pausedArbi = campaigns
@@ -237,7 +249,7 @@ async function cycle(): Promise<void> {
       //     timed-out/failed render every cycle and burn Higgsfield credits).
       // Top demand ("most viral") first.
       const queue = eligible
-        .sort((a, b) => (Number(b.demandScore) || 0) - (Number(a.demandScore) || 0))
+        .sort((a, b) => effectiveDemand(b) - effectiveDemand(a))
         .filter((l) =>
           !l.videoUrl &&
           !videoKeys.has(productCampaignKey(String(l.productTitle || ''))) &&
@@ -303,7 +315,7 @@ async function cycle(): Promise<void> {
       for (const l of (await getListings('active')) as any[]) {
         const k = productCampaignKey(String(l.productTitle || ''));
         if (!k) continue;
-        demandByKey.set(k, Math.max(demandByKey.get(k) || 0, Number(l.demandScore) || 0));
+        demandByKey.set(k, Math.max(demandByKey.get(k) || 0, effectiveDemand(l)));
         if (!listingIdByKey.has(k)) listingIdByKey.set(k, l.listingId);
         if (isAdvertisable(l)) advertisableKeys.add(k);
       }
@@ -330,11 +342,37 @@ async function cycle(): Promise<void> {
     }
   }
 
-  // 3) Optimize live campaigns (scale winners, pause losers).
+  // 2.7) SNAPSHOT — record realized per-campaign performance (read-only, no spend)
+  //      and persist each product's blended realized score for learning-ranked
+  //      selection. Runs whenever the engine is active; safe + idempotent.
+  if (cfg.optimize || cfg.profitGovernor) {
+    try {
+      const snap = await captureSnapshots();
+      if (snap.captured) {
+        await persistRealizedScores();
+        logger.info(`📈 SNAPSHOT: captured ${snap.captured} (${snap.mapped} mapped), realized scores updated`);
+      }
+    } catch (e: any) {
+      logger.error('📈 SNAPSHOT error:', e?.message || e);
+    }
+  }
+
+  // 3) Optimize live campaigns. The reinvestment GOVERNOR (account cap + ramp +
+  //    reallocation) supersedes the bare optimizer when enabled; otherwise the
+  //    proven optimizer runs unchanged. Governor blocks scale-ups on stale data.
   if (cfg.optimize) {
     try {
-      const r = await runOptimizationPass();
-      if (r.acted) logger.info(`🤖 OPTIMIZE: ${r.acted}/${r.evaluated} actions — ${r.actions.map((a) => `${a.name}:${a.action}`).join(', ')}`);
+      if (cfg.profitGovernor) {
+        const age = await latestSnapshotAgeHours();
+        const fresh = age != null && age <= (cfg.governor?.staleHours ?? 26);
+        const r = await runProfitGovernor(undefined, { allowIncreases: fresh, governor: cfg.governor });
+        if (r.scaled || r.reduced || r.paused) {
+          logger.info(`💰 GOVERNOR: +${r.scaled} scaled, -${r.reduced} reduced, ${r.paused} paused; projected $${r.projectedSpend}/$${r.cap}/day${fresh ? '' : ' (stale: no scale-ups)'}`);
+        }
+      } else {
+        const r = await runOptimizationPass();
+        if (r.acted) logger.info(`🤖 OPTIMIZE: ${r.acted}/${r.evaluated} actions — ${r.actions.map((a) => `${a.name}:${a.action}`).join(', ')}`);
+      }
     } catch (e: any) {
       logger.error('🤖 OPTIMIZE error:', e?.message || e);
     }

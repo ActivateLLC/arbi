@@ -85,6 +85,8 @@ export interface MarketplaceListing {
   marketplacePrice: number;
   estimatedProfit: number;
   demandScore?: number; // proven-demand proxy (Amazon reviews / CJ listed count)
+  realizedScore?: number;      // 0-100 realized performance (from campaign snapshots)
+  realizedConfidence?: number; // 0-1 — how much realizedScore should override priors
   status: 'active' | 'sold' | 'expired' | 'out_of_stock';
   listedAt: Date;
   expiresAt: Date;

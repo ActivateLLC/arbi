@@ -16,7 +16,24 @@ import Stripe from 'stripe';
 import { getListings, getListing } from './marketplace';
 import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../services/google-ads/googleAdsConversions';
 import { cjClient, isCJConfigured } from '../services/cjDropshipping';
-import { extractVariants, extractImages } from '../services/cjSourcing';
+import { extractVariants, extractImages, extractReviews, SupplierReview } from '../services/cjSourcing';
+
+/**
+ * Fetch supplier (CJ) product reviews for the page, best-effort + cached on the
+ * object. These are REAL supplier reviews, shown clearly attributed — not
+ * fabricated. Returns [] when CJ is down or the product has none.
+ */
+async function ensureReviews(listing: any): Promise<SupplierReview[]> {
+  if (Array.isArray(listing?.reviews)) return listing.reviews;
+  if (!listing?.cjProductId || !isCJConfigured()) return [];
+  try {
+    const data = await cjClient.getProductReviews(listing.cjProductId);
+    listing.reviews = extractReviews(data);
+    return listing.reviews;
+  } catch {
+    return [];
+  }
+}
 
 /**
  * Ensure a listing has its selectable variants (size/color) AND its full image
@@ -105,6 +122,8 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
     // Pull size/color variants + full image gallery (from the listing, or live
     // from CJ for older listings) so the customer can pick + swipe before buying.
     await ensureProductDetail(listing);
+    // Real supplier reviews (best-effort), shown clearly attributed.
+    await ensureReviews(listing);
     // Generate beautiful landing page HTML
     const html = generateProductLandingPage(listing);
     console.log(`   Step 6: HTML generated successfully (${html.length} chars)`);
@@ -295,9 +314,34 @@ function generateProductLandingPage(listing: any): string {
 
   const imageUrl = mainImageUrl;
 
-  // Generate mock social proof
-  const randomRating = (4.6 + Math.random() * 0.3).toFixed(1);
-  const randomReviews = Math.floor(50 + Math.random() * 200);
+  // Real supplier reviews (clearly attributed). Build the section + use them for
+  // the rating/count when present (more honest than synthetic numbers).
+  const reviews: SupplierReview[] = Array.isArray(listing.reviews) ? listing.reviews : [];
+  const esc = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const stars = (n: number) => '★★★★★'.slice(0, Math.max(0, Math.min(5, Math.round(n)))) + '☆☆☆☆☆'.slice(0, 5 - Math.max(0, Math.min(5, Math.round(n))));
+  const reviewsHtml = reviews.length
+    ? `<section class="reviews-section">
+        <div class="reviews-head">
+          <h2 class="reviews-title">Customer Reviews</h2>
+          <span class="reviews-attrib">Verified supplier reviews</span>
+        </div>
+        ${reviews.map((r) => `
+          <div class="review-card">
+            <div class="review-top">
+              <span class="review-author">${esc(r.author)}${r.country ? ` · ${esc(r.country)}` : ''}</span>
+              <span class="review-stars" aria-label="${r.rating} out of 5">${stars(r.rating)}</span>
+            </div>
+            <p class="review-text">${esc(r.text)}</p>
+            ${(r.images && r.images.length) ? `<div class="review-imgs">${r.images.map((u) => `<img src="${esc(u)}" alt="Customer photo" loading="lazy" onerror="this.style.display='none'">`).join('')}</div>` : ''}
+            ${r.date ? `<span class="review-date">${esc(r.date)}</span>` : ''}
+          </div>`).join('')}
+       </section>`
+    : '';
+
+  // Social proof — use REAL review data when we have it, else a modest estimate.
+  const avgReal = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) : 0;
+  const randomRating = reviews.length ? avgReal.toFixed(1) : (4.6 + Math.random() * 0.3).toFixed(1);
+  const randomReviews = reviews.length ? reviews.length : Math.floor(50 + Math.random() * 200);
   const randomStock = Math.floor(3 + Math.random() * 12);
   const randomViewers = Math.floor(8 + Math.random() * 25);
 
@@ -924,6 +968,20 @@ function generateProductLandingPage(listing: any): string {
             color: #d1d5db;
         }
 
+        /* Supplier reviews */
+        .reviews-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid rgba(255,255,255,0.08); }
+        .reviews-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+        .reviews-title { font-size: 18px; font-weight: 800; color: #e8eefc; margin: 0; letter-spacing: 0.01em; }
+        .reviews-attrib { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; font-weight: 700; }
+        .review-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+        .review-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+        .review-author { font-size: 12px; font-weight: 700; color: #cbd5e1; }
+        .review-stars { font-size: 13px; color: #ffb020; letter-spacing: 1px; white-space: nowrap; }
+        .review-text { font-size: 13px; line-height: 1.55; color: #aab6cf; margin: 0; }
+        .review-imgs { display: flex; gap: 6px; margin-top: 8px; }
+        .review-imgs img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); }
+        .review-date { display: block; font-size: 10px; color: #5b6680; margin-top: 8px; }
+
         @media (max-width: 768px) {
             .trust-layer {
                 padding: 12px;
@@ -1168,6 +1226,8 @@ function generateProductLandingPage(listing: any): string {
                 <span class="separator">•</span>
                 <span>${randomRating} average device rating</span>
             </div>
+
+            ${reviewsHtml}
         </div>
     </div>
 

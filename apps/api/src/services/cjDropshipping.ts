@@ -155,6 +155,11 @@ export class CJDropshippingClient {
     return this.call<any>('GET', ENDPOINTS.productQuery, { pid });
   }
 
+  /** Supplier product reviews/comments (GET /product/productComments). */
+  getProductReviews(pid: string, pageSize = 20): Promise<any> {
+    return this.call<any>('GET', ENDPOINTS.productComments, { pid, pageNum: 1, pageSize });
+  }
+
   /** Cheapest available logistic for a variant to a destination. */
   async cheapestFreight(vid: string, quantity: number, countryCode: string): Promise<{ logisticName: string; price: number } | null> {
     const data = await this.call<any[]>('POST', ENDPOINTS.freightCalculate, {

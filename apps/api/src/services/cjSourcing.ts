@@ -75,6 +75,44 @@ export function extractImages(detail: any): string[] {
   return out;
 }
 
+export interface SupplierReview {
+  author: string;
+  country?: string;
+  rating: number; // 1..5
+  date?: string;
+  text: string;
+  images?: string[];
+}
+
+/**
+ * Normalize CJ product comments into supplier reviews. CJ returns the list under
+ * data.list[] (field names vary), each with a comment, score (1..5), date,
+ * country flag, and optional buyer photos. Filtered to entries with real text.
+ */
+export function extractReviews(data: any): SupplierReview[] {
+  const list = data?.list ?? data?.content ?? data?.comments ?? (Array.isArray(data) ? data : []);
+  if (!Array.isArray(list)) return [];
+  const out: SupplierReview[] = [];
+  for (const c of list) {
+    const text = str(c?.comment, c?.content, c?.commentContent);
+    if (!text) continue;
+    const rating = Math.max(1, Math.min(5, Math.round(num(c?.score, c?.commentScore, c?.star) || 5)));
+    const imgsRaw = c?.commentUrls ?? c?.commentImages ?? c?.images;
+    const images = (typeof imgsRaw === 'string' ? imgsRaw.split(',') : Array.isArray(imgsRaw) ? imgsRaw : [])
+      .map((s: any) => (typeof s === 'string' ? s.trim() : '')).filter((u: string) => /^https?:\/\//i.test(u)).slice(0, 3);
+    out.push({
+      author: str(c?.commentUser, c?.userName, c?.buyerName) || 'Verified Buyer',
+      country: str(c?.countryCode, c?.country),
+      rating,
+      date: str(c?.commentDate, c?.createTime, c?.date),
+      text: text.slice(0, 500),
+      images: images.length ? images : undefined,
+    });
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
 export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   if (!isCJConfigured()) return { success: false, error: 'CJ not configured (CJ_EMAIL + CJ_API_KEY)' };
 

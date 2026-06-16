@@ -137,6 +137,12 @@ async function runColumnMigrations(db: DatabaseManager): Promise<void> {
       sql: `CREATE UNIQUE INDEX IF NOT EXISTS "uq_tenant_campaigns_slot"
         ON "tenant_campaigns" ("tenantId", "listingId", "channel");`,
     },
+    {
+      // Sequelize's model defaultValue is ORM-layer only — ensure the column has
+      // a real DB default so raw INSERTs (the registry) always get an id.
+      label: 'tenant_campaigns.id default',
+      sql: `ALTER TABLE "tenant_campaigns" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();`,
+    },
   ];
   for (const m of migrations) {
     try {

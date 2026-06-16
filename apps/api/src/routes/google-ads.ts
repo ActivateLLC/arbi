@@ -445,8 +445,24 @@ router.get('/video-diag', async (req: Request, res: Response) => {
     const listing: any = listingId ? all.find((l: any) => l.listingId === listingId) : all.find((l: any) => Array.isArray(l.productImages) && l.productImages[0]);
     const imageUrl = listing && Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
     if (!imageUrl) return res.json({ ok: false, stage: 'listing', error: 'No active product with an image found.' });
-    const r = await submitOnly(videoModelId(), { image_url: imageUrl, prompt: 'Short vertical UGC product ad, dynamic, scroll-stopping.' });
-    res.json({ modelId: videoModelId(), testedListing: listing.productTitle, imageUrl, result: r });
+
+    // Try the documented image-to-video models in order; stop at the first the
+    // account accepts (queues). Invalid models 404 without consuming credits.
+    const candidates = [
+      videoModelId(),
+      'higgsfield-ai/dop/standard',
+      'kling-video/v2.1/pro/image-to-video',
+      'bytedance/seedance/v1/pro/image-to-video',
+    ].filter((v, i, a) => v && a.indexOf(v) === i);
+    const args = { image_url: imageUrl, prompt: 'Short vertical UGC product ad, dynamic, scroll-stopping.' };
+    const attempts: any[] = [];
+    let working: string | null = null;
+    for (const m of candidates) {
+      const r = await submitOnly(m, args);
+      attempts.push({ modelId: m, ok: r.ok, httpStatus: r.httpStatus, status: r.status, error: r.error });
+      if (r.ok) { working = m; break; }
+    }
+    res.json({ workingModelId: working, hint: working ? `Set HF_VIDEO_MODEL_ID=${working}` : 'No documented model accepted — check Higgsfield plan/credits', testedListing: listing.productTitle, attempts });
   } catch (e: any) {
     res.json({ ok: false, stage: 'exception', error: e?.message || String(e) });
   }

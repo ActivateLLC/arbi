@@ -15,7 +15,7 @@ import { runCycleNow } from '../jobs/autonomousEngine';
 import { listCampaigns, campaignProductKey, productCampaignKey } from '../services/google-ads/campaignAutomation';
 import { checkAdvertisable } from '../services/google-ads/advertisability';
 import { getListings, MarketplaceListing } from '../routes/marketplace';
-import { cleanupCampaigns } from '../services/google-ads/campaignCleanup';
+import { cleanupCampaigns, enforceAdvertisable } from '../services/google-ads/campaignCleanup';
 const router = Router();
 
 /**
@@ -27,7 +27,15 @@ async function handleCleanupCampaigns(req: Request, res: Response) {
   const dryRun = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
   try {
     const result = await cleanupCampaigns({ dryRun });
-    res.json({ success: true, ...result });
+    // Also enforce advertisability: expire seed/placeholder/no-photo listings
+    // (e.g. "Premium Espresso Machine") and pause any live campaign for them.
+    const enforced = await enforceAdvertisable({ dryRun }).catch(() => ({ expiredListings: 0, pausedCampaigns: 0 }));
+    res.json({
+      success: true,
+      ...result,
+      expiredListings: result.expiredListings + enforced.expiredListings,
+      pausedCampaigns: enforced.pausedCampaigns,
+    });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e?.message || String(e) });
   }

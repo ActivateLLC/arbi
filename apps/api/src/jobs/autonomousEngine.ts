@@ -30,6 +30,7 @@ import {
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
+import { enforceAdvertisable } from '../services/google-ads/campaignCleanup';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
 import { isAdvertisable, advertisableListings } from '../services/google-ads/advertisability';
 import { isConfigured as isVideoConfigured } from '../services/google-ads/higgsfieldVideo';
@@ -91,6 +92,20 @@ async function cycle(): Promise<void> {
     } catch (e: any) {
       logger.error('🤖 AUTO_SOURCE error:', e?.message || e);
     }
+  }
+
+  // 0.5) HYGIENE — enforce "don't advertise what you can't sell" every cycle:
+  //      expire seed/placeholder/brand listings (e.g. the leftover "Premium
+  //      Espresso Machine" with a placeholder image) and pause any live campaign
+  //      for a product that's no longer advertisable. Self-healing, so junk can
+  //      never linger in the catalog or keep spending — no manual "Clean up" tap.
+  try {
+    const h = await enforceAdvertisable();
+    if (h.expiredListings || h.pausedCampaigns) {
+      logger.info(`🧹 HYGIENE: expired ${h.expiredListings} non-advertisable listing(s), paused ${h.pausedCampaigns} campaign(s)`);
+    }
+  } catch (e: any) {
+    logger.error('🧹 HYGIENE error:', e?.message || e);
   }
 
   // 1) Create PAUSED campaigns for new high-margin products (skip ones that

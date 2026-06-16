@@ -17,9 +17,54 @@
  * not servable) and is what de-clutters the campaigns list. Supports a dry run.
  */
 
-import { listCampaigns, setCampaignStatus, campaignProductKey, campaignProductName } from './campaignAutomation';
-import { isBrandRestricted } from './advertisability';
+import { listCampaigns, setCampaignStatus, campaignProductKey, campaignProductName, productCampaignKey } from './campaignAutomation';
+import { isBrandRestricted, checkAdvertisable } from './advertisability';
 import { getListings, updateListing } from '../../routes/marketplace';
+
+/**
+ * Self-healing hygiene: enforce the "don't advertise what you can't sell" rule
+ * continuously, not just on a manual "Clean up" tap. Every autonomous cycle this:
+ *   1. EXPIRES active listings that fail checkAdvertisable — seed/demo rows with a
+ *      placeholder image (e.g. "Premium Espresso Machine"), brand/trademark items,
+ *      or anything missing a real photo/supplier ref. (status 'expired', reversible)
+ *   2. PAUSES any ENABLED "Arbi - " / "Arbi Video - " campaign whose product is no
+ *      longer in the advertisable set — so a previously-launched ad for a junk
+ *      product stops spending immediately (the inverse of the go-live gate).
+ * dryRun reports without mutating.
+ */
+export async function enforceAdvertisable(opts: { dryRun?: boolean; customerId?: string } = {}): Promise<{ expiredListings: number; pausedCampaigns: number }> {
+  const dryRun = opts.dryRun ?? false;
+  const active = (await getListings('active')) as any[];
+
+  // 1) Expire non-advertisable listings; collect the keys that REMAIN advertisable.
+  const advertisableKeys = new Set<string>();
+  let expiredListings = 0;
+  for (const l of active) {
+    if (checkAdvertisable(l).ok) {
+      const k = productCampaignKey(String(l.productTitle || ''));
+      if (k) advertisableKeys.add(k);
+    } else {
+      expiredListings++;
+      if (!dryRun) { try { await updateListing(l.listingId, { status: 'expired' as any }); } catch { /* keep going */ } }
+    }
+  }
+
+  // 2) Pause live campaigns whose product isn't advertisable anymore.
+  const campaigns = (await listCampaigns(opts.customerId)) as any[];
+  let pausedCampaigns = 0;
+  const stripVideo = (n: string) => String(n || '').replace(/^Arbi Video\s*-\s*/i, '').replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, '').trim();
+  for (const c of campaigns) {
+    const name = c.name || '';
+    if (!/^Arbi (Video )?- /i.test(name)) continue;     // only our campaigns
+    if (c.status !== 'ENABLED') continue;
+    const key = /^Arbi Video - /i.test(name) ? productCampaignKey(stripVideo(name)) : campaignProductKey(name);
+    if (key && advertisableKeys.has(key)) continue;     // still sellable — leave it serving
+    pausedCampaigns++;
+    if (!dryRun) { try { await setCampaignStatus(String(c.id), 'PAUSED', opts.customerId); } catch { /* keep going */ } }
+  }
+
+  return { expiredListings, pausedCampaigns };
+}
 
 /**
  * Expire duplicate active listings — keep one per normalized title (prefer the

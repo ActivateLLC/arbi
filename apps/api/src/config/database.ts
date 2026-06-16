@@ -200,6 +200,20 @@ async function runColumnMigrations(db: DatabaseManager): Promise<void> {
       label: 'marketplace_listings.realizedConfidence',
       sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "realizedConfidence" DECIMAL DEFAULT NULL;',
     },
+    // Organic-first: free YouTube traction is the real demand signal that must be
+    // PROVEN before any paid spend is amplified onto a product.
+    {
+      label: 'marketplace_listings.organicViews',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "organicViews" BIGINT DEFAULT 0;',
+    },
+    {
+      label: 'marketplace_listings.organicLikes',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "organicLikes" BIGINT DEFAULT 0;',
+    },
+    {
+      label: 'marketplace_listings.organicCheckedAt',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "organicCheckedAt" TIMESTAMPTZ;',
+    },
   ];
   for (const m of migrations) {
     try {

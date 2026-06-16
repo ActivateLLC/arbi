@@ -43,6 +43,7 @@ export interface AutonomousSettings {
   autoVideo: boolean;    // auto-generate UGC video ads for top products (Higgsfield credits)
   profitGovernor: boolean; // use the reinvestment governor (account cap + reallocation) instead of the bare optimizer
   learningRank: boolean;   // rank create/go-live/render by realized performance, not just predicted demand/virality
+  organicFirst: boolean;   // post UGC as PUBLIC YouTube Shorts (free reach); gate paid go-live on proven organic traction
   governor?: GovernorConfig; // reinvestment guardrails (persisted in the same JSON blob)
   sourcing?: SourcingConfig; // unit-economics sourcing config (margin optimizer + opt-in floor)
 }
@@ -97,6 +98,7 @@ let settings: AutonomousSettings = {
   // is the hidden emergency brake that reverts to the bare optimizer.
   profitGovernor: envFlag('PROFIT_GOVERNOR', true),
   learningRank: envFlag('LEARNING_RANK'),
+  organicFirst: envFlag('ORGANIC_FIRST'),
   governor: { ...DEFAULT_GOVERNOR },
   sourcing: { ...DEFAULT_SOURCING },
 };
@@ -156,7 +158,7 @@ export function getAutonomousSettings(): AutonomousSettings {
 
 /** Apply a partial update (only boolean fields are accepted) and PERSIST it. */
 export function setAutonomousSettings(patch: Partial<AutonomousSettings>, updatedBy?: string): AutonomousSettings {
-  const keys: (keyof AutonomousSettings)[] = ['autonomous', 'autoSource', 'autoCreate', 'autoGoLive', 'optimize', 'autoVideo', 'profitGovernor', 'learningRank'];
+  const keys: (keyof AutonomousSettings)[] = ['autonomous', 'autoSource', 'autoCreate', 'autoGoLive', 'optimize', 'autoVideo', 'profitGovernor', 'learningRank', 'organicFirst'];
   for (const k of keys) {
     if (typeof patch[k] === 'boolean') (settings as any)[k] = patch[k] as boolean;
   }

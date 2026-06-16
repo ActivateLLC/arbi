@@ -20,6 +20,7 @@ import { createVideoCampaign, CampaignConfig, DEFAULT_DAILY_BUDGET } from './cam
 import { scoreVariations } from '../ai/viralityScorer';
 import { cjClient, isCJConfigured } from '../cjDropshipping';
 import { extractReviews } from '../cjSourcing';
+import { getAutonomousSettings } from '../autonomousSettings';
 import { startJob, updateJob, failJob } from './videoJobs';
 
 export interface VideoAdResult {
@@ -110,12 +111,18 @@ export async function createVideoAdForListing(listing: any, opts?: { model?: any
       return { listingId: listing.listingId, sourceVideoUrl: video.videoUrl, virality, posted: false, videoCampaign };
     }
 
+    // ORGANIC-FIRST: post as a PUBLIC YouTube Short for free reach (the discovery
+    // engine). Otherwise unlisted (a paid ad asset only). Public posts get #Shorts
+    // so YouTube treats the vertical clip as a Short.
+    const organicFirst = getAutonomousSettings().organicFirst;
+    const title = (bestHook || product.productName).slice(0, organicFirst ? 90 : 95);
     // Host on YouTube — NON-FATAL. If it fails, the raw render is still reviewable.
     try {
       youtube = await uploadVideoToYouTube({
         videoUrl: video.videoUrl,
-        title: (bestHook || product.productName).slice(0, 95),
-        description: bestHook || video.brief.hooks[0],
+        title: organicFirst ? `${title} #Shorts` : title,
+        description: `${bestHook || video.brief.hooks[0]}${organicFirst ? '\n\n#Shorts #fyp' : ''}`,
+        privacyStatus: organicFirst ? 'public' : 'unlisted',
       });
       try {
         await updateListing(listing.listingId, {

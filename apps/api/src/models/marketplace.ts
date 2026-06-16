@@ -71,6 +71,22 @@ const MarketplaceListingModel: ModelDefinition = {
       type: 'decimal',
       allowNull: true
     },
+    // Organic YouTube traction (free-exposure demand signal; proves a product
+    // before paid spend amplifies it).
+    organicViews: {
+      type: 'decimal',
+      allowNull: true,
+      defaultValue: 0
+    },
+    organicLikes: {
+      type: 'decimal',
+      allowNull: true,
+      defaultValue: 0
+    },
+    organicCheckedAt: {
+      type: 'date',
+      allowNull: true
+    },
     cjVariantId: {
       type: 'string', // CJ variant id (vid) — required for CJ auto-fulfillment
       allowNull: true

@@ -34,6 +34,7 @@ import { runProfitGovernor } from '../services/google-ads/profitGovernor';
 import { captureSnapshots, latestSnapshotAgeHours, persistRealizedScores } from '../services/google-ads/performanceSnapshots';
 import { refreshObservedCpa, getCachedObservedCpa } from '../services/scoring/observedCpa';
 import { expectedRoiScore, bestVirality } from '../services/scoring/expectedRoi';
+import { refreshOrganicStats, ORGANIC_PROOF_VIEWS } from '../services/google-ads/organicTraction';
 import { enforceAdvertisable, cleanupCampaigns } from '../services/google-ads/campaignCleanup';
 import { reserveCampaignSlot, markCampaignCreated, releaseFailedReservation } from '../services/google-ads/campaignRegistry';
 import { DEFAULT_TENANT_ID } from '../services/tenantContext';
@@ -57,7 +58,9 @@ const logger = createLogger();
  *  exploration bonus for the unproven). With it OFF (default), plain demandScore —
  *  byte-identical to the original behavior. */
 function effectiveDemand(l: any): number {
-  const demand = Number(l.demandScore) || 0;
+  // Organic YouTube views are a REAL demand signal — prefer them over CJ's
+  // seller-count proxy whenever a product's Short has accrued views.
+  const demand = Number(l.organicViews) > 0 ? Number(l.organicViews) : (Number(l.demandScore) || 0);
   if (!getAutonomousSettings().learningRank) return demand;
   return expectedRoiScore({
     demandScore: demand,
@@ -208,11 +211,13 @@ async function cycle(): Promise<void> {
       // advertisableKeys gates go-live to properly-sourced, in-stock products only.
       const demandByKey = new Map<string, number>();
       const advertisableKeys = new Set<string>();
+      const organicProvenKeys = new Set<string>(); // products whose Short cleared the proof bar
       for (const l of (await getListings('active')) as any[]) {
         const k = productCampaignKey(String(l.productTitle || ''));
         if (!k) continue;
         demandByKey.set(k, Math.max(demandByKey.get(k) || 0, effectiveDemand(l)));
         if (isAdvertisable(l)) advertisableKeys.add(k);
+        if ((Number(l.organicViews) || 0) >= ORGANIC_PROOF_VIEWS) organicProvenKeys.add(k);
       }
       const pausedArbi = campaigns
         .filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''))
@@ -225,6 +230,9 @@ async function cycle(): Promise<void> {
         if (!key || liveKeys.has(key) || seen.has(key)) continue; // one per product
         // Don't take live a product that isn't advertisable (OOS / no real supplier).
         if (!advertisableKeys.has(key)) { logger.info(`🤖 AUTO_GO_LIVE: skip ${c.name} — not advertisable (sourcing/stock)`); continue; }
+        // ORGANIC-FIRST: only amplify with PAID once the product proved itself on
+        // free organic reach. Until then, no spend — discovery stays free.
+        if (cfg.organicFirst && !organicProvenKeys.has(key)) { logger.info(`🤖 AUTO_GO_LIVE: hold ${c.name} — awaiting organic proof (<${ORGANIC_PROOF_VIEWS} views)`); continue; }
         seen.add(key);
         await setCampaignStatus(c.id, 'ENABLED');
         enabled++;
@@ -326,6 +334,7 @@ async function cycle(): Promise<void> {
       );
       const demandByKey = new Map<string, number>();
       const advertisableKeys = new Set<string>();
+      const organicProvenKeys = new Set<string>();
       const listingIdByKey = new Map<string, string>();
       for (const l of (await getListings('active')) as any[]) {
         const k = productCampaignKey(String(l.productTitle || ''));
@@ -333,6 +342,7 @@ async function cycle(): Promise<void> {
         demandByKey.set(k, Math.max(demandByKey.get(k) || 0, effectiveDemand(l)));
         if (!listingIdByKey.has(k)) listingIdByKey.set(k, l.listingId);
         if (isAdvertisable(l)) advertisableKeys.add(k);
+        if ((Number(l.organicViews) || 0) >= ORGANIC_PROOF_VIEWS) organicProvenKeys.add(k);
       }
       const pausedVideo = campaigns
         .filter((c) => c.status === 'PAUSED' && /^Arbi Video - /i.test(c.name || ''))
@@ -344,6 +354,7 @@ async function cycle(): Promise<void> {
         const key = videoKey(c.name);
         if (!key || liveVideoKeys.has(key) || seen.has(key)) continue;
         if (!advertisableKeys.has(key)) { logger.info(`🎬 AUTO_VIDEO_GO_LIVE: skip ${c.name} — not advertisable`); continue; }
+        if (cfg.organicFirst && !organicProvenKeys.has(key)) { logger.info(`🎬 AUTO_VIDEO_GO_LIVE: hold ${c.name} — awaiting organic proof (<${ORGANIC_PROOF_VIEWS} views)`); continue; }
         seen.add(key);
         await setCampaignStatus(c.id, 'ENABLED');
         const lid = listingIdByKey.get(key);
@@ -370,6 +381,12 @@ async function cycle(): Promise<void> {
       // Recompute the real CPA so the sourcing margin floor self-tunes next cycle.
       const cpa = await refreshObservedCpa();
       if (cpa.source === 'observed') logger.info(`📈 OBSERVED CPA: $${cpa.cpa} (${cpa.conversions} conv, conf ${cpa.confidence.toFixed(2)})`);
+      // ORGANIC-FIRST: refresh free YouTube traction (the demand signal that gates
+      // paid amplification). Only when organic-first is on.
+      if (cfg.organicFirst) {
+        const ot = await refreshOrganicStats();
+        if (ot.updated) logger.info(`▶️  ORGANIC: refreshed views for ${ot.updated}/${ot.checked} posted video(s)`);
+      }
     } catch (e: any) {
       logger.error('📈 SNAPSHOT error:', e?.message || e);
     }

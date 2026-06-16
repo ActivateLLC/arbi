@@ -110,38 +110,41 @@ async function cycle(): Promise<void> {
     if (h.expiredListings || h.pausedCampaigns) {
       logger.info(`🧹 HYGIENE: expired ${h.expiredListings} non-advertisable listing(s), paused ${h.pausedCampaigns} campaign(s)`);
     }
-    // Also REMOVE brand/trademark + duplicate campaigns (e.g. the leftover
-    // "Arbi - Apple AirPods Pro 2" and the many duplicate "Infinity Love …")
-    // so the account self-cleans instead of waiting for a manual "Clean up".
-    const cc = await cleanupCampaigns({ dryRun: false });
-    if (cc.removed) logger.info(`🧹 HYGIENE: removed ${cc.removed} brand/duplicate campaign(s); de-duped ${cc.expiredListings} listing(s)`);
+    // Per-cycle duplicate cleanup is RETIRED when the registry is on: duplicates
+    // can't form (DB-enforced exactly-once) and a one-time backfill already cleared
+    // legacy dupes. We only run it as a fallback when the kill switch is off.
+    if (!USE_REGISTRY) {
+      const cc = await cleanupCampaigns({ dryRun: false });
+      if (cc.removed) logger.info(`🧹 HYGIENE(legacy): removed ${cc.removed} brand/duplicate campaign(s); de-duped ${cc.expiredListings} listing(s)`);
+    }
   } catch (e: any) {
     logger.error('🧹 HYGIENE error:', e?.message || e);
   }
 
-  // 1) Create PAUSED campaigns for new high-margin products (skip ones that
-  //    already have a campaign, so we don't duplicate every cycle).
+  // 1) Create PAUSED campaigns for new high-margin products. Exactly-once is
+  //    guaranteed by the registry reservation (the DB unique slot), so there is
+  //    no fuzzy name-matching to maintain.
   if (cfg.autoCreate) {
     try {
       // Gate: only advertise properly-sourced, in-stock products (real supplier
       // ref + image + active). Blocks placeholder/hardcoded rows from the funnel.
       const eligible = advertisableListings(await getListings('active'));
       const products = activeProducts(eligible, 5, 30);
-      const existing = await listCampaigns();
-      const existingNames = (existing as any[]).map((c) => (c.name || '').toLowerCase());
-      let toCreate = products.filter(
-        (p) => !existingNames.some((n) => n.includes(p.productName.toLowerCase().slice(0, 30)))
-      );
-      // EXACTLY-ONCE: reserve a SEARCH slot per product BEFORE creating. Only the
-      // writer that wins the unique (tenant,listing,SEARCH) reservation creates the
-      // campaign; a concurrent cycle / second instance / retry hits the slot and
-      // skips — a duplicate is impossible, no fuzzy name-matching needed.
+      let toCreate = products;
       if (USE_REGISTRY) {
+        // Reserve a SEARCH slot per product BEFORE creating — the authoritative,
+        // race-proof exactly-once gate. Only the writer that wins the unique
+        // (tenant,listing,SEARCH) reservation creates; everything else skips.
         const won: typeof toCreate = [];
         for (const p of toCreate) {
           if ((await reserveCampaignSlot(DEFAULT_TENANT_ID, p.productId, 'SEARCH')) === 'won') won.push(p);
         }
         toCreate = won;
+      } else {
+        // Legacy fuzzy name-dedup — fallback only when the registry kill switch is off.
+        const existing = await listCampaigns();
+        const existingNames = (existing as any[]).map((c) => (c.name || '').toLowerCase());
+        toCreate = products.filter((p) => !existingNames.some((n) => n.includes(p.productName.toLowerCase().slice(0, 30))));
       }
       if (toCreate.length) {
         const r = await createBulkCampaigns(toCreate, CAMPAIGN_CONFIG);

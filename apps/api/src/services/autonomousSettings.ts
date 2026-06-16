@@ -41,5 +41,17 @@ export function setAutonomousSettings(patch: Partial<AutonomousSettings>): Auton
   for (const k of keys) {
     if (typeof patch[k] === 'boolean') settings[k] = patch[k] as boolean;
   }
+  // Master switch cascades the no-spend build pipeline: turning Autonomous ON
+  // means "run the whole thing" — source products, create campaigns, generate
+  // UGC videos, and optimize — automatically, so the operator never has to also
+  // hunt for sub-toggles or tap YouTube/TikTok. Only autoGoLive (REAL SPEND) is
+  // left out: that stays an explicit, separately-confirmed decision. A caller can
+  // still opt a build step OUT in the same patch (e.g. {autonomous:true, autoVideo:false}).
+  if (patch.autonomous === true) {
+    if (patch.autoSource === undefined) settings.autoSource = true;
+    if (patch.autoCreate === undefined) settings.autoCreate = true;
+    if (patch.autoVideo === undefined) settings.autoVideo = true;
+    if (patch.optimize === undefined) settings.optimize = true;
+  }
   return getAutonomousSettings();
 }

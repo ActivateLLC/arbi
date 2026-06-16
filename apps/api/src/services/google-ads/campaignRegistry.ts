@@ -51,10 +51,11 @@ export async function reserveCampaignSlot(
   if (db) {
     try {
       // INSERT ... ON CONFLICT DO NOTHING is atomic against the unique index.
-      // We supply id via gen_random_uuid() (built-in, PG13+) because Sequelize's
-      // model defaultValue is an ORM-layer default and does NOT apply to raw SQL.
-      const sql = `INSERT INTO "tenant_campaigns" ("id","tenantId","listingId","channel","status","customerId")
-        VALUES (gen_random_uuid(), :tenantId, :listingId, :channel, 'reserved', :customerId)
+      // We supply id + reservedAt explicitly because Sequelize model defaultValues
+      // are ORM-layer only and do NOT apply to raw SQL (createdAt/updatedAt get DB
+      // defaults via migration).
+      const sql = `INSERT INTO "tenant_campaigns" ("id","tenantId","listingId","channel","status","customerId","reservedAt")
+        VALUES (gen_random_uuid(), :tenantId, :listingId, :channel, 'reserved', :customerId, NOW())
         ON CONFLICT ("tenantId","listingId","channel") DO NOTHING
         RETURNING "id";`;
       const res: any = await (db as any).query(sql, {

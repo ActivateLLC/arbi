@@ -143,6 +143,22 @@ async function runColumnMigrations(db: DatabaseManager): Promise<void> {
       label: 'tenant_campaigns.id default',
       sql: `ALTER TABLE "tenant_campaigns" ALTER COLUMN "id" SET DEFAULT gen_random_uuid();`,
     },
+    // Same ORM-only-default issue for the timestamp columns: give them real DB
+    // defaults so raw INSERTs don't violate NOT NULL. createdAt/updatedAt exist
+    // because the model uses Sequelize timestamps; if a column is absent the
+    // ALTER is a harmless no-op (caught + logged, non-fatal).
+    {
+      label: 'tenant_campaigns.reservedAt default',
+      sql: `ALTER TABLE "tenant_campaigns" ALTER COLUMN "reservedAt" SET DEFAULT NOW();`,
+    },
+    {
+      label: 'tenant_campaigns.createdAt default',
+      sql: `ALTER TABLE "tenant_campaigns" ALTER COLUMN "createdAt" SET DEFAULT NOW();`,
+    },
+    {
+      label: 'tenant_campaigns.updatedAt default',
+      sql: `ALTER TABLE "tenant_campaigns" ALTER COLUMN "updatedAt" SET DEFAULT NOW();`,
+    },
   ];
   for (const m of migrations) {
     try {

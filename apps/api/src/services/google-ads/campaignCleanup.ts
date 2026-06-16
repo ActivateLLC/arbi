@@ -87,9 +87,12 @@ export async function backfillCampaignRegistry(opts: { customerId?: string; dryR
   // Brand/trademark campaigns are removed regardless (they can never serve).
   for (const c of ours) if (isBrandRestricted(campaignProductName(c.name))) toRemove.add(String(c.id));
 
-  // SANITY CAP: refuse to remove an implausible share (guards a parsing bug).
-  if (toRemove.size > Math.max(3, Math.floor(ours.length * 0.6))) {
-    console.error(`🚨 backfill abort: would remove ${toRemove.size}/${ours.length} campaigns — refusing (sanity cap).`);
+  // SANITY GUARD: the real bug signal is "remove a lot but identified NO keepers"
+  // (mapped === 0) — that means the matching failed. A high removal RATIO is fine
+  // when keepers were found (a genuinely cluttered account can be mostly dupes;
+  // we always keep one per product/channel). Only block a near-total wipe.
+  if ((mapped === 0 && toRemove.size > 0) || toRemove.size > Math.floor(ours.length * 0.95)) {
+    console.error(`🚨 backfill abort: would remove ${toRemove.size}/${ours.length} (mapped ${mapped}) — refusing (sanity guard).`);
     return { mapped, removed: 0, skipped };
   }
   let removed = 0;

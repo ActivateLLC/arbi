@@ -14,6 +14,7 @@ import { scoreExpectedValue } from '@arbi/arbitrage-engine';
 import { isBrandRestricted } from './google-ads/advertisability';
 import { getAutonomousSettings, DEFAULT_SOURCING } from './autonomousSettings';
 import { cpaAdjustedEV, viableForPaidAds, thresholdsFromConfig } from './scoring/unitEconomics';
+import { getCachedObservedCpa } from './scoring/observedCpa';
 
 export interface CJSourceOptions {
   keyword?: string;
@@ -123,7 +124,9 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   // clear the ad CPA. Explicit opt overrides; else the runtime sourcing config.
   const srcCfg = getAutonomousSettings().sourcing || DEFAULT_SOURCING;
   const markup = opts.markupPercentage ?? srcCfg.markupPercent ?? 100;
-  const thresholds = thresholdsFromConfig(srcCfg);
+  // Use the self-tuned observed CPA (falls back to the config estimate) so the
+  // margin floor + ROI ranking reflect what ads actually cost.
+  const thresholds = thresholdsFromConfig(srcCfg, getCachedObservedCpa());
 
   // Over-fetch a real pool so selection is by expected value, not by whatever
   // CJ returns first (which trends cheap). Ordered by listed-count (demand), not price.

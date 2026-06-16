@@ -33,6 +33,7 @@ import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { runProfitGovernor } from '../services/google-ads/profitGovernor';
 import { captureSnapshots, latestSnapshotAgeHours, persistRealizedScores } from '../services/google-ads/performanceSnapshots';
 import { blendedScore } from '../services/scoring/realizedPerformance';
+import { refreshObservedCpa } from '../services/scoring/observedCpa';
 import { enforceAdvertisable, cleanupCampaigns } from '../services/google-ads/campaignCleanup';
 import { reserveCampaignSlot, markCampaignCreated, releaseFailedReservation } from '../services/google-ads/campaignRegistry';
 import { DEFAULT_TENANT_ID } from '../services/tenantContext';
@@ -359,6 +360,9 @@ async function cycle(): Promise<void> {
         await persistRealizedScores();
         logger.info(`📈 SNAPSHOT: captured ${snap.captured} (${snap.mapped} mapped), realized scores updated`);
       }
+      // Recompute the real CPA so the sourcing margin floor self-tunes next cycle.
+      const cpa = await refreshObservedCpa();
+      if (cpa.source === 'observed') logger.info(`📈 OBSERVED CPA: $${cpa.cpa} (${cpa.conversions} conv, conf ${cpa.confidence.toFixed(2)})`);
     } catch (e: any) {
       logger.error('📈 SNAPSHOT error:', e?.message || e);
     }

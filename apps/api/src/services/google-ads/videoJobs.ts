@@ -80,6 +80,12 @@ export function getJob(listingId: string): VideoJob | undefined {
   return jobs.get(listingId);
 }
 
+/** Forget a job so the product is eligible to render again (used by "regenerate"
+ *  and to retry a transient failure without waiting for the TTL prune). */
+export function clearJob(listingId: string): void {
+  jobs.delete(listingId);
+}
+
 /** All known jobs, newest activity first — powers the dashboard lifecycle list. */
 export function listJobs(): VideoJob[] {
   prune();

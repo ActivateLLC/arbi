@@ -74,7 +74,11 @@ const MarketplaceListingModel: ModelDefinition = {
       allowNull: true
     },
     videoUrl: {
-      type: 'text', // generated UGC video (YouTube watch URL)
+      type: 'text', // primary/latest generated UGC video (YouTube watch URL or raw render)
+      allowNull: true
+    },
+    videoAssets: {
+      type: 'json', // history of generated videos [{ url, youtubeUrl?, model, format, durationSec?, prompt?, createdAt }]
       allowNull: true
     },
     status: {

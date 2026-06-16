@@ -70,7 +70,18 @@ export interface MarketplaceListing {
   // Selectable variants (e.g. size / color). When a product has more than one,
   // the customer must choose at checkout so we fulfill the right supplier variant.
   variants?: { vid: string; label: string; price?: number }[];
-  videoUrl?: string; // generated UGC video (YouTube watch URL) — reviewable in the catalog
+  videoUrl?: string; // primary/latest generated UGC video — reviewable in the catalog
+  // Persisted history of generated video ASSETS (proof + downloadable), newest first.
+  videoAssets?: {
+    url: string;            // raw rendered video (downloadable .mp4)
+    youtubeUrl?: string;    // hosted YouTube watch URL, when posted
+    model?: string;         // Higgsfield model id used
+    format?: string;        // ad format (try-on/unboxing/demo/review/ugc)
+    durationSec?: number;
+    viralityScore?: number; // 0-100 predicted virality of the winning creative
+    posted?: boolean;       // auto-posted to YouTube (passed the virality gate)
+    createdAt: string;      // ISO timestamp
+  }[];
   marketplacePrice: number;
   estimatedProfit: number;
   demandScore?: number; // proven-demand proxy (Amazon reviews / CJ listed count)

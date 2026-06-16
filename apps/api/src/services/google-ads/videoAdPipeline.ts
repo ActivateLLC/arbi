@@ -14,6 +14,7 @@ import { listingToProductAd } from './productAdMapper';
 import { updateListing } from '../../routes/marketplace';
 import { buildHooks } from './adCreative';
 import { generateProductVideo, isConfigured as isVideoConfigured } from './higgsfieldVideo';
+import { videoModelId } from './higgsfieldRest';
 import { uploadVideoToYouTube } from './youtubeUpload';
 import { createVideoCampaign, CampaignConfig, DEFAULT_DAILY_BUDGET } from './campaignAutomation';
 import { scoreVariations } from '../ai/viralityScorer';
@@ -25,9 +26,15 @@ export interface VideoAdResult {
   listingId: string;
   sourceVideoUrl?: string;
   youtube?: { videoId: string; watchUrl: string; privacyStatus: string };
-  virality?: { bestIndex: number; source: string; scores: any[] };
+  virality?: { bestIndex: number; source: string; scores: any[]; score: number };
+  posted?: boolean; // auto-posted to YouTube (passed the virality gate)
   videoCampaign?: { status: 'created_paused' | 'failed'; campaignId?: string; error?: string };
 }
+
+/** Minimum predicted-virality score (0-100) to AUTO-POST a video to YouTube +
+ *  create an ad campaign. Below this we still render + store the asset (so it's
+ *  reviewable/downloadable) but don't publish it. Override via VIRALITY_MIN. */
+const VIRALITY_MIN = Math.max(0, Math.min(100, Number(process.env.VIRALITY_MIN) || 60));
 
 /** Run the full video-ad pipeline for a listing. Throws only on hard failures
  * (not configured, no image, render/upload failure); campaign creation is soft. */
@@ -42,15 +49,20 @@ export async function createVideoAdForListing(listing: any, opts?: { model?: any
   startJob(listing.listingId, listing.productTitle || product.productName);
 
   try {
-    // 1) Best hook (virality-scored).
+    // 1) Best hook (virality-scored). We KEEP the winning hook's score and use it
+    //    below to gate auto-posting — render everything, publish only winners.
     updateJob(listing.listingId, { stage: 'scripting' });
     let bestHook: string | undefined;
     let virality: VideoAdResult['virality'];
+    let viralityScore = 60;        // neutral default
+    let viralitySource: 'ai' | 'fallback' = 'fallback';
     try {
       const hooks = buildHooks(product).slice(0, 5);
       const scored = await scoreVariations(hooks.map((h) => ({ hook: h })));
       bestHook = hooks[scored.bestIndex];
-      virality = { bestIndex: scored.bestIndex, source: scored.source, scores: scored.scores };
+      viralityScore = scored.scores[scored.bestIndex]?.score ?? 60;
+      viralitySource = scored.source;
+      virality = { bestIndex: scored.bestIndex, source: scored.source, scores: scored.scores, score: viralityScore };
     } catch { /* fall back to default brief hook */ }
 
     // 2) Real CJ review for the social-proof beat.
@@ -68,34 +80,57 @@ export async function createVideoAdForListing(listing: any, opts?: { model?: any
     updateJob(listing.listingId, { stage: 'rendering' });
     const video = await generateProductVideo(product, imageUrl, { model: opts?.model, reviewQuote });
 
-    // PERSIST THE RAW RENDER IMMEDIATELY — this is the bare-minimum success: a
-    // reviewable UGC video. We save it BEFORE YouTube/campaign so a failure in
-    // those later (auth/scope/quota) can never throw away a video that already
-    // rendered. "Video ready / review" must appear the moment the render lands.
-    try { await updateListing(listing.listingId, { videoUrl: video.videoUrl } as any); } catch { /* non-fatal */ }
+    // PERSIST THE RAW RENDER IMMEDIATELY as a downloadable ASSET (proof) — before
+    // YouTube/campaign, so a later failure can never throw away a rendered video.
+    const asset = {
+      url: video.videoUrl,
+      model: videoModelId(),
+      format: video.format,
+      durationSec: Number(process.env.HF_VIDEO_DURATION) || 10,
+      viralityScore,
+      posted: false,
+      createdAt: new Date().toISOString(),
+    };
+    const priorAssets: any[] = Array.isArray(listing.videoAssets) ? listing.videoAssets : [];
+    const videoAssets = [asset, ...priorAssets].slice(0, 25);
+    try { await updateListing(listing.listingId, { videoUrl: video.videoUrl, videoAssets } as any); } catch { /* non-fatal */ }
     updateJob(listing.listingId, { stage: 'uploading', format: video.format, videoUrl: video.videoUrl });
 
-    // 3b) Host on YouTube — NON-FATAL. If it fails, the raw render is still the
-    //     reviewable video; we just can't create a YouTube ad campaign for it.
+    // 3b) VIRALITY GATE — auto-post to YouTube ONLY when the winning creative
+    //     scores high enough (or when AI scoring is unavailable, so we never block
+    //     on a missing scorer). Below the bar, the render stays a reviewable asset
+    //     but isn't published. THIS is the "post viral videos" rule, now plugged in.
+    const shouldPost = viralitySource === 'fallback' || viralityScore >= VIRALITY_MIN;
     let youtube: VideoAdResult['youtube'];
+    let videoCampaign: VideoAdResult['videoCampaign'];
+
+    if (!shouldPost) {
+      updateJob(listing.listingId, { stage: 'ready' }); // rendered + stored, intentionally not posted
+      videoCampaign = { status: 'failed', error: `Virality ${viralityScore} < ${VIRALITY_MIN} — rendered + saved, not auto-posted.` };
+      return { listingId: listing.listingId, sourceVideoUrl: video.videoUrl, virality, posted: false, videoCampaign };
+    }
+
+    // Host on YouTube — NON-FATAL. If it fails, the raw render is still reviewable.
     try {
       youtube = await uploadVideoToYouTube({
         videoUrl: video.videoUrl,
         title: (bestHook || product.productName).slice(0, 95),
         description: bestHook || video.brief.hooks[0],
       });
-      // Prefer the YouTube watch URL for review once hosted.
-      try { await updateListing(listing.listingId, { videoUrl: youtube.watchUrl } as any); } catch { /* non-fatal */ }
+      try {
+        await updateListing(listing.listingId, {
+          videoUrl: youtube.watchUrl,
+          videoAssets: [{ ...asset, youtubeUrl: youtube.watchUrl, posted: true }, ...priorAssets].slice(0, 25),
+        } as any);
+      } catch { /* non-fatal */ }
       updateJob(listing.listingId, { videoUrl: youtube.watchUrl });
     } catch (e: any) {
-      // Keep the raw render as the reviewable video; surface why YouTube failed.
-      youtube = undefined;
+      youtube = undefined; // keep raw render as the reviewable asset
     }
 
-    // 4) PAUSED video campaign — needs a YouTube video id, so skip cleanly if the
-    //    upload failed. Go-live happens in the autonomous sequence. Non-fatal.
+    // 4) PAUSED video campaign — needs a YouTube video id; skip cleanly if upload
+    //    failed. Go-live happens in the autonomous sequence. Non-fatal.
     updateJob(listing.listingId, { stage: 'launching' });
-    let videoCampaign: VideoAdResult['videoCampaign'];
     if (youtube?.videoId) {
       try {
         const cfg: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, geoTargeting: ['US'], maxCPC: 1.5 };
@@ -104,14 +139,14 @@ export async function createVideoAdForListing(listing: any, opts?: { model?: any
         updateJob(listing.listingId, { stage: 'ready', campaignId: created.campaignId });
       } catch (e: any) {
         videoCampaign = { status: 'failed', error: e?.message || String(e) };
-        updateJob(listing.listingId, { stage: 'ready' }); // creative is rendered + hosted
+        updateJob(listing.listingId, { stage: 'ready' });
       }
     } else {
       videoCampaign = { status: 'failed', error: 'YouTube upload failed — video rendered and reviewable, but no YouTube id for an ad campaign.' };
-      updateJob(listing.listingId, { stage: 'ready' }); // raw render is reviewable
+      updateJob(listing.listingId, { stage: 'ready' });
     }
 
-    return { listingId: listing.listingId, sourceVideoUrl: video.videoUrl, youtube, virality, videoCampaign };
+    return { listingId: listing.listingId, sourceVideoUrl: video.videoUrl, youtube, virality, posted: !!youtube?.videoId, videoCampaign };
   } catch (e: any) {
     failJob(listing.listingId, e?.message || String(e));
     throw e;

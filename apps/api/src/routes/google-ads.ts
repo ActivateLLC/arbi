@@ -17,12 +17,12 @@ import {
   ProductAdData,
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
-import { getListings, getListing } from './marketplace';
+import { getListings, getListing, updateListing } from './marketplace';
 import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
 import { submitOnly, videoModelId, fetchRenderResult } from '../services/google-ads/higgsfieldRest';
-import { listJobs as listVideoJobs, stageProgress } from '../services/google-ads/videoJobs';
+import { listJobs as listVideoJobs, stageProgress, clearJob as clearVideoJob } from '../services/google-ads/videoJobs';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
@@ -440,6 +440,61 @@ router.post('/youtube/upload-from-listing', async (req: Request, res: Response) 
 router.get('/video-jobs', (_req: Request, res: Response) => {
   const jobs = listVideoJobs().map((j) => ({ ...j, progress: stageProgress(j.stage) }));
   res.json({ success: true, jobs, active: jobs.filter((j) => !['live', 'ready', 'failed'].includes(j.stage)).length });
+});
+
+/**
+ * GET /api/google-ads/video-assets — every generated video ASSET across the
+ * catalog (proof + downloadable links), newest first. Powers the UI gallery.
+ */
+router.get('/video-assets', async (_req: Request, res: Response) => {
+  try {
+    const listings = (await getListings('active')) as any[];
+    const assets: any[] = [];
+    for (const l of listings) {
+      const list = Array.isArray(l.videoAssets) ? l.videoAssets : (l.videoUrl ? [{ url: l.videoUrl, createdAt: l.listedAt, posted: /youtube/.test(l.videoUrl) }] : []);
+      for (const a of list) assets.push({ listingId: l.listingId, productTitle: l.productTitle, ...a });
+    }
+    assets.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    res.json({ success: true, count: assets.length, assets });
+  } catch (e: any) {
+    res.json({ success: false, error: e?.message || String(e), assets: [] });
+  }
+});
+
+/**
+ * POST /api/google-ads/regenerate-video — re-render with the current (improved)
+ * vision-informed pipeline. Body: { listingId } regenerates ONE now (background);
+ * { all: true } clears saved videos so the engine re-renders them over cycles
+ * (credit-safe, bounded concurrency — never fires a flood at once).
+ */
+router.post('/regenerate-video', async (req: Request, res: Response) => {
+  try {
+    if (!isVideoConfigured()) return res.json({ success: false, error: 'Higgsfield not configured.' });
+    const { listingId, all } = req.body || {};
+
+    if (all === true) {
+      const listings = (await getListings('active')) as any[];
+      const withVideo = listings.filter((l) => l.videoUrl || (Array.isArray(l.videoAssets) && l.videoAssets.length));
+      for (const l of withVideo) {
+        clearVideoJob(l.listingId);
+        try { await updateListing(l.listingId, { videoUrl: undefined } as any); } catch { /* keep going */ }
+      }
+      return res.json({ success: true, cleared: withVideo.length, note: 'Cleared saved videos; the engine will re-render them with the new pipeline over the next cycles (credit-safe).' });
+    }
+
+    if (!listingId) return res.json({ success: false, error: 'Pass { listingId } or { all: true }.' });
+    const listing: any = await getListing(listingId);
+    if (!listing) return res.json({ success: false, error: 'Listing not found.' });
+    clearVideoJob(listingId);
+    try { await updateListing(listingId, { videoUrl: undefined } as any); } catch { /* non-fatal */ }
+    // Re-render in the BACKGROUND (1-3 min) so the request returns immediately;
+    // the lifecycle UI shows progress and the asset persists when done.
+    void createVideoAdForListing({ ...listing, videoUrl: undefined })
+      .catch((e) => console.error('regenerate-video failed:', e?.message || e));
+    res.status(202).json({ success: true, listingId, status: 'regenerating', note: 'Re-rendering with the vision-informed pipeline — watch the card lifecycle.' });
+  } catch (e: any) {
+    res.json({ success: false, error: e?.message || String(e) });
+  }
 });
 
 /**

@@ -40,6 +40,11 @@ const BRAND_DENYLIST: RegExp[] = [
   /\bdisney\b/i, /\bpok[eé]mon\b/i, /\bmarvel\b/i, /\bstar wars\b/i,
   /\byeti\b/i, /\blululemon\b/i, /\bstanley\b/i,
   /\byamaha\b/i, /\bcasio\b/i, /\broland\b/i, /\bfender\b/i, /\bgibson\b/i, /\bkorg\b/i, // instruments
+  /\bbreville\b/i, /\birobot\b/i, /\broomba\b/i, /\bcanon\b/i, /\bnikon\b/i,             // appliances/cameras
+  /\bmeta quest\b/i, /\boculus\b/i, /\bkindle\b/i, /\blogitech\b/i, /\banker\b/i,        // devices
+  /\bring (video )?doorbell\b/i, /\bgalaxy buds\b/i, /\bmacbook\b/i, /\bipad\b/i, /\biphone\b/i,
+  // Internal test/QA junk that was seeded into the catalog.
+  /^test\s*-/i, /google ads (integration|token verification)/i, /token verification/i,
 ];
 
 const RESOLVER_OR_PLACEHOLDER = /\/(api\/)?product-image\/|example\.(com|org|net)|placeholder|via\.placeholder|dummyimage/i;

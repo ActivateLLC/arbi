@@ -21,6 +21,7 @@ import { getListings, getListing } from './marketplace';
 import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
+import { submitOnly, videoModelId } from '../services/google-ads/higgsfieldRest';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
@@ -427,6 +428,27 @@ router.post('/youtube/upload-from-listing', async (req: Request, res: Response) 
   } catch (error: any) {
     console.error('youtube/upload-from-listing failed:', error?.response?.data || error?.message || error);
     res.json({ success: false, error: error?.message || String(error) });
+  }
+});
+
+/**
+ * GET /api/google-ads/video-diag — fast, browser-clickable diagnostic. Submits a
+ * Higgsfield render request (no waiting) and returns the immediate response/error
+ * so we can tell in seconds whether the model/auth/credits work vs. the render
+ * itself. Pass ?listingId=... or it uses the first active product with an image.
+ */
+router.get('/video-diag', async (req: Request, res: Response) => {
+  try {
+    if (!isVideoConfigured()) return res.json({ ok: false, stage: 'config', error: 'Higgsfield not configured (HF_API_KEY/HF_API_SECRET).' });
+    const listingId = String(req.query.listingId || '');
+    const all = await getListings('active');
+    const listing: any = listingId ? all.find((l: any) => l.listingId === listingId) : all.find((l: any) => Array.isArray(l.productImages) && l.productImages[0]);
+    const imageUrl = listing && Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) return res.json({ ok: false, stage: 'listing', error: 'No active product with an image found.' });
+    const r = await submitOnly(videoModelId(), { image_url: imageUrl, prompt: 'Short vertical UGC product ad, dynamic, scroll-stopping.' });
+    res.json({ modelId: videoModelId(), testedListing: listing.productTitle, imageUrl, result: r });
+  } catch (e: any) {
+    res.json({ ok: false, stage: 'exception', error: e?.message || String(e) });
   }
 });
 

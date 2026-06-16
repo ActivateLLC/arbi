@@ -53,6 +53,25 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * Submit a generation to the documented REST API and wait for the result.
  * Polls status_url every `intervalMs` up to `timeoutMs` (video can take minutes).
  */
+/**
+ * Submit-only (no polling) — for fast diagnostics. Returns the immediate API
+ * response (queued + request_id) or throws with the exact upstream error, so we
+ * can tell in seconds whether auth/model/credits are the problem vs. the render.
+ */
+export async function submitOnly(modelId: string, args: Record<string, any>): Promise<any> {
+  const auth = authHeader();
+  if (!auth) throw new Error('Higgsfield not configured (HF_API_KEY/HF_API_SECRET).');
+  try {
+    const r = await axios.post(`${BASE}/${modelId}`, args, {
+      headers: { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json' },
+      timeout: 25_000,
+    });
+    return { ok: true, modelId, status: r.data?.status, request_id: r.data?.request_id, data: r.data };
+  } catch (e: any) {
+    return { ok: false, modelId, httpStatus: e?.response?.status, error: e?.response?.data || e?.message || String(e) };
+  }
+}
+
 export async function submitAndWait(
   modelId: string,
   args: Record<string, any>,

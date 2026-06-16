@@ -26,9 +26,16 @@ function authHeader(): string {
   return id && secret ? `Key ${id}:${secret}` : '';
 }
 
-/** The documented model_id to call for product video (set once confirmed). */
+/**
+ * The documented model_id for product image-to-video. Defaults to Higgsfield's
+ * native DoP Standard (cinematic camera motion, matches our motion prompt).
+ * Override via HF_VIDEO_MODEL_ID to switch models, e.g.:
+ *   higgsfield-ai/dop/standard            (default, Higgsfield DoP)
+ *   kling-video/v2.1/pro/image-to-video   (Kling 2.1 Pro)
+ *   bytedance/seedance/v1/pro/image-to-video (Seedance 1.0 Pro — product/identity)
+ */
 export function videoModelId(): string {
-  return (process.env.HF_VIDEO_MODEL_ID || '').trim();
+  return (process.env.HF_VIDEO_MODEL_ID || 'higgsfield-ai/dop/standard').trim();
 }
 
 export interface RestResult {

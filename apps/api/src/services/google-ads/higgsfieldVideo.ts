@@ -113,33 +113,29 @@ export async function generateProductVideo(
   // Preferred: the DOCUMENTED REST API (official path) when a model_id is set.
   // Falls back to the (working) npm-client path otherwise, so enabling REST is
   // a single env var (HF_VIDEO_MODEL_ID) and never breaks the live feature.
+  // Documented REST contract (all image-to-video models): flat image_url + prompt.
   const modelId = videoModelId();
-  if (modelId) {
-    const rest = await submitAndWait(modelId, {
-      prompt,
-      aspect_ratio: '9:16',
-      input_images: [{ type: 'image_url', image_url: imageUrl }],
-      enhance_prompt: true,
-    });
+  try {
+    const rest = await submitAndWait(modelId, { image_url: imageUrl, prompt });
     if (!rest.videoUrl) throw new Error(`Higgsfield REST returned no video (status=${rest.status}).`);
     return { videoUrl: rest.videoUrl, status: rest.status, prompt, format, brief };
+  } catch (restErr: any) {
+    // Resilience: if the official REST call fails, fall back to the npm client.
+    console.warn('Higgsfield REST failed, trying npm client:', restErr?.message || restErr);
+    const client = getClient();
+    const resp = await client.subscribe('/v1/image2video/dop', {
+      input: {
+        model: opts?.model || 'dop-turbo',
+        prompt,
+        input_images: [{ type: 'image_url', image_url: imageUrl }],
+        enhance_prompt: true,
+      },
+      withPolling: true,
+    });
+    const videoUrl: string | undefined = resp?.video?.url;
+    if (resp?.status !== 'completed' || !videoUrl) {
+      throw new Error(`Higgsfield video generation status="${resp?.status}"${videoUrl ? '' : ' (no video url returned)'}`);
+    }
+    return { videoUrl, status: resp.status, prompt, format, brief };
   }
-
-  const client = getClient();
-  const resp = await client.subscribe('/v1/image2video/dop', {
-    input: {
-      model: opts?.model || 'dop-turbo',
-      prompt,
-      input_images: [{ type: 'image_url', image_url: imageUrl }],
-      enhance_prompt: true,
-    },
-    withPolling: true,
-  });
-
-  // V2Response: { status: 'completed'|'failed'|'nsfw'|..., video?: { url } }
-  const videoUrl: string | undefined = resp?.video?.url;
-  if (resp?.status !== 'completed' || !videoUrl) {
-    throw new Error(`Higgsfield video generation status="${resp?.status}"${videoUrl ? '' : ' (no video url returned)'}`);
-  }
-  return { videoUrl, status: resp.status, prompt, format, brief };
 }

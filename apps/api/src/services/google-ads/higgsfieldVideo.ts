@@ -13,6 +13,7 @@
 
 import { ProductAdData } from './campaignAutomation';
 import { buildCreativeBrief, CreativeBrief } from './adCreative';
+import { submitAndWait, videoModelId } from './higgsfieldRest';
 
 function credentials(): string {
   const combined = (process.env.HF_CREDENTIALS || '').trim();
@@ -108,6 +109,21 @@ export async function generateProductVideo(
   // (try-on for apparel, unboxing for gadgets, demo for tools, review for jewelry).
   const format = pickAdFormat(product.productName, product.category);
   const prompt = buildMotionPrompt(brief, format);
+
+  // Preferred: the DOCUMENTED REST API (official path) when a model_id is set.
+  // Falls back to the (working) npm-client path otherwise, so enabling REST is
+  // a single env var (HF_VIDEO_MODEL_ID) and never breaks the live feature.
+  const modelId = videoModelId();
+  if (modelId) {
+    const rest = await submitAndWait(modelId, {
+      prompt,
+      aspect_ratio: '9:16',
+      input_images: [{ type: 'image_url', image_url: imageUrl }],
+      enhance_prompt: true,
+    });
+    if (!rest.videoUrl) throw new Error(`Higgsfield REST returned no video (status=${rest.status}).`);
+    return { videoUrl: rest.videoUrl, status: rest.status, prompt, format, brief };
+  }
 
   const client = getClient();
   const resp = await client.subscribe('/v1/image2video/dop', {

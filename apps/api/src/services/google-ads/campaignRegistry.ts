@@ -50,18 +50,23 @@ export async function reserveCampaignSlot(
 ): Promise<ReserveResult> {
   if (db) {
     try {
-      // INSERT ... ON CONFLICT DO NOTHING is atomic against the unique index.
-      // We supply id + reservedAt explicitly because Sequelize model defaultValues
-      // are ORM-layer only and do NOT apply to raw SQL (createdAt/updatedAt get DB
-      // defaults via migration).
-      const sql = `INSERT INTO "tenant_campaigns" ("id","tenantId","listingId","channel","status","customerId","reservedAt")
-        VALUES (gen_random_uuid(), :tenantId, :listingId, :channel, 'reserved', :customerId, NOW())
-        ON CONFLICT ("tenantId","listingId","channel") DO NOTHING
+      // Atomic claim against the unique slot index. ON CONFLICT DO UPDATE re-claims
+      // ONLY a previously-FAILED, never-created slot (so a retry works) — it never
+      // touches a 'reserved' (in-flight) or 'created' row, so the row is returned
+      // (→ 'won') only when we legitimately own it. A created/in-flight slot yields
+      // no returned row (→ 'exists'). This is fully atomic — no delete window where
+      // a slow/late Google response could let a duplicate slip in (review H2).
+      // id + timestamps supplied explicitly (Sequelize defaultValues are ORM-only).
+      const sql = `INSERT INTO "tenant_campaigns"
+          ("id","tenantId","listingId","channel","status","customerId","reservedAt","createdAt","updatedAt")
+        VALUES (gen_random_uuid(), :tenantId, :listingId, :channel, 'reserved', :customerId, NOW(), NOW(), NOW())
+        ON CONFLICT ("tenantId","listingId","channel") DO UPDATE
+          SET "status"='reserved', "reservedAt"=NOW(), "lastError"=NULL, "updatedAt"=NOW()
+          WHERE "tenant_campaigns"."googleCampaignId" IS NULL AND "tenant_campaigns"."status"='failed'
         RETURNING "id";`;
       const res: any = await (db as any).query(sql, {
         replacements: { tenantId, listingId, channel, customerId: opts.customerId || null },
       });
-      // Sequelize raw INSERT...RETURNING shape: [rows, meta] or { rowCount }.
       const rows = Array.isArray(res) ? res[0] : res?.rows;
       const won = Array.isArray(rows) ? rows.length > 0 : (res?.rowCount ?? 0) > 0;
       return won ? 'won' : 'exists';
@@ -103,17 +108,14 @@ export async function releaseFailedReservation(
 ): Promise<void> {
   if (db) {
     try {
+      // Mark the slot 'failed' (NEVER delete) — only when it was never created.
+      // The next reserveCampaignSlot re-claims a 'failed' row atomically via its
+      // ON CONFLICT DO UPDATE, so a retry works without ever opening a window where
+      // a late/slow Google response could let a duplicate slip in (review H2).
       await (db as any).query(
-        `UPDATE "tenant_campaigns" SET "status"='failed', "lastError"=:err
+        `UPDATE "tenant_campaigns" SET "status"='failed', "lastError"=:err, "updatedAt"=NOW()
          WHERE "tenantId"=:tenantId AND "listingId"=:listingId AND "channel"=:channel AND "googleCampaignId" IS NULL;`,
         { replacements: { err: String(error).slice(0, 500), tenantId, listingId, channel } }
-      );
-      // Allow a retry: a failed, never-created reservation is deleted so the next
-      // cycle can re-reserve cleanly (still exactly-once — only one row at a time).
-      await (db as any).query(
-        `DELETE FROM "tenant_campaigns"
-         WHERE "tenantId"=:tenantId AND "listingId"=:listingId AND "channel"=:channel AND "googleCampaignId" IS NULL AND "status"='failed';`,
-        { replacements: { tenantId, listingId, channel } }
       );
       return;
     } catch (e: any) { console.error('⚠️  releaseFailedReservation DB error:', e?.message || e); }

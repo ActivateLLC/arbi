@@ -161,15 +161,22 @@ async function cycle(): Promise<void> {
       if (toCreate.length) {
         const r = await createBulkCampaigns(toCreate, CAMPAIGN_CONFIG);
         if (USE_REGISTRY) {
-          // Record the outcome on each reserved slot (create→mark, fail/skip→release).
-          const byName = new Map(toCreate.map((p) => [p.productName, p.productId]));
+          // Mark the slots that actually produced a campaign…
+          const marked = new Set<string>();
           for (const res of r.results) {
-            const listingId = byName.get(res.product);
-            if (!listingId) continue;
-            if (res.status === 'success' && res.campaignId) {
-              await markCampaignCreated(DEFAULT_TENANT_ID, listingId, 'SEARCH', res.campaignId, `Arbi - ${res.product}`);
-            } else {
-              await releaseFailedReservation(DEFAULT_TENANT_ID, listingId, 'SEARCH', res.error || res.reason || 'not created');
+            const p = toCreate.find((x) => x.productName === res.product);
+            if (p && res.status === 'success' && res.campaignId) {
+              await markCampaignCreated(DEFAULT_TENANT_ID, p.productId, 'SEARCH', res.campaignId, `Arbi - ${res.product}`);
+              marked.add(p.productId);
+            }
+          }
+          // …and RELEASE every reserved slot that did NOT produce a campaign —
+          // failed, image-skipped, OR silently dropped by createBulkCampaigns'
+          // inner dedup (which yields no result row). Without this, a reserved slot
+          // could be orphaned and lock that product out of ads forever (review H1).
+          for (const p of toCreate) {
+            if (!marked.has(p.productId)) {
+              await releaseFailedReservation(DEFAULT_TENANT_ID, p.productId, 'SEARCH', 'no campaign created this cycle');
             }
           }
         }

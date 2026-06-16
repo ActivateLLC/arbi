@@ -133,7 +133,18 @@ export function setAutonomousSettings(patch: Partial<AutonomousSettings>, update
   }
   // Nested governor guardrails merge over defaults (keeps unknown/future keys).
   if (patch.governor && typeof patch.governor === 'object') {
-    settings.governor = { ...DEFAULT_GOVERNOR, ...settings.governor, ...patch.governor };
+    const merged = { ...DEFAULT_GOVERNOR, ...settings.governor, ...patch.governor };
+    // VALIDATE money-affecting fields — a negative/NaN/absurd cap must never reach
+    // the governor's budget math. Clamp to a sane range; ignore non-finite values.
+    const clampNum = (v: any, lo: number, hi: number, dflt: number) =>
+      Number.isFinite(Number(v)) ? Math.min(Math.max(Number(v), lo), hi) : dflt;
+    merged.accountMaxDailySpend = clampNum(merged.accountMaxDailySpend, 0, 1_000_000, DEFAULT_GOVERNOR.accountMaxDailySpend);
+    merged.maxDailyBudget = clampNum(merged.maxDailyBudget, 1, 100_000, DEFAULT_GOVERNOR.maxDailyBudget);
+    merged.minDailyBudget = clampNum(merged.minDailyBudget, 1, merged.maxDailyBudget, DEFAULT_GOVERNOR.minDailyBudget);
+    merged.targetRoas = clampNum(merged.targetRoas, 0.1, 100, DEFAULT_GOVERNOR.targetRoas);
+    merged.maxStepPct = clampNum(merged.maxStepPct, 0, 1, DEFAULT_GOVERNOR.maxStepPct);
+    merged.minStepPct = clampNum(merged.minStepPct, 0, merged.maxStepPct, DEFAULT_GOVERNOR.minStepPct);
+    settings.governor = merged;
   }
   // Master switch cascades the no-spend build pipeline: turning Autonomous ON
   // means "run the whole thing" — source, create, generate UGC videos, optimize —

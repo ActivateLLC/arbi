@@ -44,6 +44,19 @@ function toOptConfig(g: GovernorConfig): OptimizationConfig {
  * the ramp clamp and the account cap. No I/O.
  */
 export function planBudgets(campaigns: any[], g: GovernorConfig = DEFAULT_GOVERNOR, opts: { allowIncreases?: boolean } = {}): GovernorPlan {
+  // Normalize over defaults so a partial/raw governor config from any caller can
+  // never produce NaN budgets (review M2). Coerce each numeric field.
+  g = {
+    ...DEFAULT_GOVERNOR,
+    ...g,
+    targetRoas: Number(g?.targetRoas) || DEFAULT_GOVERNOR.targetRoas,
+    minDailyBudget: Number(g?.minDailyBudget) || DEFAULT_GOVERNOR.minDailyBudget,
+    maxDailyBudget: Number(g?.maxDailyBudget) || DEFAULT_GOVERNOR.maxDailyBudget,
+    maxStepPct: Number.isFinite(g?.maxStepPct) ? g.maxStepPct : DEFAULT_GOVERNOR.maxStepPct,
+    minStepPct: Number.isFinite(g?.minStepPct) ? g.minStepPct : DEFAULT_GOVERNOR.minStepPct,
+    accountMaxDailySpend: Number(g?.accountMaxDailySpend) || DEFAULT_GOVERNOR.accountMaxDailySpend,
+    minSpendToAct: Number(g?.minSpendToAct) || DEFAULT_GOVERNOR.minSpendToAct,
+  };
   const allowIncreases = opts.allowIncreases !== false; // default true; false on stale data
   const cfg = toOptConfig(g);
   const items: GovernorPlanItem[] = [];

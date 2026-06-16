@@ -8,6 +8,7 @@ import { ApiError } from '../middleware/errorHandler';
 import {
   createAutomatedCampaign,
   createBulkCampaigns,
+  createVideoCampaign,
   getCampaignMetrics,
   setCampaignStatus,
   listCampaigns,
@@ -17,9 +18,10 @@ import {
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { getListings, getListing } from './marketplace';
-import { buildCreativeBrief } from '../services/google-ads/adCreative';
+import { buildCreativeBrief, buildHooks } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 import { uploadVideoToYouTube } from '../services/google-ads/youtubeUpload';
+import { scoreVariations } from '../services/ai/viralityScorer';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
@@ -418,13 +420,38 @@ router.post('/youtube/upload-from-listing', async (req: Request, res: Response, 
     if (!imageUrl) throw new ApiError(409, 'Listing has no product image to animate');
 
     const product = listingToProduct(listing);
+
+    // 1) Generate several hook variations and score them — only the BEST creative
+    //    is used (cheap to score scripts; we render just the winner).
+    let bestHook: string | undefined;
+    let virality: any = null;
+    try {
+      const hooks = buildHooks(product).slice(0, 5); // proven-formula candidate hooks
+      const scored = await scoreVariations(hooks.map(h => ({ hook: h })));
+      bestHook = hooks[scored.bestIndex];
+      virality = { bestIndex: scored.bestIndex, source: scored.source, scores: scored.scores, candidates: hooks };
+    } catch { /* non-fatal — fall back to the default brief hook */ }
+
+    // 2) Render the winning creative and host it on YouTube.
     const video = await generateProductVideo(product, imageUrl, { model });
     const youtube = await uploadVideoToYouTube({
       videoUrl: video.videoUrl,
-      title: product.productName,
-      description: video.brief.hooks[0],
+      title: (bestHook || product.productName).slice(0, 95),
+      description: bestHook || video.brief.hooks[0],
     });
-    res.status(201).json({ success: true, listingId, sourceVideoUrl: video.videoUrl, youtube });
+
+    // 3) Create a PAUSED Google Ads VIDEO campaign for it (no spend until go-live).
+    //    Non-fatal: the video is already on YouTube even if campaign creation fails.
+    let videoCampaign: any = null;
+    try {
+      const cfg: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, geoTargeting: ['US'], maxCPC: 1.5 };
+      const created = await createVideoCampaign(product, youtube.videoId, cfg);
+      videoCampaign = { status: 'created_paused', ...created };
+    } catch (e: any) {
+      videoCampaign = { status: 'failed', error: e?.message || String(e) };
+    }
+
+    res.status(201).json({ success: true, listingId, sourceVideoUrl: video.videoUrl, youtube, virality, videoCampaign });
   } catch (error: any) {
     next(error);
   }

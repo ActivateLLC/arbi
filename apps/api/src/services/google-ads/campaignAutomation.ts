@@ -434,6 +434,102 @@ export async function createAutomatedCampaign(
 }
 
 /**
+ * Create a PAUSED Google Ads VIDEO campaign that runs a YouTube-hosted video as
+ * an in-stream/in-feed ad driving to the product landing page. This is the piece
+ * that turns "video uploaded to YouTube" into an actual YouTube ad.
+ *
+ * Mirrors the SEARCH flow over the same REST transport: budget → campaign
+ * (VIDEO) → geo targeting → ad group (VIDEO_RESPONSIVE) → YouTube video asset →
+ * video responsive ad. Created PAUSED so nothing spends until go-live.
+ *
+ * NOTE: Google Ads' video-ad asset payloads are intricate and account-dependent;
+ * the caller treats failures as non-fatal (the video is still on YouTube) and we
+ * surface the exact API error via describeAdsError for tuning on a live account.
+ */
+export async function createVideoCampaign(
+  product: ProductAdData,
+  youtubeVideoId: string,
+  config: CampaignConfig,
+  customerIdOverride?: string
+): Promise<{ campaignId: string; adGroupId: string; adId: string }> {
+  if (!canUseAutomatedAds(product.targetCountry)) {
+    throw new Error(`Automated ads not allowed in ${product.targetCountry}. Manual creation required.`);
+  }
+  if (!youtubeVideoId) throw new Error('A YouTube video id is required to create a video campaign.');
+
+  const ts = Date.now();
+  const short = shortProductName(product.productName);
+
+  // Step 1: Budget
+  const [budgetResource] = await mutate('campaignBudgets', [{
+    create: {
+      name: `Video Budget - ${product.productName} - ${ts}`,
+      amountMicros: Math.round(config.dailyBudget * 1_000_000),
+      deliveryMethod: 'STANDARD',
+      explicitlyShared: false,
+    },
+  }], customerIdOverride);
+
+  // Step 2: Campaign (VIDEO, PAUSED). Maximize Conversions is new-account-safe.
+  const [campaignResource] = await mutate('campaigns', [{
+    create: {
+      name: `Arbi Video - ${product.productName} - ${product.targetCountry} - ${ts}`,
+      advertisingChannelType: 'VIDEO',
+      status: 'PAUSED',
+      campaignBudget: budgetResource,
+      ...buildBiddingStrategy(config),
+      containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
+    },
+  }], customerIdOverride);
+  console.log(`✅ Video campaign created: ${campaignResource}`);
+
+  // Step 2b: Geo targeting (reuse — negatives are harmless on video too).
+  await applyCampaignTargeting(campaignResource, config, customerIdOverride);
+
+  // Step 3: Ad group (video responsive).
+  const [adGroupResource] = await mutate('adGroups', [{
+    create: {
+      name: `Video AG - ${truncate(product.productName, 110)}`,
+      campaign: campaignResource,
+      status: 'ENABLED',
+      type: 'VIDEO_RESPONSIVE',
+    },
+  }], customerIdOverride);
+
+  // Step 4: YouTube video asset (references the uploaded video by id).
+  const [videoAssetResource] = await mutate('assets', [{
+    create: { youtubeVideoAsset: { youtubeVideoId } },
+  }], customerIdOverride);
+
+  // Step 5: Video responsive ad — headlines/descriptions + the video asset +
+  // CTA, pointing at the product landing page.
+  const headlines = dedupeAssets([short, `Shop ${short}`, 'Shop Now'], HEADLINE_MAX).slice(0, 5);
+  const descriptions = dedupeAssets([
+    `Shop ${short} — free shipping, easy returns.`,
+    'Limited-time offer. Order today.',
+  ], DESC_MAX).slice(0, 5);
+  const [adResource] = await mutate('adGroupAds', [{
+    create: {
+      adGroup: adGroupResource,
+      status: 'PAUSED',
+      ad: {
+        finalUrls: [product.landingPageUrl],
+        videoResponsiveAd: {
+          videos: [{ asset: videoAssetResource }],
+          headlines,
+          longHeadlines: [{ text: truncate(`${short} — Shop the deal today`, 90) }],
+          descriptions,
+          callToActions: [{ text: 'Shop Now' }],
+        },
+      },
+    },
+  }], customerIdOverride);
+  console.log(`✅ Video ad created: ${adResource}`);
+
+  return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
+}
+
+/**
  * Attach audience signals to an ad group in OBSERVATION mode (status ENABLED,
  * no negative). This gathers performance data and lets Smart Bidding lean into
  * high-intent audiences WITHOUT narrowing who sees the ad. No-op when no

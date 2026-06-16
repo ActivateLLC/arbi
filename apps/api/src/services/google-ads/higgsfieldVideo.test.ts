@@ -37,7 +37,9 @@ describe('higgsfield video generation', () => {
   it('builds a hook-forward 9:16 UGC motion prompt', () => {
     const prompt = buildMotionPrompt(buildCreativeBrief(product));
     expect(prompt).toMatch(/9:16/);
-    expect(prompt.toLowerCase()).toContain('ugc');
+    // Master-level image-to-video prompt: heroes the product + directs motion.
+    expect(prompt.toLowerCase()).toContain('product');
+    expect(prompt.toLowerCase()).toMatch(/motion|camera|push-in|cinematic/);
     expect(prompt.length).toBeGreaterThan(40);
   });
 

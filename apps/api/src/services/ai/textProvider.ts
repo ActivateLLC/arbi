@@ -75,6 +75,64 @@ async function viaAnthropic(opts: GenerateTextOptions, key: string): Promise<str
   );
 }
 
+/**
+ * VISION: describe what's actually in an image. You can't write a good
+ * image-to-video prompt for a product you can't see — this fetches the product
+ * photo and asks a vision model what it is (type, color, material, key features,
+ * and whether it's a clean single-product shot or a busy collage) so the motion
+ * prompt can be tailored to the real product. Returns null if no provider/vision
+ * is available (caller falls back to the title-based prompt).
+ */
+export async function describeImage(imageUrl: string, instruction: string): Promise<string | null> {
+  if (!imageUrl || !/^https?:\/\//i.test(imageUrl)) return null;
+  // Fetch the image bytes once; both providers take inline base64.
+  let b64 = '', mime = 'image/jpeg';
+  try {
+    const img = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 20000 });
+    b64 = Buffer.from(img.data).toString('base64');
+    mime = (img.headers['content-type'] || '').split(';')[0] || mime;
+    if (!/^image\//.test(mime)) mime = 'image/jpeg';
+  } catch {
+    return null; // can't fetch the image — fall back to title-based prompt
+  }
+
+  const gKey = geminiKey();
+  if (gKey) {
+    try {
+      const r = await axios.post(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`,
+        { contents: [{ role: 'user', parts: [{ inlineData: { mimeType: mime, data: b64 } }, { text: instruction }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 250 } },
+        { timeout: 25000, headers: { 'x-goog-api-key': gKey } }
+      );
+      const t = r.data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if (t) return t;
+    } catch (e: any) {
+      console.error('Gemini describeImage failed, trying Anthropic:', e?.response?.data?.error?.message || e?.message || e);
+    }
+  }
+
+  const aKey = anthropicKey();
+  if (aKey) {
+    try {
+      const r = await axios.post(
+        `https://api.anthropic.com/v1/messages`,
+        { model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-6', max_tokens: 250, temperature: 0.3,
+          messages: [{ role: 'user', content: [
+            { type: 'image', source: { type: 'base64', media_type: mime, data: b64 } },
+            { type: 'text', text: instruction },
+          ] }] },
+        { timeout: 25000, headers: { 'x-api-key': aKey, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' } }
+      );
+      const t = (r.data?.content || []).filter((p: any) => p?.type === 'text').map((p: any) => p.text).join('').trim();
+      if (t) return t;
+    } catch (e: any) {
+      console.error('Anthropic describeImage failed:', e?.response?.data?.error?.message || e?.message || e);
+    }
+  }
+  return null;
+}
+
 export async function generateText(opts: GenerateTextOptions): Promise<string | null> {
   const gKey = geminiKey();
   if (gKey) {

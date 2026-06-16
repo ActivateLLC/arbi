@@ -408,19 +408,25 @@ router.get('/youtube-oauth/callback', async (req: Request, res: Response) => {
  * Generate a UGC video for a listing and host it on YouTube (unlisted). Returns
  * the YouTube video id to use as a Google Ads video asset.
  */
-router.post('/youtube/upload-from-listing', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/youtube/upload-from-listing', async (req: Request, res: Response) => {
+  // Return readable errors (200 + {success:false,error}) so the UI shows WHY it
+  // failed instead of a generic 500. Video gen has many external failure points
+  // (Higgsfield render, YouTube scope, Ads payload) — each must be diagnosable.
   try {
-    if (!isVideoConfigured()) throw new ApiError(503, 'Higgsfield not configured: set HF_API_KEY and HF_API_SECRET.');
     const { listingId, model } = req.body || {};
-    if (!listingId) throw new ApiError(400, 'listingId is required');
+    if (!isVideoConfigured()) return res.json({ success: false, error: 'Higgsfield not configured (HF_API_KEY/HF_API_SECRET).' });
+    if (!listingId) return res.json({ success: false, error: 'listingId is required' });
     const listing: any = await getListing(listingId);
-    if (!listing) throw new ApiError(404, 'Listing not found');
+    if (!listing) return res.json({ success: false, error: 'Listing not found' });
+    const imageUrl = Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) return res.json({ success: false, error: 'Listing has no product image to animate' });
 
     // Full chain (hook scoring → CJ review → render → YouTube → PAUSED campaign).
     const result = await createVideoAdForListing(listing, { model });
     res.status(201).json({ success: true, ...result });
   } catch (error: any) {
-    next(error);
+    console.error('youtube/upload-from-listing failed:', error?.response?.data || error?.message || error);
+    res.json({ success: false, error: error?.message || String(error) });
   }
 });
 

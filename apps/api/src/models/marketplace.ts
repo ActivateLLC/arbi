@@ -73,6 +73,10 @@ const MarketplaceListingModel: ModelDefinition = {
       type: 'json', // selectable size/color variants [{ vid, label, price }]
       allowNull: true
     },
+    videoUrl: {
+      type: 'text', // generated UGC video (YouTube watch URL)
+      allowNull: true
+    },
     status: {
       type: 'string',
       allowNull: false,

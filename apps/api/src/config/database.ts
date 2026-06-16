@@ -79,6 +79,10 @@ async function runColumnMigrations(db: DatabaseManager): Promise<void> {
       label: 'marketplace_listings.variants',
       sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "variants" JSONB;',
     },
+    {
+      label: 'marketplace_listings.videoUrl',
+      sql: 'ALTER TABLE "marketplace_listings" ADD COLUMN IF NOT EXISTS "videoUrl" VARCHAR(500);',
+    },
     // Buyer-chosen size/color + quantity, so we fulfill the exact item ordered.
     {
       label: 'buyer_orders.quantity',

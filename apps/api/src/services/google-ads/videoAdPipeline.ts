@@ -11,6 +11,7 @@
  */
 
 import { listingToProductAd } from './productAdMapper';
+import { updateListing } from '../../routes/marketplace';
 import { buildHooks } from './adCreative';
 import { generateProductVideo, isConfigured as isVideoConfigured } from './higgsfieldVideo';
 import { uploadVideoToYouTube } from './youtubeUpload';
@@ -64,6 +65,10 @@ export async function createVideoAdForListing(listing: any, opts?: { model?: any
     title: (bestHook || product.productName).slice(0, 95),
     description: bestHook || video.brief.hooks[0],
   });
+
+  // Persist the YouTube URL on the listing so it's reviewable from the catalog
+  // (autonomously-generated videos need a home, not just a session link).
+  try { await updateListing(listing.listingId, { videoUrl: youtube.watchUrl } as any); } catch { /* non-fatal */ }
 
   // 4) PAUSED video campaign (non-fatal).
   let videoCampaign: VideoAdResult['videoCampaign'];

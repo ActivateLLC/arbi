@@ -70,6 +70,7 @@ export interface MarketplaceListing {
   // Selectable variants (e.g. size / color). When a product has more than one,
   // the customer must choose at checkout so we fulfill the right supplier variant.
   variants?: { vid: string; label: string; price?: number }[];
+  videoUrl?: string; // generated UGC video (YouTube watch URL) — reviewable in the catalog
   marketplacePrice: number;
   estimatedProfit: number;
   demandScore?: number; // proven-demand proxy (Amazon reviews / CJ listed count)

@@ -32,6 +32,8 @@ import {
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
 import { isAdvertisable, advertisableListings } from '../services/google-ads/advertisability';
+import { isConfigured as isVideoConfigured } from '../services/google-ads/higgsfieldVideo';
+import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
 import { sourceTrendingFromCJ } from '../services/cjSourcing';
 import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../services/amazonSourcing';
 import { getAutonomousSettings } from '../services/autonomousSettings';
@@ -150,6 +152,32 @@ async function cycle(): Promise<void> {
       if (enabled) logger.info(`🤖 AUTO_GO_LIVE: took ${enabled} campaign(s) live this cycle (cap ${cap})`);
     } catch (e: any) {
       logger.error('🤖 AUTO_GO_LIVE error:', e?.message || e);
+    }
+  }
+
+  // 2.5) Auto-generate a UGC video ad for the top product that doesn't have one
+  //      yet, and create its PAUSED YouTube video campaign. Runs in this
+  //      background cycle (no HTTP timeout) — the right place for a 1-3 min
+  //      render. Capped at ONE per cycle to control Higgsfield credits.
+  if (cfg.autoVideo && isVideoConfigured()) {
+    try {
+      const eligible = advertisableListings(await getListings('active')) as any[];
+      const campaigns = (await listCampaigns()) as any[];
+      // Product keys that already have a video campaign ("Arbi Video - <title> …").
+      const stripVideo = (n: string) => String(n || '').replace(/^Arbi Video\s*-\s*/i, '').replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, '').trim();
+      const videoKeys = new Set(
+        campaigns.filter((c) => /^Arbi Video - /i.test(c.name || '')).map((c) => productCampaignKey(stripVideo(c.name)))
+      );
+      const next = eligible
+        .sort((a, b) => (Number(b.demandScore) || 0) - (Number(a.demandScore) || 0))
+        .find((l) => !videoKeys.has(productCampaignKey(String(l.productTitle || ''))));
+      if (next) {
+        logger.info(`🎬 AUTO_VIDEO: generating UGC video ad for "${next.productTitle}"`);
+        const r = await createVideoAdForListing(next);
+        logger.info(`🎬 AUTO_VIDEO: youtube=${r.youtube?.watchUrl ? 'ok' : 'none'} campaign=${r.videoCampaign?.status}${r.videoCampaign?.error ? ` (${r.videoCampaign.error})` : ''}`);
+      }
+    } catch (e: any) {
+      logger.error('🎬 AUTO_VIDEO error:', e?.message || e);
     }
   }
 

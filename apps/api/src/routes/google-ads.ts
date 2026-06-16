@@ -18,12 +18,9 @@ import {
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { getListings, getListing } from './marketplace';
-import { buildCreativeBrief, buildHooks } from '../services/google-ads/adCreative';
+import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
-import { uploadVideoToYouTube } from '../services/google-ads/youtubeUpload';
-import { scoreVariations } from '../services/ai/viralityScorer';
-import { cjClient, isCJConfigured } from '../services/cjDropshipping';
-import { extractReviews } from '../services/cjSourcing';
+import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
@@ -418,55 +415,10 @@ router.post('/youtube/upload-from-listing', async (req: Request, res: Response, 
     if (!listingId) throw new ApiError(400, 'listingId is required');
     const listing: any = await getListing(listingId);
     if (!listing) throw new ApiError(404, 'Listing not found');
-    const imageUrl = Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
-    if (!imageUrl) throw new ApiError(409, 'Listing has no product image to animate');
 
-    const product = listingToProduct(listing);
-
-    // 1) Generate several hook variations and score them — only the BEST creative
-    //    is used (cheap to score scripts; we render just the winner).
-    let bestHook: string | undefined;
-    let virality: any = null;
-    try {
-      const hooks = buildHooks(product).slice(0, 5); // proven-formula candidate hooks
-      const scored = await scoreVariations(hooks.map(h => ({ hook: h })));
-      bestHook = hooks[scored.bestIndex];
-      virality = { bestIndex: scored.bestIndex, source: scored.source, scores: scored.scores, candidates: hooks };
-    } catch { /* non-fatal — fall back to the default brief hook */ }
-
-    // 2) Pull a real CJ supplier review (highest-rated) to use as the social-
-    //    proof beat — concrete reviews convert far better than vague hype.
-    let reviewQuote: string | undefined;
-    try {
-      if (listing.cjProductId && isCJConfigured()) {
-        const reviews = extractReviews(await cjClient.getProductReviews(listing.cjProductId));
-        const best = reviews.filter(r => r.text && r.text.length > 12).sort((a, b) => b.rating - a.rating)[0];
-        reviewQuote = best?.text;
-      } else if (Array.isArray(listing.reviews) && listing.reviews[0]?.text) {
-        reviewQuote = listing.reviews[0].text;
-      }
-    } catch { /* non-fatal — fall back to generic proof line */ }
-
-    // 3) Render the winning creative (with the real review baked in) and host it.
-    const video = await generateProductVideo(product, imageUrl, { model, reviewQuote });
-    const youtube = await uploadVideoToYouTube({
-      videoUrl: video.videoUrl,
-      title: (bestHook || product.productName).slice(0, 95),
-      description: bestHook || video.brief.hooks[0],
-    });
-
-    // 4) Create a PAUSED Google Ads VIDEO campaign for it (no spend until go-live).
-    //    Non-fatal: the video is already on YouTube even if campaign creation fails.
-    let videoCampaign: any = null;
-    try {
-      const cfg: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, geoTargeting: ['US'], maxCPC: 1.5 };
-      const created = await createVideoCampaign(product, youtube.videoId, cfg);
-      videoCampaign = { status: 'created_paused', ...created };
-    } catch (e: any) {
-      videoCampaign = { status: 'failed', error: e?.message || String(e) };
-    }
-
-    res.status(201).json({ success: true, listingId, sourceVideoUrl: video.videoUrl, youtube, virality, videoCampaign });
+    // Full chain (hook scoring → CJ review → render → YouTube → PAUSED campaign).
+    const result = await createVideoAdForListing(listing, { model });
+    res.status(201).json({ success: true, ...result });
   } catch (error: any) {
     next(error);
   }

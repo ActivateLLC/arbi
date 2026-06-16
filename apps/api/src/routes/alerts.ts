@@ -83,8 +83,8 @@ router.get('/', async (_req: Request, res: Response) => {
       alerts.push({
         id: 'out-of-stock', severity: 'warning',
         title: `${oos.length} product${oos.length > 1 ? 's' : ''} out of stock`,
-        message: 'These were auto-paused so you don\'t pay for ads you can\'t fulfill. Source replacements to keep revenue flowing.',
-        action: { label: 'Source products', internal: 'sourceProducts' },
+        message: 'These were auto-paused so you don\'t pay for ads you can\'t fulfill. This clears them and sources fresh replacements.',
+        action: { label: 'Clear & restock', internal: 'clearOutOfStock' },
       });
     }
   } catch { /* non-fatal */ }

@@ -721,6 +721,31 @@ router.get('/purge-restricted', handlePurgeRestricted);
 router.post('/purge-restricted', handlePurgeRestricted);
 
 /**
+ * POST /api/marketplace/clear-out-of-stock
+ * Expire every out_of_stock listing (status -> expired) so they drop out of the
+ * catalog and the "products out of stock" alert resolves. Reversible-ish (not a
+ * hard delete). ?preview=1 / GET = dry run.
+ */
+async function handleClearOutOfStock(req: Request, res: Response) {
+  const preview = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
+  const oos = await getListings('out_of_stock');
+  if (!preview) {
+    for (const l of oos) {
+      try { await updateListing(l.listingId, { status: 'expired' as any }); } catch { /* keep going */ }
+    }
+  }
+  res.status(200).json({
+    success: true,
+    preview,
+    matched: oos.length,
+    expired: preview ? 0 : oos.length,
+    listings: oos.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle })),
+  });
+}
+router.get('/clear-out-of-stock', handleClearOutOfStock);
+router.post('/clear-out-of-stock', handleClearOutOfStock);
+
+/**
  * GET /api/marketplace/health
  * Check marketplace system status
  */

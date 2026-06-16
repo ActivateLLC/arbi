@@ -32,8 +32,8 @@ import {
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { runProfitGovernor } from '../services/google-ads/profitGovernor';
 import { captureSnapshots, latestSnapshotAgeHours, persistRealizedScores } from '../services/google-ads/performanceSnapshots';
-import { blendedScore } from '../services/scoring/realizedPerformance';
-import { refreshObservedCpa } from '../services/scoring/observedCpa';
+import { refreshObservedCpa, getCachedObservedCpa } from '../services/scoring/observedCpa';
+import { expectedRoiScore, bestVirality } from '../services/scoring/expectedRoi';
 import { enforceAdvertisable, cleanupCampaigns } from '../services/google-ads/campaignCleanup';
 import { reserveCampaignSlot, markCampaignCreated, releaseFailedReservation } from '../services/google-ads/campaignRegistry';
 import { DEFAULT_TENANT_ID } from '../services/tenantContext';
@@ -52,13 +52,20 @@ import { getAutonomousSettings } from '../services/autonomousSettings';
 
 const logger = createLogger();
 
-/** Demand score used for ranking. When learningRank is on, blend in realized
- *  performance (confidence-weighted) so we promote what actually converts; with
- *  no data the blend == predicted demand, so behavior is unchanged. */
+/** Ranking score across the funnel. With learningRank ON, use the unified
+ *  EXPECTED-ROI score (demand × margin-after-CPA × virality × realized, with an
+ *  exploration bonus for the unproven). With it OFF (default), plain demandScore —
+ *  byte-identical to the original behavior. */
 function effectiveDemand(l: any): number {
   const demand = Number(l.demandScore) || 0;
   if (!getAutonomousSettings().learningRank) return demand;
-  return blendedScore(demand, l.realizedScore, l.realizedConfidence);
+  return expectedRoiScore({
+    demandScore: demand,
+    profitPerUnit: Number(l.estimatedProfit) || 0,
+    viralityScore: bestVirality(l.videoAssets),
+    realizedScore: l.realizedScore,
+    realizedConfidence: l.realizedConfidence,
+  }, getCachedObservedCpa());
 }
 
 const CAMPAIGN_CONFIG: CampaignConfig = {

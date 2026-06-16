@@ -24,7 +24,20 @@ export class FacebookMarketplaceScout implements OpportunityScout {
   name = 'Facebook Marketplace Scout';
   type = 'ecommerce_arbitrage' as const;
 
-  async scan(config: ScoutConfig): Promise<Opportunity[]> {
+  async scan(_config: ScoutConfig): Promise<Opportunity[]> {
+    // INTENT: discover TRENDING products on Facebook Marketplace.
+    // Currently a no-op: there is no real FB data source wired yet (FB has no
+    // public API), and the previous implementation faked it with hardcoded MOCK
+    // listings (e.g. "KitchenAid Stand Mixer - Wedding Gift Duplicate") that
+    // polluted the catalog and ads. We return [] so NO mock/demo products are
+    // ever listed. When real FB-trending discovery is wired here, its output is
+    // automatically gated downstream — the autonomousListing pipeline runs every
+    // product through the rating, advertisability, and in-stock checks before
+    // anything is listed or advertised — so real finds are safe, mock is excluded.
+    return [];
+  }
+
+  private async _legacyScanDisabled(config: ScoutConfig): Promise<Opportunity[]> {
     const opportunities: Opportunity[] = [];
 
     try {

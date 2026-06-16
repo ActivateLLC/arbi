@@ -23,7 +23,16 @@ export class RainforestScout implements OpportunityScout {
     this.apiKey = apiKey || process.env.RAINFOREST_API_KEY || 'YOUR_RAINFOREST_API_KEY';
   }
 
-  async scan(config: ScoutConfig): Promise<Opportunity[]> {
+  async scan(_config: ScoutConfig): Promise<Opportunity[]> {
+    // DISABLED: this scout monitored a HARDCODED list of brand ASINs (Meta Quest,
+    // Kindle, Roomba, Breville, AirPods, etc.) — branded products we can't legally
+    // dropship and that polluted the catalog. Real Amazon sourcing is the dynamic
+    // amazonSourcing service (Rainforest search by term). Return [] so no
+    // hardcoded brand products enter the catalog.
+    return [];
+  }
+
+  private async _legacyScanDisabled(config: ScoutConfig): Promise<Opportunity[]> {
     const opportunities: Opportunity[] = [];
 
     try {

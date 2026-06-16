@@ -88,6 +88,9 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     const supplierPrice = parseFloat(metadata.supplierPrice);
     const estimatedProfit = parseFloat(metadata.estimatedProfit);
     const supplierUrl = metadata.supplierUrl;
+    // Variant (size/color) the customer chose — used to fulfill the right item.
+    const variantId = metadata.variantId || '';
+    const variantLabel = metadata.variantLabel || '';
 
     console.log('   📦 Order Details:');
     console.log('      Listing ID:', listingId);
@@ -124,6 +127,9 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     const order = {
       orderId: `order_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       listingId,
+      quantity,
+      variantId,
+      variantLabel,
       buyerEmail: session.customer_details?.email || 'unknown@email.com',
       buyerShippingAddress: {
         name: shippingName,

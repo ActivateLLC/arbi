@@ -20,6 +20,10 @@
  */
 
 import axios from 'axios';
+// NOTE: aiAdCopy imports back from this module (buildHeadlines/buildDescriptions/
+// shortProductName). The cycle is safe — both sides only touch each other at
+// call-time (inside async fns), never at module init.
+import { generateAdCopy } from './aiAdCopy';
 
 const API_VERSION = 'v23'; // matches the google-ads-api package we had installed
 const ADS_BASE = `https://googleads.googleapis.com/${API_VERSION}`;
@@ -45,7 +49,21 @@ export interface ProductAdData {
   category: string;
   targetCountry: string;
   videoUrl?: string; // Cloudinary URL from ad extraction
+  imageUrl?: string; // first real product image — REQUIRED to advertise (no photo, no ad)
   landingPageUrl: string;
+}
+
+/**
+ * A product is only advertisable with a REAL product photo — a placeholder
+ * landing page wastes ad spend and looks untrustworthy. Reject empty values, the
+ * server-side image-resolver/placeholder path, data URIs, and known placeholders.
+ */
+export function hasRealProductImage(url?: string): boolean {
+  const u = (url || '').trim();
+  if (!/^https?:\/\//i.test(u)) return false;
+  if (/\/(api\/)?product-image\//i.test(u)) return false; // our placeholder resolver
+  if (/(example\.(com|org|net)|placeholder|via\.placeholder|dummyimage)/i.test(u)) return false;
+  return true;
 }
 
 export interface CampaignConfig {
@@ -321,6 +339,12 @@ export async function createAutomatedCampaign(
     throw new Error(`Automated ads not allowed in ${product.targetCountry}. Manual creation required.`);
   }
 
+  // HARD RULE: never advertise a product without a real photo. No image means a
+  // placeholder landing page and no creative for video ads — so we don't run it.
+  if (!hasRealProductImage(product.imageUrl)) {
+    throw new Error('No product image — skipping campaign (no photo, no ad).');
+  }
+
   console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
   const ts = Date.now();
 
@@ -389,9 +413,11 @@ export async function createAutomatedCampaign(
     })), customerIdOverride);
   }
 
-  // Step 5: Responsive Search Ad (text-only; no asset uploads needed)
-  const headlines = buildHeadlines(product);
-  const descriptions = buildDescriptions(product);
+  // Step 5: Responsive Search Ad (text-only; no asset uploads needed).
+  // Prefer AI-written, product-specific copy for higher Ad Strength; the helper
+  // always returns a Google-compliant set (falls back to templates on failure).
+  const { headlines, descriptions, source: copySource } = await generateAdCopy(product);
+  console.log(`📝 RSA copy source: ${copySource} (${headlines.length} headlines, ${descriptions.length} descriptions)`);
   const [adResource] = await mutate('adGroupAds', [{
     create: {
       adGroup: adGroupResource,
@@ -403,6 +429,102 @@ export async function createAutomatedCampaign(
     },
   }], customerIdOverride);
   console.log(`✅ Responsive Search Ad created: ${adResource}`);
+
+  return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
+}
+
+/**
+ * Create a PAUSED Google Ads VIDEO campaign that runs a YouTube-hosted video as
+ * an in-stream/in-feed ad driving to the product landing page. This is the piece
+ * that turns "video uploaded to YouTube" into an actual YouTube ad.
+ *
+ * Mirrors the SEARCH flow over the same REST transport: budget → campaign
+ * (VIDEO) → geo targeting → ad group (VIDEO_RESPONSIVE) → YouTube video asset →
+ * video responsive ad. Created PAUSED so nothing spends until go-live.
+ *
+ * NOTE: Google Ads' video-ad asset payloads are intricate and account-dependent;
+ * the caller treats failures as non-fatal (the video is still on YouTube) and we
+ * surface the exact API error via describeAdsError for tuning on a live account.
+ */
+export async function createVideoCampaign(
+  product: ProductAdData,
+  youtubeVideoId: string,
+  config: CampaignConfig,
+  customerIdOverride?: string
+): Promise<{ campaignId: string; adGroupId: string; adId: string }> {
+  if (!canUseAutomatedAds(product.targetCountry)) {
+    throw new Error(`Automated ads not allowed in ${product.targetCountry}. Manual creation required.`);
+  }
+  if (!youtubeVideoId) throw new Error('A YouTube video id is required to create a video campaign.');
+
+  const ts = Date.now();
+  const short = shortProductName(product.productName);
+
+  // Step 1: Budget
+  const [budgetResource] = await mutate('campaignBudgets', [{
+    create: {
+      name: `Video Budget - ${product.productName} - ${ts}`,
+      amountMicros: Math.round(config.dailyBudget * 1_000_000),
+      deliveryMethod: 'STANDARD',
+      explicitlyShared: false,
+    },
+  }], customerIdOverride);
+
+  // Step 2: Campaign (VIDEO, PAUSED). Maximize Conversions is new-account-safe.
+  const [campaignResource] = await mutate('campaigns', [{
+    create: {
+      name: `Arbi Video - ${product.productName} - ${product.targetCountry} - ${ts}`,
+      advertisingChannelType: 'VIDEO',
+      status: 'PAUSED',
+      campaignBudget: budgetResource,
+      ...buildBiddingStrategy(config),
+      containsEuPoliticalAdvertising: 'DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING',
+    },
+  }], customerIdOverride);
+  console.log(`✅ Video campaign created: ${campaignResource}`);
+
+  // Step 2b: Geo targeting (reuse — negatives are harmless on video too).
+  await applyCampaignTargeting(campaignResource, config, customerIdOverride);
+
+  // Step 3: Ad group (video responsive).
+  const [adGroupResource] = await mutate('adGroups', [{
+    create: {
+      name: `Video AG - ${truncate(product.productName, 110)}`,
+      campaign: campaignResource,
+      status: 'ENABLED',
+      type: 'VIDEO_RESPONSIVE',
+    },
+  }], customerIdOverride);
+
+  // Step 4: YouTube video asset (references the uploaded video by id).
+  const [videoAssetResource] = await mutate('assets', [{
+    create: { youtubeVideoAsset: { youtubeVideoId } },
+  }], customerIdOverride);
+
+  // Step 5: Video responsive ad — headlines/descriptions + the video asset +
+  // CTA, pointing at the product landing page.
+  const headlines = dedupeAssets([short, `Shop ${short}`, 'Shop Now'], HEADLINE_MAX).slice(0, 5);
+  const descriptions = dedupeAssets([
+    `Shop ${short} — free shipping, easy returns.`,
+    'Limited-time offer. Order today.',
+  ], DESC_MAX).slice(0, 5);
+  const [adResource] = await mutate('adGroupAds', [{
+    create: {
+      adGroup: adGroupResource,
+      status: 'PAUSED',
+      ad: {
+        finalUrls: [product.landingPageUrl],
+        videoResponsiveAd: {
+          videos: [{ asset: videoAssetResource }],
+          headlines,
+          longHeadlines: [{ text: truncate(`${short} — Shop the deal today`, 90) }],
+          descriptions,
+          callToActions: [{ text: 'Shop Now' }],
+        },
+      },
+    },
+  }], customerIdOverride);
+  console.log(`✅ Video ad created: ${adResource}`);
 
   return { campaignId: campaignResource, adGroupId: adGroupResource, adId: adResource };
 }
@@ -507,16 +629,73 @@ function describeAdsError(error: any): string {
 /**
  * Bulk create campaigns for multiple products (optionally scoped to a tenant).
  */
+// Lower per-campaign daily budget = test MORE products cheaply; the optimizer
+// then concentrates spend on the few winners (scaling up to its cap). Tunable
+// via env CAMPAIGN_DAILY_BUDGET.
+export const DEFAULT_DAILY_BUDGET = (() => {
+  const v = Number((process.env.CAMPAIGN_DAILY_BUDGET || '').trim());
+  return Number.isFinite(v) && v > 0 ? v : 10;
+})();
+
+/** Normalized key from a product TITLE (used for de-duplication). */
+export function productCampaignKey(s: string): string {
+  return (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 40);
+}
+
+/** Strip the "Arbi - <title> - <CC> - <ts>" wrapper back to the product title. */
+export function campaignProductName(name: string): string {
+  return (name || '')
+    .replace(/^arbi\s*-\s*/i, '')
+    .replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, '')
+    .trim();
+}
+
+/** Product key derived from a campaign NAME — comparable to productCampaignKey. */
+export function campaignProductKey(name: string): string {
+  return productCampaignKey(campaignProductName(name));
+}
+
+/**
+ * Promotion priority: DEMAND (proven sales proxy — Amazon reviews / CJ listed
+ * count) dominates so the most in-demand products go live first; estimated
+ * profit breaks ties. Used to rank which products to create/launch.
+ */
+export function demandRank(demandScore: number, estimatedProfit: number): number {
+  return (Number(demandScore) || 0) * 1000 + (Number(estimatedProfit) || 0);
+}
+
 export async function createBulkCampaigns(
   products: ProductAdData[],
   config: CampaignConfig,
   customerIdOverride?: string
 ): Promise<{ success: number; failed: number; results: any[] }> {
+  // De-dupe: skip products that already have a campaign, so repeated launches /
+  // autonomous cycles never create duplicate spend for the same product.
+  let queue = products;
+  try {
+    const existing = await listCampaigns(customerIdOverride);
+    const existingKeys = (existing as any[]).map((c) => campaignProductKey(c.name)).filter(Boolean);
+    queue = products.filter((p) => {
+      const key = productCampaignKey(p.productName);
+      return key.length > 3 && !existingKeys.some((n) => n === key || n.includes(key) || key.includes(n));
+    });
+  } catch {
+    queue = products; // if we can't list, proceed without dedup
+  }
+
   const results = [];
   let success = 0;
   let failed = 0;
 
-  for (const product of products) {
+  // HARD RULE: a campaign requires a real product photo. Drop anything without
+  // one up front (no photo → no ad), with a clear skipped reason.
+  const skippedNoImage = queue.filter((p) => !hasRealProductImage(p.imageUrl));
+  for (const p of skippedNoImage) {
+    results.push({ product: p.productName, status: 'skipped', reason: 'no product image' });
+  }
+  queue = queue.filter((p) => hasRealProductImage(p.imageUrl));
+
+  for (const product of queue) {
     try {
       const result = await createAutomatedCampaign(product, config, customerIdOverride);
       results.push({ product: product.productName, ...result, status: 'success' });
@@ -579,7 +758,7 @@ export async function getCampaignMetrics(campaignId: string, customerIdOverride?
  */
 export async function setCampaignStatus(
   campaignId: string,
-  status: 'ENABLED' | 'PAUSED',
+  status: 'ENABLED' | 'PAUSED' | 'REMOVED',
   customerIdOverride?: string
 ): Promise<string> {
   const cid = digits(customerIdOverride || '') || customerId();

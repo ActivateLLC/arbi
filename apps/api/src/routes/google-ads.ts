@@ -8,16 +8,21 @@ import { ApiError } from '../middleware/errorHandler';
 import {
   createAutomatedCampaign,
   createBulkCampaigns,
+  createVideoCampaign,
   getCampaignMetrics,
   setCampaignStatus,
   listCampaigns,
+  demandRank,
+  DEFAULT_DAILY_BUDGET,
   ProductAdData,
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { getListings, getListing } from './marketplace';
 import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
-import { uploadVideoToYouTube } from '../services/google-ads/youtubeUpload';
+import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
+import { submitOnly, videoModelId } from '../services/google-ads/higgsfieldRest';
+import { listJobs as listVideoJobs, stageProgress } from '../services/google-ads/videoJobs';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
@@ -35,6 +40,7 @@ function listingToProduct(l: any): ProductAdData {
     profitMargin: price > 0 ? Math.round((profit / price) * 100) : 0,
     category: l.supplierPlatform || 'general',
     targetCountry: 'US',
+    imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
     landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
   };
 }
@@ -52,20 +58,29 @@ export async function getActiveProductsForAds(limit: number, minProfitMargin = 0
       const price = Number(l.marketplacePrice) || 0;
       const profit = Number(l.estimatedProfit) || 0;
       const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
+      const demandScore = Number(l.demandScore) || 0;
       return {
-        productId: l.listingId,
-        productName: l.productTitle,
-        productPrice: price,
-        profitMargin,
-        category: l.supplierPlatform || 'general',
-        targetCountry: 'US',
-        landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
-        videoUrl: undefined,
-      } as ProductAdData;
+        product: {
+          productId: l.listingId,
+          productName: l.productTitle,
+          productPrice: price,
+          profitMargin,
+          category: l.supplierPlatform || 'general',
+          targetCountry: 'US',
+          imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
+          landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
+          videoUrl: undefined,
+        } as ProductAdData,
+        demandScore,
+        profit,
+      };
     })
-    .filter((p) => p.profitMargin >= minProfitMargin)
-    .sort((a, b) => b.profitMargin - a.profitMargin)
-    .slice(0, limit);
+    .filter((x) => x.product.profitMargin >= minProfitMargin)
+    // Demand-first: promote the most proven (highest-demand) products, breaking
+    // ties by estimated profit — so we spend on what's most likely to sell now.
+    .sort((a, b) => demandRank(b.demandScore, b.profit) - demandRank(a.demandScore, a.profit))
+    .slice(0, limit)
+    .map((x) => x.product);
 }
 
 /**
@@ -220,7 +235,7 @@ router.post('/quick-start', async (req: Request, res: Response, next: NextFuncti
 
     // Step 2: Create campaigns with conservative budget
     const config: CampaignConfig = {
-      dailyBudget: 20, // Start conservative at $20/day per product
+      dailyBudget: DEFAULT_DAILY_BUDGET, // low test budget — spread across many products
       targetROAS: 4.0, // Target $4 revenue per $1 spent (aggressive)
       geoTargeting: ['US'],
       maxCPC: 1.5,
@@ -266,7 +281,7 @@ router.get('/quick-start-now', async (req: Request, res: Response, next: NextFun
     if (products.length === 0) {
       return res.status(200).json({ success: false, message: 'No products with 30%+ profit margin found.' });
     }
-    const config: CampaignConfig = { dailyBudget: 20, targetROAS: 4.0, geoTargeting: ['US'], maxCPC: 1.5 };
+    const config: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, targetROAS: 4.0, geoTargeting: ['US'], maxCPC: 1.5 };
     const result = await createBulkCampaigns(products, config);
     res.status(201).json({ success: true, message: `Created ${result.success} PAUSED campaign(s)`, ...result });
   } catch (error: any) {
@@ -395,26 +410,72 @@ router.get('/youtube-oauth/callback', async (req: Request, res: Response) => {
  * Generate a UGC video for a listing and host it on YouTube (unlisted). Returns
  * the YouTube video id to use as a Google Ads video asset.
  */
-router.post('/youtube/upload-from-listing', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/youtube/upload-from-listing', async (req: Request, res: Response) => {
+  // Return readable errors (200 + {success:false,error}) so the UI shows WHY it
+  // failed instead of a generic 500. Video gen has many external failure points
+  // (Higgsfield render, YouTube scope, Ads payload) — each must be diagnosable.
   try {
-    if (!isVideoConfigured()) throw new ApiError(503, 'Higgsfield not configured: set HF_API_KEY and HF_API_SECRET.');
     const { listingId, model } = req.body || {};
-    if (!listingId) throw new ApiError(400, 'listingId is required');
+    if (!isVideoConfigured()) return res.json({ success: false, error: 'Higgsfield not configured (HF_API_KEY/HF_API_SECRET).' });
+    if (!listingId) return res.json({ success: false, error: 'listingId is required' });
     const listing: any = await getListing(listingId);
-    if (!listing) throw new ApiError(404, 'Listing not found');
+    if (!listing) return res.json({ success: false, error: 'Listing not found' });
     const imageUrl = Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
-    if (!imageUrl) throw new ApiError(409, 'Listing has no product image to animate');
+    if (!imageUrl) return res.json({ success: false, error: 'Listing has no product image to animate' });
 
-    const product = listingToProduct(listing);
-    const video = await generateProductVideo(product, imageUrl, { model });
-    const youtube = await uploadVideoToYouTube({
-      videoUrl: video.videoUrl,
-      title: product.productName,
-      description: video.brief.hooks[0],
-    });
-    res.status(201).json({ success: true, listingId, sourceVideoUrl: video.videoUrl, youtube });
+    // Full chain (hook scoring → CJ review → render → YouTube → PAUSED campaign).
+    const result = await createVideoAdForListing(listing, { model });
+    res.status(201).json({ success: true, ...result });
   } catch (error: any) {
-    next(error);
+    console.error('youtube/upload-from-listing failed:', error?.response?.data || error?.message || error);
+    res.json({ success: false, error: error?.message || String(error) });
+  }
+});
+
+/**
+ * GET /api/google-ads/video-jobs — the live UGC video lifecycle so the Command
+ * Center can show a native, sequential status (queued → scripting → rendering →
+ * uploading → launching → ready/live) for each product, no YouTube tab needed.
+ */
+router.get('/video-jobs', (_req: Request, res: Response) => {
+  const jobs = listVideoJobs().map((j) => ({ ...j, progress: stageProgress(j.stage) }));
+  res.json({ success: true, jobs, active: jobs.filter((j) => !['live', 'ready', 'failed'].includes(j.stage)).length });
+});
+
+/**
+ * GET /api/google-ads/video-diag — fast, browser-clickable diagnostic. Submits a
+ * Higgsfield render request (no waiting) and returns the immediate response/error
+ * so we can tell in seconds whether the model/auth/credits work vs. the render
+ * itself. Pass ?listingId=... or it uses the first active product with an image.
+ */
+router.get('/video-diag', async (req: Request, res: Response) => {
+  try {
+    if (!isVideoConfigured()) return res.json({ ok: false, stage: 'config', error: 'Higgsfield not configured (HF_API_KEY/HF_API_SECRET).' });
+    const listingId = String(req.query.listingId || '');
+    const all = await getListings('active');
+    const listing: any = listingId ? all.find((l: any) => l.listingId === listingId) : all.find((l: any) => Array.isArray(l.productImages) && l.productImages[0]);
+    const imageUrl = listing && Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) return res.json({ ok: false, stage: 'listing', error: 'No active product with an image found.' });
+
+    // Try the documented image-to-video models in order; stop at the first the
+    // account accepts (queues). Invalid models 404 without consuming credits.
+    const candidates = [
+      videoModelId(),
+      'higgsfield-ai/dop/standard',
+      'kling-video/v2.1/pro/image-to-video',
+      'bytedance/seedance/v1/pro/image-to-video',
+    ].filter((v, i, a) => v && a.indexOf(v) === i);
+    const args = { image_url: imageUrl, prompt: 'Short vertical UGC product ad, dynamic, scroll-stopping.' };
+    const attempts: any[] = [];
+    let working: string | null = null;
+    for (const m of candidates) {
+      const r = await submitOnly(m, args);
+      attempts.push({ modelId: m, ok: r.ok, httpStatus: r.httpStatus, status: r.status, error: r.error });
+      if (r.ok) { working = m; break; }
+    }
+    res.json({ workingModelId: working, hint: working ? `Set HF_VIDEO_MODEL_ID=${working}` : 'No documented model accepted — check Higgsfield plan/credits', testedListing: listing.productTitle, attempts });
+  } catch (e: any) {
+    res.json({ ok: false, stage: 'exception', error: e?.message || String(e) });
   }
 });
 

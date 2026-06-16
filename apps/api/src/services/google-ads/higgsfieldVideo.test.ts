@@ -1,8 +1,10 @@
-// Mock the Higgsfield SDK so we test our integration without network/credits.
-const subscribe = jest.fn();
-jest.mock('@higgsfield/client/v2', () => ({
-  createHiggsfieldClient: jest.fn(() => ({ subscribe })),
-}), { virtual: true });
+// Mock the documented REST path so we test our integration without network/credits.
+const submitAndWait = jest.fn();
+const videoModelId = jest.fn(() => 'higgsfield-ai/dop/standard');
+jest.mock('./higgsfieldRest', () => ({
+  submitAndWait: (...args: any[]) => submitAndWait(...args),
+  videoModelId: () => videoModelId(),
+}));
 
 import { isConfigured, buildMotionPrompt, generateProductVideo } from './higgsfieldVideo';
 import { buildCreativeBrief } from './adCreative';
@@ -20,7 +22,7 @@ const product: ProductAdData = {
 
 describe('higgsfield video generation', () => {
   beforeEach(() => {
-    subscribe.mockReset();
+    submitAndWait.mockReset();
     process.env.HF_API_KEY = 'key-id';
     process.env.HF_API_SECRET = 'key-secret';
   });
@@ -39,19 +41,20 @@ describe('higgsfield video generation', () => {
     expect(prompt.length).toBeGreaterThan(40);
   });
 
-  it('calls image2video with the product image and returns the video url', async () => {
-    subscribe.mockResolvedValue({ status: 'completed', video: { url: 'https://cdn.hf/out.mp4' } });
+  it('submits to the REST model with the product image and returns the video url', async () => {
+    submitAndWait.mockResolvedValue({ status: 'completed', videoUrl: 'https://cdn.hf/out.mp4' });
     const r = await generateProductVideo(product, 'https://img/p.jpg');
     expect(r.videoUrl).toBe('https://cdn.hf/out.mp4');
-    const [endpoint, opts] = subscribe.mock.calls[0];
-    expect(endpoint).toBe('/v1/image2video/dop');
-    expect(opts.input.input_images[0].image_url).toBe('https://img/p.jpg');
-    expect(opts.withPolling).toBe(true);
+    const [modelId, args] = submitAndWait.mock.calls[0];
+    expect(modelId).toBe('higgsfield-ai/dop/standard');
+    expect(args.image_url).toBe('https://img/p.jpg');
+    expect(typeof args.prompt).toBe('string');
+    expect(args.prompt.length).toBeGreaterThan(40);
   });
 
-  it('throws a clear error when generation does not complete', async () => {
-    subscribe.mockResolvedValue({ status: 'failed' });
-    await expect(generateProductVideo(product, 'https://img/p.jpg')).rejects.toThrow(/failed/i);
+  it('throws a clear error when generation returns no video', async () => {
+    submitAndWait.mockResolvedValue({ status: 'failed' });
+    await expect(generateProductVideo(product, 'https://img/p.jpg')).rejects.toThrow(/no video/i);
   });
 
   it('requires an image url', async () => {

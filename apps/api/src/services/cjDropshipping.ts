@@ -35,6 +35,7 @@ const ENDPOINTS = {
   getBalance: '/shopping/pay/getBalance',
   listV2: '/product/listV2',
   productQuery: '/product/query',
+  productComments: '/product/productComments',
 };
 
 export interface CJShippingAddress {
@@ -152,6 +153,11 @@ export class CJDropshippingClient {
   /** Full product detail incl. variants (GET /product/query). */
   getProductDetail(pid: string): Promise<any> {
     return this.call<any>('GET', ENDPOINTS.productQuery, { pid });
+  }
+
+  /** Supplier product reviews/comments (GET /product/productComments). */
+  getProductReviews(pid: string, pageSize = 20): Promise<any> {
+    return this.call<any>('GET', ENDPOINTS.productComments, { pid, pageNum: 1, pageSize });
   }
 
   /** Cheapest available logistic for a variant to a destination. */

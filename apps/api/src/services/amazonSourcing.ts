@@ -10,6 +10,7 @@
 
 import axios from 'axios';
 import { saveListing, MarketplaceListing } from '../routes/marketplace';
+import { isBrandRestricted } from './google-ads/advertisability';
 
 const RAINFOREST_URL = 'https://api.rainforestapi.com/request';
 
@@ -59,7 +60,8 @@ export async function sourceTrendingFromAmazon(opts: AmazonSourceOptions = {}) {
     .filter((p) => {
       const price = Number(p?.price?.value || 0);
       const reviews = Number(p?.ratings_total || p?.reviews_total || 0);
-      return price > 0 && price <= maxPrice && reviews >= minReviews && !!p?.image;
+      // Exclude trademarked/brand products — can't fulfill, Google Ads disapproves.
+      return price > 0 && price <= maxPrice && reviews >= minReviews && !!p?.image && !isBrandRestricted(p?.title);
     })
     .sort((a, b) => Number(b?.ratings_total || 0) - Number(a?.ratings_total || 0))
     .slice(0, count);
@@ -80,6 +82,7 @@ export async function sourceTrendingFromAmazon(opts: AmazonSourceOptions = {}) {
       supplierPlatform: 'amazon',
       marketplacePrice,
       estimatedProfit: Number((marketplacePrice - price).toFixed(2)),
+      demandScore: Number(p.ratings_total || p.reviews_total || 0), // proven demand
       status: 'active',
       listedAt: new Date(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),

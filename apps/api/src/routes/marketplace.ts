@@ -7,6 +7,7 @@ import { adCampaignManager } from '../services/adCampaigns';
 import { imageScraper } from '../services/imageScraper';
 // import { requireApiKey } from '../middleware/apiAuth'; // Optional: Uncomment to require API key authentication
 import { createListingSchema, checkoutSchema, validateSchema } from '../schemas/marketplace';
+import { isBrandRestricted, checkAdvertisable } from '../services/google-ads/advertisability';
 
 const router = Router();
 
@@ -66,9 +67,14 @@ export interface MarketplaceListing {
   supplierPlatform: string; // "amazon" | "walmart" | "target" | "ebay" | "cj"
   cjVariantId?: string; // CJ Dropshipping variant id (vid) — enables supplier->customer auto-fulfillment
   cjProductId?: string; // CJ Dropshipping product id (pid), optional
+  // Selectable variants (e.g. size / color). When a product has more than one,
+  // the customer must choose at checkout so we fulfill the right supplier variant.
+  variants?: { vid: string; label: string; price?: number }[];
+  videoUrl?: string; // generated UGC video (YouTube watch URL) — reviewable in the catalog
   marketplacePrice: number;
   estimatedProfit: number;
-  status: 'active' | 'sold' | 'expired';
+  demandScore?: number; // proven-demand proxy (Amazon reviews / CJ listed count)
+  status: 'active' | 'sold' | 'expired' | 'out_of_stock';
   listedAt: Date;
   expiresAt: Date;
   soldAt?: Date;
@@ -211,7 +217,7 @@ async function getOrder(orderId: string): Promise<BuyerOrder | null> {
   return orders.get(orderId) || null;
 }
 
-async function getOrders(): Promise<BuyerOrder[]> {
+export async function getOrders(): Promise<BuyerOrder[]> {
   if (db) {
     try {
       const results = await db.find('BuyerOrder', {
@@ -678,6 +684,74 @@ router.get('/orders', async (req: Request, res: Response) => {
     }
   });
 });
+
+/**
+ * POST /api/marketplace/purge-restricted
+ * Expire active listings that reference protected brands/trademarks (e.g. leftover
+ * demo rows like "Apple AirPods Pro 2", "Nintendo Switch OLED"). These can't be
+ * legitimately dropshipped and would get Google Ads disapproved. We set status to
+ * 'expired' (reversible — not a hard delete) so they drop out of the catalog and
+ * can never go live. ?preview=1 lists what WOULD be expired without changing it.
+ */
+async function handlePurgeRestricted(req: Request, res: Response) {
+  // GET is always a safe dry-run (browser-clickable). POST mutates unless
+  // ?preview=1 / {preview:true} is set.
+  const preview = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
+  const active = await getListings('active');
+  // Expire anything NOT advertisable — brand/trademark, placeholder/no real
+  // image (seed/demo junk like "Premium Espresso Machine", "Test - …"), no real
+  // supplier, etc. Real CJ products (real image + variant id) are kept. This is
+  // the comprehensive "remove anything that isn't a real sellable product" sweep.
+  const restricted = active.filter((l) => {
+    const g = checkAdvertisable(l);
+    return !g.ok;
+  });
+
+  if (!preview) {
+    for (const l of restricted) {
+      try { await updateListing(l.listingId, { status: 'expired' as any }); } catch { /* keep going */ }
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    preview,
+    method: req.method,
+    matched: restricted.length,
+    expired: preview ? 0 : restricted.length,
+    hint: preview ? 'This was a dry run. Send a POST (no ?preview) to actually expire these.' : undefined,
+    listings: restricted.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle, reason: checkAdvertisable(l).reason })),
+  });
+}
+
+// GET = browser-clickable dry run; POST = perform the purge.
+router.get('/purge-restricted', handlePurgeRestricted);
+router.post('/purge-restricted', handlePurgeRestricted);
+
+/**
+ * POST /api/marketplace/clear-out-of-stock
+ * Expire every out_of_stock listing (status -> expired) so they drop out of the
+ * catalog and the "products out of stock" alert resolves. Reversible-ish (not a
+ * hard delete). ?preview=1 / GET = dry run.
+ */
+async function handleClearOutOfStock(req: Request, res: Response) {
+  const preview = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
+  const oos = await getListings('out_of_stock');
+  if (!preview) {
+    for (const l of oos) {
+      try { await updateListing(l.listingId, { status: 'expired' as any }); } catch { /* keep going */ }
+    }
+  }
+  res.status(200).json({
+    success: true,
+    preview,
+    matched: oos.length,
+    expired: preview ? 0 : oos.length,
+    listings: oos.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle })),
+  });
+}
+router.get('/clear-out-of-stock', handleClearOutOfStock);
+router.post('/clear-out-of-stock', handleClearOutOfStock);
 
 /**
  * GET /api/marketplace/health

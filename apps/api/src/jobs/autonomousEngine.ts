@@ -22,11 +22,19 @@ import {
   createBulkCampaigns,
   listCampaigns,
   setCampaignStatus,
+  campaignProductKey,
+  productCampaignKey,
+  demandRank,
+  DEFAULT_DAILY_BUDGET,
   ProductAdData,
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
+import { isAdvertisable, advertisableListings } from '../services/google-ads/advertisability';
+import { isConfigured as isVideoConfigured } from '../services/google-ads/higgsfieldVideo';
+import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
+import { updateJob as updateVideoJob } from '../services/google-ads/videoJobs';
 import { sourceTrendingFromCJ } from '../services/cjSourcing';
 import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../services/amazonSourcing';
 import { getAutonomousSettings } from '../services/autonomousSettings';
@@ -34,7 +42,7 @@ import { getAutonomousSettings } from '../services/autonomousSettings';
 const logger = createLogger();
 
 const CAMPAIGN_CONFIG: CampaignConfig = {
-  dailyBudget: 20,
+  dailyBudget: DEFAULT_DAILY_BUDGET,
   targetROAS: 3.0,
   geoTargeting: ['US'],
   maxCPC: 1.5,
@@ -48,23 +56,30 @@ function activeProducts(listings: any[], limit: number, minMargin: number): Prod
       const profit = Number(l.estimatedProfit) || 0;
       const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
       return {
-        productId: l.listingId,
-        productName: l.productTitle,
-        productPrice: price,
-        profitMargin,
-        category: l.supplierPlatform || 'general',
-        targetCountry: 'US',
-        landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
-      } as ProductAdData;
+        product: {
+          productId: l.listingId,
+          productName: l.productTitle,
+          productPrice: price,
+          profitMargin,
+          category: l.supplierPlatform || 'general',
+          targetCountry: 'US',
+          imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
+          landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
+        } as ProductAdData,
+        demandScore: Number(l.demandScore) || 0,
+        profit,
+      };
     })
-    .filter((p) => p.profitMargin >= minMargin)
-    .sort((a, b) => b.profitMargin - a.profitMargin)
-    .slice(0, limit);
+    .filter((x) => x.product.profitMargin >= minMargin)
+    // Demand-first: create/promote the most proven products first.
+    .sort((a, b) => demandRank(b.demandScore, b.profit) - demandRank(a.demandScore, a.profit))
+    .slice(0, limit)
+    .map((x) => x.product);
 }
 
 async function cycle(): Promise<void> {
   const cfg = getAutonomousSettings();
-  if (!cfg.autonomous) return; // master switch (runtime-togggleable from the dashboard)
+  if (!cfg.autonomous) return; // master switch (runtime-toggleable from the dashboard)
 
   // 0) Source fresh products from every configured retailer (CJ + Amazon).
   if (cfg.autoSource) {
@@ -82,7 +97,10 @@ async function cycle(): Promise<void> {
   //    already have a campaign, so we don't duplicate every cycle).
   if (cfg.autoCreate) {
     try {
-      const products = activeProducts(await getListings('active'), 5, 30);
+      // Gate: only advertise properly-sourced, in-stock products (real supplier
+      // ref + image + active). Blocks placeholder/hardcoded rows from the funnel.
+      const eligible = advertisableListings(await getListings('active'));
+      const products = activeProducts(eligible, 5, 30);
       const existing = await listCampaigns();
       const existingNames = (existing as any[]).map((c) => (c.name || '').toLowerCase());
       const toCreate = products.filter(
@@ -97,17 +115,118 @@ async function cycle(): Promise<void> {
     }
   }
 
-  // 2) Take our PAUSED campaigns LIVE (the real-spend switch).
+  // 2) Take our PAUSED campaigns LIVE — but ONE per product and capped per cycle,
+  //    so we test many products at low budget instead of dumping spend on dupes.
   if (cfg.autoGoLive) {
     try {
-      const campaigns = await listCampaigns();
-      const paused = (campaigns as any[]).filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''));
-      for (const c of paused) {
-        await setCampaignStatus(c.id, 'ENABLED');
-        logger.info(`🤖 AUTO_GO_LIVE: enabled campaign ${c.id} (${c.name})`);
+      const campaigns = (await listCampaigns()) as any[];
+      const cap = Math.max(Number(process.env.AUTO_GO_LIVE_MAX) || 5, 1);
+      // Products already serving — don't double-enable.
+      const liveKeys = new Set(campaigns.filter((c) => c.status === 'ENABLED').map((c) => campaignProductKey(c.name)));
+      // Demand map: productCampaignKey(title) → demandScore, so we take the most
+      // in-demand PAUSED campaigns live first (not whatever order the API returns).
+      // advertisableKeys gates go-live to properly-sourced, in-stock products only.
+      const demandByKey = new Map<string, number>();
+      const advertisableKeys = new Set<string>();
+      for (const l of (await getListings('active')) as any[]) {
+        const k = productCampaignKey(String(l.productTitle || ''));
+        if (!k) continue;
+        demandByKey.set(k, Math.max(demandByKey.get(k) || 0, Number(l.demandScore) || 0));
+        if (isAdvertisable(l)) advertisableKeys.add(k);
       }
+      const pausedArbi = campaigns
+        .filter((c) => c.status === 'PAUSED' && /^Arbi - /.test(c.name || ''))
+        .sort((a, b) => (demandByKey.get(campaignProductKey(b.name)) || 0) - (demandByKey.get(campaignProductKey(a.name)) || 0));
+      const seen = new Set<string>();
+      let enabled = 0;
+      for (const c of pausedArbi) {
+        if (enabled >= cap) break;
+        const key = campaignProductKey(c.name);
+        if (!key || liveKeys.has(key) || seen.has(key)) continue; // one per product
+        // Don't take live a product that isn't advertisable (OOS / no real supplier).
+        if (!advertisableKeys.has(key)) { logger.info(`🤖 AUTO_GO_LIVE: skip ${c.name} — not advertisable (sourcing/stock)`); continue; }
+        seen.add(key);
+        await setCampaignStatus(c.id, 'ENABLED');
+        enabled++;
+        logger.info(`🤖 AUTO_GO_LIVE: enabled ${c.id} (${c.name})`);
+      }
+      if (enabled) logger.info(`🤖 AUTO_GO_LIVE: took ${enabled} campaign(s) live this cycle (cap ${cap})`);
     } catch (e: any) {
       logger.error('🤖 AUTO_GO_LIVE error:', e?.message || e);
+    }
+  }
+
+  // 2.5) Auto-generate a UGC video ad for the top product that doesn't have one
+  //      yet, and create its PAUSED YouTube video campaign. Runs in this
+  //      background cycle (no HTTP timeout) — the right place for a 1-3 min
+  //      render. Capped at ONE per cycle to control Higgsfield credits.
+  if (cfg.autoVideo && isVideoConfigured()) {
+    try {
+      const eligible = advertisableListings(await getListings('active')) as any[];
+      const campaigns = (await listCampaigns()) as any[];
+      // Product keys that already have a video campaign ("Arbi Video - <title> …").
+      const stripVideo = (n: string) => String(n || '').replace(/^Arbi Video\s*-\s*/i, '').replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, '').trim();
+      const videoKeys = new Set(
+        campaigns.filter((c) => /^Arbi Video - /i.test(c.name || '')).map((c) => productCampaignKey(stripVideo(c.name)))
+      );
+      const next = eligible
+        .sort((a, b) => (Number(b.demandScore) || 0) - (Number(a.demandScore) || 0))
+        .find((l) => !videoKeys.has(productCampaignKey(String(l.productTitle || ''))));
+      if (next) {
+        logger.info(`🎬 AUTO_VIDEO: generating UGC video ad for "${next.productTitle}"`);
+        const r = await createVideoAdForListing(next);
+        logger.info(`🎬 AUTO_VIDEO: youtube=${r.youtube?.watchUrl ? 'ok' : 'none'} campaign=${r.videoCampaign?.status}${r.videoCampaign?.error ? ` (${r.videoCampaign.error})` : ''}`);
+      }
+    } catch (e: any) {
+      logger.error('🎬 AUTO_VIDEO error:', e?.message || e);
+    }
+  }
+
+  // 2.6) Take PAUSED video campaigns LIVE — launching the video ad is part of the
+  //      autonomous sequence (not just creating it). Gated by the same Auto
+  //      Go-Live spend switch, one per product, capped, advertisable-only. The
+  //      search go-live above only matches "Arbi - "; video campaigns are named
+  //      "Arbi Video - " and need their own pass.
+  if (cfg.autoGoLive) {
+    try {
+      const campaigns = (await listCampaigns()) as any[];
+      const cap = Math.max(Number(process.env.AUTO_GO_LIVE_VIDEO_MAX) || 3, 1);
+      const stripVideo = (n: string) => String(n || '').replace(/^Arbi Video\s*-\s*/i, '').replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, '').trim();
+      const videoKey = (n: string) => productCampaignKey(stripVideo(n));
+      // Products already serving a video ad — don't double-enable.
+      const liveVideoKeys = new Set(
+        campaigns.filter((c) => c.status === 'ENABLED' && /^Arbi Video - /i.test(c.name || '')).map((c) => videoKey(c.name))
+      );
+      const demandByKey = new Map<string, number>();
+      const advertisableKeys = new Set<string>();
+      const listingIdByKey = new Map<string, string>();
+      for (const l of (await getListings('active')) as any[]) {
+        const k = productCampaignKey(String(l.productTitle || ''));
+        if (!k) continue;
+        demandByKey.set(k, Math.max(demandByKey.get(k) || 0, Number(l.demandScore) || 0));
+        if (!listingIdByKey.has(k)) listingIdByKey.set(k, l.listingId);
+        if (isAdvertisable(l)) advertisableKeys.add(k);
+      }
+      const pausedVideo = campaigns
+        .filter((c) => c.status === 'PAUSED' && /^Arbi Video - /i.test(c.name || ''))
+        .sort((a, b) => (demandByKey.get(videoKey(b.name)) || 0) - (demandByKey.get(videoKey(a.name)) || 0));
+      const seen = new Set<string>();
+      let enabled = 0;
+      for (const c of pausedVideo) {
+        if (enabled >= cap) break;
+        const key = videoKey(c.name);
+        if (!key || liveVideoKeys.has(key) || seen.has(key)) continue;
+        if (!advertisableKeys.has(key)) { logger.info(`🎬 AUTO_VIDEO_GO_LIVE: skip ${c.name} — not advertisable`); continue; }
+        seen.add(key);
+        await setCampaignStatus(c.id, 'ENABLED');
+        const lid = listingIdByKey.get(key);
+        if (lid) updateVideoJob(lid, { stage: 'live', campaignId: c.id });
+        enabled++;
+        logger.info(`🎬 AUTO_VIDEO_GO_LIVE: enabled ${c.id} (${c.name})`);
+      }
+      if (enabled) logger.info(`🎬 AUTO_VIDEO_GO_LIVE: took ${enabled} video campaign(s) live this cycle (cap ${cap})`);
+    } catch (e: any) {
+      logger.error('🎬 AUTO_VIDEO_GO_LIVE error:', e?.message || e);
     }
   }
 
@@ -130,6 +249,28 @@ async function cycle(): Promise<void> {
   }
 }
 
+// Guard so overlapping triggers (interval + a dashboard toggle) don't run the
+// money-affecting cycle twice at once.
+let cycleRunning = false;
+
+/**
+ * Run a single engine pass right now (used when the dashboard toggles autonomy /
+ * Auto Go-Live, so go-live happens immediately instead of waiting up to a full
+ * interval). Respects the same settings gate as the scheduled cycle, and is
+ * a no-op while a cycle is already in flight. Fire-and-forget safe.
+ */
+export async function runCycleNow(): Promise<void> {
+  if (cycleRunning) return;
+  cycleRunning = true;
+  try {
+    await cycle();
+  } catch (e: any) {
+    logger.error('🤖 runCycleNow error:', e?.message || e);
+  } finally {
+    cycleRunning = false;
+  }
+}
+
 /**
  * Start the autonomous engine. No-op unless ENABLE_AUTONOMOUS=true, so deploying
  * this never spends money on its own.
@@ -140,6 +281,6 @@ export function startAutonomousEngine(): void {
   const minutes = Math.max(Number(process.env.AUTONOMOUS_INTERVAL_MIN) || 60, 15);
   const cfg = getAutonomousSettings();
   logger.info(`🤖 Autonomous engine armed — cycle every ${minutes}m (currently ${cfg.autonomous ? 'ON' : 'OFF'}; toggle from the dashboard)`);
-  setTimeout(() => { cycle().catch((e) => logger.error('🤖 cycle error:', e)); }, 30_000);
-  setInterval(() => { cycle().catch((e) => logger.error('🤖 cycle error:', e)); }, minutes * 60_000);
+  setTimeout(() => { void runCycleNow(); }, 30_000);
+  setInterval(() => { void runCycleNow(); }, minutes * 60_000);
 }

@@ -10,14 +10,14 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ApiError } from '../middleware/errorHandler';
 import { createTenant, getTenant, listTenants, setTenantAdAccount } from '../services/tenancy';
-import { provisionChildAccount, createBulkCampaigns, CampaignConfig } from '../services/google-ads/campaignAutomation';
+import { provisionChildAccount, createBulkCampaigns, DEFAULT_DAILY_BUDGET, CampaignConfig } from '../services/google-ads/campaignAutomation';
 import { getActiveProductsForAds } from './google-ads';
 
 const router = Router();
 
 // Conservative, new-account-safe defaults (matches the single-account quick-start).
 const TENANT_CAMPAIGN_CONFIG: CampaignConfig = {
-  dailyBudget: 20,
+  dailyBudget: DEFAULT_DAILY_BUDGET,
   targetROAS: 4.0,
   geoTargeting: ['US'],
   maxCPC: 1.5,

@@ -91,9 +91,15 @@ export function buildHooks(product: ProductAdData): string[] {
  * Build the 5-beat UGC video script (~22s total). Each beat carries a VO line
  * and a short on-screen caption; designed vertical, captioned, sound-optional.
  */
-export function buildScript(product: ProductAdData): ScriptBeat[] {
+export function buildScript(product: ProductAdData, reviewQuote?: string): ScriptBeat[] {
   const s = shortProductName(product.productName);
   const cat = meaningfulCategory(product.category) || 'product';
+  // Social proof converts hardest with a REAL, specific customer quote (not
+  // vague hype). Use an actual review when we have one; otherwise fall back.
+  const q = (reviewQuote || '').replace(/\s+/g, ' ').trim();
+  const proof: ScriptBeat = q
+    ? { part: 'proof', vo: `Real customer: "${q.slice(0, 120)}"`, onScreen: cap(`⭐⭐⭐⭐⭐ "${q.slice(0, 38)}"`, 50), seconds: 5 }
+    : { part: 'proof', vo: `Thousands of 5-star reviews, fast shipping, and easy returns.`, onScreen: cap(`⭐⭐⭐⭐⭐ loved by thousands`, 50), seconds: 5 };
   return [
     {
       part: 'hook',
@@ -113,12 +119,7 @@ export function buildScript(product: ProductAdData): ScriptBeat[] {
       onScreen: cap(`this ${s} actually delivers ✅`, 50),
       seconds: 6,
     },
-    {
-      part: 'proof',
-      vo: `Thousands of 5-star reviews, fast shipping, and easy returns.`,
-      onScreen: cap(`⭐⭐⭐⭐⭐ loved by thousands`, 50),
-      seconds: 5,
-    },
+    proof,
     {
       part: 'cta',
       vo: `Tap to grab yours before it sells out again.`,
@@ -140,8 +141,8 @@ export function buildPrimaryTexts(product: ProductAdData): string[] {
 /**
  * Assemble the full creative brief for a product.
  */
-export function buildCreativeBrief(product: ProductAdData): CreativeBrief {
-  const script = buildScript(product);
+export function buildCreativeBrief(product: ProductAdData, reviewQuote?: string): CreativeBrief {
+  const script = buildScript(product, reviewQuote);
   return {
     productId: product.productId,
     shortName: shortProductName(product.productName),

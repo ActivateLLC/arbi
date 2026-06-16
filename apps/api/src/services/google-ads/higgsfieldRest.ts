@@ -47,6 +47,56 @@ export interface RestResult {
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Robustly extract a video URL — Higgsfield's completed payload shape varies by
+ * model/version (video.url, results[].url, output.video_url, raw .mp4 string…).
+ * Missing the field would silently throw "no video" even on a SUCCESSFUL render,
+ * so we probe every common location and any nested *.mp4 URL as a last resort.
+ */
+export function findVideoUrl(d: any): string | undefined {
+  if (!d) return undefined;
+  const direct =
+    d.video?.url || d.video_url || (typeof d.video === 'string' ? d.video : undefined) ||
+    d.output?.video?.url || d.output?.url || d.output?.video_url ||
+    d.result?.video?.url || d.result?.url ||
+    (Array.isArray(d.results) ? (d.results[0]?.video?.url || d.results[0]?.url) : undefined) ||
+    (Array.isArray(d.videos) ? (d.videos[0]?.url || (typeof d.videos[0] === 'string' ? d.videos[0] : undefined)) : undefined) ||
+    (Array.isArray(d.assets) ? d.assets.find((a: any) => /\.mp4/i.test(a?.url || a?.type || ''))?.url : undefined) ||
+    (Array.isArray(d.outputs) ? (d.outputs[0]?.url || d.outputs[0]?.video?.url) : undefined);
+  if (direct) return direct;
+  try {
+    const m = JSON.stringify(d).match(/https?:\/\/[^"'\\\s]+\.(?:mp4|mov|webm)[^"'\\\s]*/i);
+    return m ? m[0] : undefined;
+  } catch { return undefined; }
+}
+
+function pickResult(d: any): RestResult {
+  return {
+    status: d?.status,
+    videoUrl: findVideoUrl(d),
+    imageUrl: Array.isArray(d?.images) ? d.images[0]?.url : undefined,
+    requestId: d?.request_id,
+  };
+}
+
+/** True for the transient "max concurrent requests (N) reached" 400 — retryable,
+ *  NOT a credit/auth failure, so callers should wait for a slot, not give up. */
+export function isConcurrencyLimitError(e: any): boolean {
+  const status = e?.response?.status;
+  const body = JSON.stringify(e?.response?.data || e?.message || '').toLowerCase();
+  return status === 400 && /concurrent request/.test(body);
+}
+
+/** Poll a queued render's status_url (or request id) once and return what we got
+ *  — used by the diagnostic to SEE the completed payload + the URL we extract. */
+export async function fetchRenderResult(statusUrlOrId: string): Promise<{ status?: string; videoUrl?: string; raw: any }> {
+  const auth = authHeader();
+  if (!auth) throw new Error('Higgsfield not configured (HF_API_KEY/HF_API_SECRET).');
+  const statusUrl = /^https?:\/\//i.test(statusUrlOrId) ? statusUrlOrId : `${BASE}/requests/${statusUrlOrId}/status`;
+  const r = await axios.get(statusUrl, { headers: { Authorization: auth, Accept: 'application/json' }, timeout: 20_000 });
+  return { status: r.data?.status, videoUrl: findVideoUrl(r.data), raw: r.data };
+}
+
+/**
  * Submit a generation to the documented REST API and wait for the result.
  * Polls status_url every `intervalMs` up to `timeoutMs` (video can take minutes).
  */
@@ -82,35 +132,26 @@ export async function submitAndWait(
   const url = `${BASE}/${modelId}${opts.webhookUrl ? `?hf_webhook=${encodeURIComponent(opts.webhookUrl)}` : ''}`;
   const headers = { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json' };
 
-  // Robustly extract a video URL — Higgsfield's completed payload shape varies by
-  // model/version (video.url, results[].url, output.video_url, raw .mp4 string…).
-  // Missing the field would silently throw "no video" even on a SUCCESSFUL render,
-  // so we probe every common location and any nested *.mp4 URL as a last resort.
-  const findVideoUrl = (d: any): string | undefined => {
-    if (!d) return undefined;
-    const direct =
-      d.video?.url || d.video_url || (typeof d.video === 'string' ? d.video : undefined) ||
-      d.output?.video?.url || d.output?.url || d.output?.video_url ||
-      d.result?.video?.url || d.result?.url ||
-      (Array.isArray(d.results) ? (d.results[0]?.video?.url || d.results[0]?.url) : undefined) ||
-      (Array.isArray(d.videos) ? (d.videos[0]?.url || (typeof d.videos[0] === 'string' ? d.videos[0] : undefined)) : undefined) ||
-      (Array.isArray(d.assets) ? d.assets.find((a: any) => /\.mp4/i.test(a?.url || a?.type || ''))?.url : undefined) ||
-      (Array.isArray(d.outputs) ? (d.outputs[0]?.url || d.outputs[0]?.video?.url) : undefined);
-    if (direct) return direct;
-    // Last resort: deep-scan for the first http(s) .mp4/.mov/.webm URL anywhere.
-    try {
-      const m = JSON.stringify(d).match(/https?:\/\/[^"'\\\s]+\.(?:mp4|mov|webm)[^"'\\\s]*/i);
-      return m ? m[0] : undefined;
-    } catch { return undefined; }
-  };
-  const pick = (d: any): RestResult => ({
-    status: d?.status,
-    videoUrl: findVideoUrl(d),
-    imageUrl: Array.isArray(d?.images) ? d.images[0]?.url : undefined,
-    requestId: d?.request_id,
-  });
+  const pick = pickResult;
 
-  const submit = await axios.post(url, args, { headers, timeout: 30_000 });
+  // SUBMIT with retry on the account's concurrency cap (HTTP 400 "max concurrent
+  // requests reached"). That's transient — a slot frees when an in-flight render
+  // finishes — so we wait and retry instead of failing the job. We keep retrying
+  // within the overall timeout budget so a queued product eventually gets a slot.
+  const deadline = Date.now() + timeoutMs;
+  let submit: any;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      submit = await axios.post(url, args, { headers, timeout: 30_000 });
+      break;
+    } catch (e: any) {
+      if (isConcurrencyLimitError(e) && Date.now() < deadline - 30_000) {
+        await sleep(Math.min(20_000, 5_000 + attempt * 5_000)); // back off, wait for a slot
+        continue;
+      }
+      throw e;
+    }
+  }
   let data = submit.data || {};
   // Some requests may already be complete on submit; otherwise poll status_url.
   if (data.status === 'completed') return pick(data);
@@ -120,7 +161,6 @@ export async function submitAndWait(
     return pick(data);
   }
 
-  const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     await sleep(intervalMs);
     const r = await axios.get(statusUrl, { headers, timeout: 20_000 });

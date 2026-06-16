@@ -21,7 +21,7 @@ import { getListings, getListing } from './marketplace';
 import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
-import { submitOnly, videoModelId } from '../services/google-ads/higgsfieldRest';
+import { submitOnly, videoModelId, fetchRenderResult } from '../services/google-ads/higgsfieldRest';
 import { listJobs as listVideoJobs, stageProgress } from '../services/google-ads/videoJobs';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
@@ -470,12 +470,39 @@ router.get('/video-diag', async (req: Request, res: Response) => {
     let working: string | null = null;
     for (const m of candidates) {
       const r = await submitOnly(m, args);
-      attempts.push({ modelId: m, ok: r.ok, httpStatus: r.httpStatus, status: r.status, error: r.error });
+      // Surface request_id + status_url so the result can be polled (see
+      // /video-diag-result) to confirm the render COMPLETES and yields a URL.
+      attempts.push({ modelId: m, ok: r.ok, httpStatus: r.httpStatus, status: r.status, request_id: r.request_id, status_url: r.data?.status_url, error: r.error });
       if (r.ok) { working = m; break; }
     }
-    res.json({ workingModelId: working, hint: working ? `Set HF_VIDEO_MODEL_ID=${working}` : 'No documented model accepted — check Higgsfield plan/credits', testedListing: listing.productTitle, attempts });
+    const last = attempts.find((a) => a.ok) || attempts[attempts.length - 1];
+    res.json({
+      workingModelId: working,
+      hint: working ? `Set HF_VIDEO_MODEL_ID=${working}` : 'No documented model accepted — check Higgsfield plan/credits',
+      testedListing: listing.productTitle,
+      pollResult: last?.request_id ? `/api/google-ads/video-diag-result?requestId=${encodeURIComponent(last.request_id)}` : undefined,
+      attempts,
+    });
   } catch (e: any) {
     res.json({ ok: false, stage: 'exception', error: e?.message || String(e) });
+  }
+});
+
+/**
+ * GET /api/google-ads/video-diag-result?requestId=…  (or ?statusUrl=…)
+ * Polls a queued render's status ONCE and returns the completed payload + the
+ * video URL we extract from it — so we can confirm the render finishes AND that
+ * our parser pulls the URL (the last mile of "why no video"). No new render, no
+ * extra credits — it just reads an already-submitted job.
+ */
+router.get('/video-diag-result', async (req: Request, res: Response) => {
+  try {
+    const id = String(req.query.statusUrl || req.query.requestId || '').trim();
+    if (!id) return res.json({ ok: false, error: 'Pass ?requestId=… (from /video-diag) or ?statusUrl=…' });
+    const r = await fetchRenderResult(id);
+    res.json({ ok: true, status: r.status, videoUrl: r.videoUrl, extracted: !!r.videoUrl, raw: r.raw });
+  } catch (e: any) {
+    res.json({ ok: false, error: e?.response?.data || e?.message || String(e) });
   }
 });
 

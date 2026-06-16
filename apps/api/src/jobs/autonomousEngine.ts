@@ -192,7 +192,10 @@ async function cycle(): Promise<void> {
         campaigns.filter((c) => /^Arbi Video - /i.test(c.name || '')).map((c) => productCampaignKey(stripVideo(c.name)))
       );
       const maxPerCycle = Math.max(Number(process.env.AUTO_VIDEO_MAX) || 4, 1);
-      const concurrency = Math.max(Number(process.env.AUTO_VIDEO_CONCURRENCY) || 2, 1);
+      // Higgsfield caps concurrent renders per account (observed: 4). Stay UNDER it
+      // (default 3) so engine renders don't 400 each other and a manual/diag render
+      // still has a slot. submitAndWait also retries the cap-limit 400 as backstop.
+      const concurrency = Math.max(Number(process.env.AUTO_VIDEO_CONCURRENCY) || 3, 1);
       // CREDIT SAFETY — render each product AT MOST ONCE. Skip anything that:
       //   • already has a persisted videoUrl (render succeeded before — survives
       //     restarts even if campaign creation later failed), OR

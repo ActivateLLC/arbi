@@ -19,6 +19,7 @@ import { createVideoCampaign, CampaignConfig, DEFAULT_DAILY_BUDGET } from './cam
 import { scoreVariations } from '../ai/viralityScorer';
 import { cjClient, isCJConfigured } from '../cjDropshipping';
 import { extractReviews } from '../cjSourcing';
+import { startJob, updateJob, failJob } from './videoJobs';
 
 export interface VideoAdResult {
   listingId: string;
@@ -36,49 +37,66 @@ export async function createVideoAdForListing(listing: any, opts?: { model?: any
   if (!imageUrl) throw new Error('Listing has no product image to animate.');
 
   const product = listingToProductAd(listing);
+  // Track the lifecycle so the Command Center can show a native, sequential
+  // status (queued → scripting → rendering → uploading → launching → ready/live).
+  startJob(listing.listingId, listing.productTitle || product.productName);
 
-  // 1) Best hook (virality-scored).
-  let bestHook: string | undefined;
-  let virality: VideoAdResult['virality'];
   try {
-    const hooks = buildHooks(product).slice(0, 5);
-    const scored = await scoreVariations(hooks.map((h) => ({ hook: h })));
-    bestHook = hooks[scored.bestIndex];
-    virality = { bestIndex: scored.bestIndex, source: scored.source, scores: scored.scores };
-  } catch { /* fall back to default brief hook */ }
+    // 1) Best hook (virality-scored).
+    updateJob(listing.listingId, { stage: 'scripting' });
+    let bestHook: string | undefined;
+    let virality: VideoAdResult['virality'];
+    try {
+      const hooks = buildHooks(product).slice(0, 5);
+      const scored = await scoreVariations(hooks.map((h) => ({ hook: h })));
+      bestHook = hooks[scored.bestIndex];
+      virality = { bestIndex: scored.bestIndex, source: scored.source, scores: scored.scores };
+    } catch { /* fall back to default brief hook */ }
 
-  // 2) Real CJ review for the social-proof beat.
-  let reviewQuote: string | undefined;
-  try {
-    if (listing.cjProductId && isCJConfigured()) {
-      const reviews = extractReviews(await cjClient.getProductReviews(listing.cjProductId));
-      reviewQuote = reviews.filter((r) => r.text && r.text.length > 12).sort((a, b) => b.rating - a.rating)[0]?.text;
-    } else if (Array.isArray(listing.reviews) && listing.reviews[0]?.text) {
-      reviewQuote = listing.reviews[0].text;
+    // 2) Real CJ review for the social-proof beat.
+    let reviewQuote: string | undefined;
+    try {
+      if (listing.cjProductId && isCJConfigured()) {
+        const reviews = extractReviews(await cjClient.getProductReviews(listing.cjProductId));
+        reviewQuote = reviews.filter((r) => r.text && r.text.length > 12).sort((a, b) => b.rating - a.rating)[0]?.text;
+      } else if (Array.isArray(listing.reviews) && listing.reviews[0]?.text) {
+        reviewQuote = listing.reviews[0].text;
+      }
+    } catch { /* fall back to generic proof line */ }
+
+    // 3) Render + host on YouTube.
+    updateJob(listing.listingId, { stage: 'rendering' });
+    const video = await generateProductVideo(product, imageUrl, { model: opts?.model, reviewQuote });
+    updateJob(listing.listingId, { stage: 'uploading', format: video.format });
+    const youtube = await uploadVideoToYouTube({
+      videoUrl: video.videoUrl,
+      title: (bestHook || product.productName).slice(0, 95),
+      description: bestHook || video.brief.hooks[0],
+    });
+
+    // Persist the YouTube URL on the listing so it's reviewable from the catalog
+    // (autonomously-generated videos need a home, not just a session link).
+    try { await updateListing(listing.listingId, { videoUrl: youtube.watchUrl } as any); } catch { /* non-fatal */ }
+    updateJob(listing.listingId, { videoUrl: youtube.watchUrl });
+
+    // 4) PAUSED video campaign (non-fatal). Go-live happens in the autonomous
+    //    sequence (AUTO_VIDEO_GO_LIVE) so the operator never has to tap YouTube.
+    updateJob(listing.listingId, { stage: 'launching' });
+    let videoCampaign: VideoAdResult['videoCampaign'];
+    try {
+      const cfg: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, geoTargeting: ['US'], maxCPC: 1.5 };
+      const created = await createVideoCampaign(product, youtube.videoId, cfg);
+      videoCampaign = { status: 'created_paused', campaignId: created.campaignId };
+      updateJob(listing.listingId, { stage: 'ready', campaignId: created.campaignId });
+    } catch (e: any) {
+      videoCampaign = { status: 'failed', error: e?.message || String(e) };
+      // The creative is rendered + hosted; only the campaign wiring failed.
+      updateJob(listing.listingId, { stage: 'ready' });
     }
-  } catch { /* fall back to generic proof line */ }
 
-  // 3) Render + host on YouTube.
-  const video = await generateProductVideo(product, imageUrl, { model: opts?.model, reviewQuote });
-  const youtube = await uploadVideoToYouTube({
-    videoUrl: video.videoUrl,
-    title: (bestHook || product.productName).slice(0, 95),
-    description: bestHook || video.brief.hooks[0],
-  });
-
-  // Persist the YouTube URL on the listing so it's reviewable from the catalog
-  // (autonomously-generated videos need a home, not just a session link).
-  try { await updateListing(listing.listingId, { videoUrl: youtube.watchUrl } as any); } catch { /* non-fatal */ }
-
-  // 4) PAUSED video campaign (non-fatal).
-  let videoCampaign: VideoAdResult['videoCampaign'];
-  try {
-    const cfg: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, geoTargeting: ['US'], maxCPC: 1.5 };
-    const created = await createVideoCampaign(product, youtube.videoId, cfg);
-    videoCampaign = { status: 'created_paused', campaignId: created.campaignId };
+    return { listingId: listing.listingId, sourceVideoUrl: video.videoUrl, youtube, virality, videoCampaign };
   } catch (e: any) {
-    videoCampaign = { status: 'failed', error: e?.message || String(e) };
+    failJob(listing.listingId, e?.message || String(e));
+    throw e;
   }
-
-  return { listingId: listing.listingId, sourceVideoUrl: video.videoUrl, youtube, virality, videoCampaign };
 }

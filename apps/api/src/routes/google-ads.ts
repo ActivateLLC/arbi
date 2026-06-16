@@ -22,6 +22,7 @@ import { buildCreativeBrief } from '../services/google-ads/adCreative';
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
 import { submitOnly, videoModelId } from '../services/google-ads/higgsfieldRest';
+import { listJobs as listVideoJobs, stageProgress } from '../services/google-ads/videoJobs';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
@@ -429,6 +430,16 @@ router.post('/youtube/upload-from-listing', async (req: Request, res: Response) 
     console.error('youtube/upload-from-listing failed:', error?.response?.data || error?.message || error);
     res.json({ success: false, error: error?.message || String(error) });
   }
+});
+
+/**
+ * GET /api/google-ads/video-jobs — the live UGC video lifecycle so the Command
+ * Center can show a native, sequential status (queued → scripting → rendering →
+ * uploading → launching → ready/live) for each product, no YouTube tab needed.
+ */
+router.get('/video-jobs', (_req: Request, res: Response) => {
+  const jobs = listVideoJobs().map((j) => ({ ...j, progress: stageProgress(j.stage) }));
+  res.json({ success: true, jobs, active: jobs.filter((j) => !['live', 'ready', 'failed'].includes(j.stage)).length });
 });
 
 /**

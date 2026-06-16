@@ -43,6 +43,7 @@ const BRAND_DENYLIST: RegExp[] = [
   /\bbreville\b/i, /\birobot\b/i, /\broomba\b/i, /\bcanon\b/i, /\bnikon\b/i,             // appliances/cameras
   /\bmeta quest\b/i, /\boculus\b/i, /\bkindle\b/i, /\blogitech\b/i, /\banker\b/i,        // devices
   /\bring (video )?doorbell\b/i, /\bgalaxy buds\b/i, /\bmacbook\b/i, /\bipad\b/i, /\biphone\b/i,
+  /\bray-?ban\b/i, /\binstant vortex\b/i, /\binstant pot\b/i, /\bvitamix\b/i, /\bcricut\b/i,
   // Internal test/QA junk that was seeded into the catalog.
   /^test\s*-/i, /google ads (integration|token verification)/i, /token verification/i,
 ];

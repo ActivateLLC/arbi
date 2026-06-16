@@ -57,13 +57,14 @@ router.get('/', async (_req: Request, res: Response) => {
   }
   const advertisable = listings.filter((l) => checkAdvertisable(l).ok);
 
-  // Leftover brand/trademark listings (old demo data) that can't be advertised.
-  const restricted = listings.filter((l) => isBrandRestricted(l.productTitle));
+  // Non-advertisable junk: brand/trademark OR placeholder/no-real-image seed/demo
+  // products (e.g. "Premium Espresso Machine", "Test - …") that can't be sold.
+  const restricted = listings.filter((l) => !checkAdvertisable(l).ok);
   if (restricted.length > 0) {
     alerts.push({
       id: 'restricted-products', severity: 'warning',
-      title: `${restricted.length} restricted product${restricted.length === 1 ? '' : 's'} can't be advertised`,
-      message: `Brand/trademark items (e.g. ${restricted.slice(0, 2).map((l) => l.productTitle.slice(0, 28)).join(', ')}…) can't be sourced or advertised. Remove them to keep your catalog clean.`,
+      title: `${restricted.length} product${restricted.length === 1 ? '' : 's'} can't be advertised`,
+      message: `Brand/trademark or placeholder/seed items (e.g. ${restricted.slice(0, 2).map((l) => l.productTitle.slice(0, 28)).join(', ')}…) can't be sold. Remove them to keep the catalog real.`,
       action: { label: 'Remove them', internal: 'purgeRestricted' },
     });
   }

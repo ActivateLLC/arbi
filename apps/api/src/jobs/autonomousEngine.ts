@@ -34,6 +34,7 @@ import { syncAdsToStock } from '../services/google-ads/stockSync';
 import { isAdvertisable, advertisableListings } from '../services/google-ads/advertisability';
 import { isConfigured as isVideoConfigured } from '../services/google-ads/higgsfieldVideo';
 import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
+import { updateJob as updateVideoJob } from '../services/google-ads/videoJobs';
 import { sourceTrendingFromCJ } from '../services/cjSourcing';
 import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../services/amazonSourcing';
 import { getAutonomousSettings } from '../services/autonomousSettings';
@@ -178,6 +179,54 @@ async function cycle(): Promise<void> {
       }
     } catch (e: any) {
       logger.error('🎬 AUTO_VIDEO error:', e?.message || e);
+    }
+  }
+
+  // 2.6) Take PAUSED video campaigns LIVE — launching the video ad is part of the
+  //      autonomous sequence (not just creating it). Gated by the same Auto
+  //      Go-Live spend switch, one per product, capped, advertisable-only. The
+  //      search go-live above only matches "Arbi - "; video campaigns are named
+  //      "Arbi Video - " and need their own pass.
+  if (cfg.autoGoLive) {
+    try {
+      const campaigns = (await listCampaigns()) as any[];
+      const cap = Math.max(Number(process.env.AUTO_GO_LIVE_VIDEO_MAX) || 3, 1);
+      const stripVideo = (n: string) => String(n || '').replace(/^Arbi Video\s*-\s*/i, '').replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, '').trim();
+      const videoKey = (n: string) => productCampaignKey(stripVideo(n));
+      // Products already serving a video ad — don't double-enable.
+      const liveVideoKeys = new Set(
+        campaigns.filter((c) => c.status === 'ENABLED' && /^Arbi Video - /i.test(c.name || '')).map((c) => videoKey(c.name))
+      );
+      const demandByKey = new Map<string, number>();
+      const advertisableKeys = new Set<string>();
+      const listingIdByKey = new Map<string, string>();
+      for (const l of (await getListings('active')) as any[]) {
+        const k = productCampaignKey(String(l.productTitle || ''));
+        if (!k) continue;
+        demandByKey.set(k, Math.max(demandByKey.get(k) || 0, Number(l.demandScore) || 0));
+        if (!listingIdByKey.has(k)) listingIdByKey.set(k, l.listingId);
+        if (isAdvertisable(l)) advertisableKeys.add(k);
+      }
+      const pausedVideo = campaigns
+        .filter((c) => c.status === 'PAUSED' && /^Arbi Video - /i.test(c.name || ''))
+        .sort((a, b) => (demandByKey.get(videoKey(b.name)) || 0) - (demandByKey.get(videoKey(a.name)) || 0));
+      const seen = new Set<string>();
+      let enabled = 0;
+      for (const c of pausedVideo) {
+        if (enabled >= cap) break;
+        const key = videoKey(c.name);
+        if (!key || liveVideoKeys.has(key) || seen.has(key)) continue;
+        if (!advertisableKeys.has(key)) { logger.info(`🎬 AUTO_VIDEO_GO_LIVE: skip ${c.name} — not advertisable`); continue; }
+        seen.add(key);
+        await setCampaignStatus(c.id, 'ENABLED');
+        const lid = listingIdByKey.get(key);
+        if (lid) updateVideoJob(lid, { stage: 'live', campaignId: c.id });
+        enabled++;
+        logger.info(`🎬 AUTO_VIDEO_GO_LIVE: enabled ${c.id} (${c.name})`);
+      }
+      if (enabled) logger.info(`🎬 AUTO_VIDEO_GO_LIVE: took ${enabled} video campaign(s) live this cycle (cap ${cap})`);
+    } catch (e: any) {
+      logger.error('🎬 AUTO_VIDEO_GO_LIVE error:', e?.message || e);
     }
   }
 

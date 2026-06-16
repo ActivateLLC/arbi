@@ -7,7 +7,7 @@ import { adCampaignManager } from '../services/adCampaigns';
 import { imageScraper } from '../services/imageScraper';
 // import { requireApiKey } from '../middleware/apiAuth'; // Optional: Uncomment to require API key authentication
 import { createListingSchema, checkoutSchema, validateSchema } from '../schemas/marketplace';
-import { isBrandRestricted } from '../services/google-ads/advertisability';
+import { isBrandRestricted, checkAdvertisable } from '../services/google-ads/advertisability';
 
 const router = Router();
 
@@ -698,7 +698,14 @@ async function handlePurgeRestricted(req: Request, res: Response) {
   // ?preview=1 / {preview:true} is set.
   const preview = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
   const active = await getListings('active');
-  const restricted = active.filter((l) => isBrandRestricted(l.productTitle));
+  // Expire anything NOT advertisable — brand/trademark, placeholder/no real
+  // image (seed/demo junk like "Premium Espresso Machine", "Test - …"), no real
+  // supplier, etc. Real CJ products (real image + variant id) are kept. This is
+  // the comprehensive "remove anything that isn't a real sellable product" sweep.
+  const restricted = active.filter((l) => {
+    const g = checkAdvertisable(l);
+    return !g.ok;
+  });
 
   if (!preview) {
     for (const l of restricted) {
@@ -713,7 +720,7 @@ async function handlePurgeRestricted(req: Request, res: Response) {
     matched: restricted.length,
     expired: preview ? 0 : restricted.length,
     hint: preview ? 'This was a dry run. Send a POST (no ?preview) to actually expire these.' : undefined,
-    listings: restricted.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle })),
+    listings: restricted.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle, reason: checkAdvertisable(l).reason })),
   });
 }
 

@@ -3,7 +3,7 @@ import { GovernorConfig } from '../autonomousSettings';
 
 const G: GovernorConfig = {
   targetRoas: 3, minDailyBudget: 5, maxDailyBudget: 200,
-  maxStepPct: 0.2, accountMaxDailySpend: 100, minSpendToAct: 20, staleHours: 26,
+  maxStepPct: 0.2, minStepPct: 0.05, accountMaxDailySpend: 100, minSpendToAct: 20, staleHours: 26,
 };
 
 const winner = (over: any = {}) => ({ id: 'w', name: 'W', status: 'ENABLED', budgetResource: 'b/w', dailyBudget: 50, spend: 100, conversions: 5, revenue: 400, ...over });
@@ -46,5 +46,20 @@ describe('profit governor — planBudgets', () => {
   it('ignores non-ENABLED campaigns', () => {
     const plan = planBudgets([{ ...winner(), status: 'PAUSED' }], G);
     expect(plan.items.length).toBe(0);
+  });
+
+  it('CONFIDENCE-SCALED authority: thin data ⇒ small step, rich data ⇒ full step', () => {
+    const Ghead = { ...G, accountMaxDailySpend: 10000 }; // headroom so the cap isn't the binding constraint
+    // Barely over the act thresholds → near minStepPct (timid).
+    const thin = winner({ id: 't', budgetResource: 'b/t', dailyBudget: 100, spend: 20, conversions: 2, revenue: 80 });
+    const thinStep = (planBudgets([thin], Ghead).items[0].toBudget - 100) / 100;
+    expect(thinStep).toBeGreaterThan(0);
+    expect(thinStep).toBeLessThan(0.12); // well under the 20% max — earns little authority
+
+    // Lots of proven data → full maxStepPct.
+    const rich = winner({ id: 'r', budgetResource: 'b/r', dailyBudget: 100, spend: 300, conversions: 30, revenue: 1200 });
+    const richStep = (planBudgets([rich], Ghead).items[0].toBudget - 100) / 100;
+    expect(richStep).toBeGreaterThan(thinStep);
+    expect(richStep).toBeCloseTo(0.2, 1); // ramps to the configured max
   });
 });

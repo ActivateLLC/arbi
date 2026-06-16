@@ -18,8 +18,9 @@ export interface GovernorConfig {
   targetRoas: number;            // scale at/above this ROAS
   minDailyBudget: number;        // per-campaign floor
   maxDailyBudget: number;        // per-campaign ceiling
-  maxStepPct: number;            // max % budget change per cycle (ramp, not lurch)
-  accountMaxDailySpend: number;  // HARD global daily-spend cap
+  maxStepPct: number;            // MAX % budget change per cycle once data is rich
+  minStepPct: number;            // MIN % step when data is thin (authority floor)
+  accountMaxDailySpend: number;  // global daily-spend target (sum of campaign budgets)
   minSpendToAct: number;         // learning floor
   staleHours: number;            // metrics older than this => no scale-ups
 }
@@ -42,6 +43,7 @@ export const DEFAULT_GOVERNOR: GovernorConfig = {
   minDailyBudget: num('OPTIMIZER_MIN_BUDGET', 5),
   maxDailyBudget: num('OPTIMIZER_MAX_BUDGET', 200),
   maxStepPct: num('GOVERNOR_MAX_STEP_PCT', 0.2),
+  minStepPct: num('GOVERNOR_MIN_STEP_PCT', 0.05),
   accountMaxDailySpend: num('GOVERNOR_ACCOUNT_MAX_DAILY', 500),
   minSpendToAct: num('OPTIMIZER_MIN_SPEND', 20),
   staleHours: num('GOVERNOR_STALE_HOURS', 26),
@@ -61,7 +63,11 @@ let settings: AutonomousSettings = {
   autoGoLive: envFlag('AUTO_GO_LIVE'),
   optimize: envFlag('AUTO_OPTIMIZE', true),
   autoVideo: envFlag('AUTO_VIDEO'),
-  profitGovernor: envFlag('PROFIT_GOVERNOR'),
+  // Always-on by default: the governor is the optimizer PLUS strictly-tighter
+  // guardrails (account cap + ramp), and its authority scales with data confidence
+  // (near-passive when data is thin), so it's safe baked in. PROFIT_GOVERNOR=false
+  // is the hidden emergency brake that reverts to the bare optimizer.
+  profitGovernor: envFlag('PROFIT_GOVERNOR', true),
   learningRank: envFlag('LEARNING_RANK'),
   governor: { ...DEFAULT_GOVERNOR },
 };

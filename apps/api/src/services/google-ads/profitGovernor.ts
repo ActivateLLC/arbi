@@ -51,18 +51,29 @@ export function planBudgets(campaigns: any[], g: GovernorConfig = DEFAULT_GOVERN
   for (const c of campaigns) {
     if (c.status !== 'ENABLED') continue;
     const from = Number(c.dailyBudget) || 0;
+    const spend = Number(c.spend) || 0;
+    const conversions = Number(c.conversions) || 0;
     const d = decideCampaignAction(
-      { status: c.status, spend: Number(c.spend) || 0, conversions: Number(c.conversions) || 0, revenue: Number(c.revenue) || 0, dailyBudget: from },
+      { status: c.status, spend, conversions, revenue: Number(c.revenue) || 0, dailyBudget: from },
       cfg
     );
+    // CONFIDENCE-SCALED AUTHORITY: the more proven the data, the bigger a step the
+    // governor may take. Thin data ⇒ near minStepPct (timid); rich data ⇒ maxStepPct.
+    // "Rich" = ~5× the act thresholds. This makes always-on safe: it can't move
+    // budgets aggressively until the evidence justifies it.
+    const richSpend = g.minSpendToAct * 5;
+    const richConv = DEFAULT_OPTIMIZATION_CONFIG.minConversionsToScale * 5;
+    const dataConfidence = clamp(Math.min(spend / (richSpend || 1), conversions / (richConv || 1)), 0, 1);
+    const effStep = g.minStepPct + (g.maxStepPct - g.minStepPct) * dataConfidence;
     let action = d.action as GovernorPlanItem['action'];
     let to = from;
     if (action === 'pause') {
       to = from; // budget unchanged; status will be paused
     } else if ((action === 'scale' || action === 'reduce') && typeof d.newBudget === 'number') {
-      // Ramp clamp: never move more than maxStepPct in a single cycle.
-      const ramped = clamp(d.newBudget, from * (1 - g.maxStepPct), from * (1 + g.maxStepPct));
+      // Ramp clamp by the CONFIDENCE-SCALED step (not the raw max).
+      const ramped = clamp(d.newBudget, from * (1 - effStep), from * (1 + effStep));
       to = round2(clamp(ramped, g.minDailyBudget, g.maxDailyBudget));
+      if (round2(to) === round2(from)) action = 'hold';
     }
     // Stale/missing data: forbid increases (fail toward not spending). Reductions/pauses stay.
     if (!allowIncreases && to > from) { to = from; action = 'hold'; }

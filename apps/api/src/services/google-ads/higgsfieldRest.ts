@@ -27,15 +27,17 @@ function authHeader(): string {
 }
 
 /**
- * The documented model_id for product image-to-video. Defaults to Higgsfield's
- * native DoP Standard (cinematic camera motion, matches our motion prompt).
- * Override via HF_VIDEO_MODEL_ID to switch models, e.g.:
- *   higgsfield-ai/dop/standard            (default, Higgsfield DoP)
- *   kling-video/v2.1/pro/image-to-video   (Kling 2.1 Pro)
- *   bytedance/seedance/v1/pro/image-to-video (Seedance 1.0 Pro — product/identity)
+ * The documented model_id for product image-to-video. Defaults to ByteDance
+ * Seedance 1.0 Pro — #1 on the image-to-video leaderboard (beats Veo 3 / Kling
+ * 2.0 by 100+ pts on I2V), built for short-form, with strong stability +
+ * identity consistency: the best evidence-backed pick for product ad clips.
+ * Override via HF_VIDEO_MODEL_ID, e.g.:
+ *   bytedance/seedance/v1/pro/image-to-video (default — best for our case)
+ *   kling-video/v2.1/pro/image-to-video      (Kling 2.1 — motion-hero/fabric/liquid)
+ *   higgsfield-ai/dop/standard               (Higgsfield DoP — cinematic camera)
  */
 export function videoModelId(): string {
-  return (process.env.HF_VIDEO_MODEL_ID || 'higgsfield-ai/dop/standard').trim();
+  return (process.env.HF_VIDEO_MODEL_ID || 'bytedance/seedance/v1/pro/image-to-video').trim();
 }
 
 export interface RestResult {

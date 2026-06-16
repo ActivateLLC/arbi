@@ -22,6 +22,8 @@ import { buildCreativeBrief, buildHooks } from '../services/google-ads/adCreativ
 import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
 import { uploadVideoToYouTube } from '../services/google-ads/youtubeUpload';
 import { scoreVariations } from '../services/ai/viralityScorer';
+import { cjClient, isCJConfigured } from '../services/cjDropshipping';
+import { extractReviews } from '../services/cjSourcing';
 import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
@@ -432,15 +434,28 @@ router.post('/youtube/upload-from-listing', async (req: Request, res: Response, 
       virality = { bestIndex: scored.bestIndex, source: scored.source, scores: scored.scores, candidates: hooks };
     } catch { /* non-fatal — fall back to the default brief hook */ }
 
-    // 2) Render the winning creative and host it on YouTube.
-    const video = await generateProductVideo(product, imageUrl, { model });
+    // 2) Pull a real CJ supplier review (highest-rated) to use as the social-
+    //    proof beat — concrete reviews convert far better than vague hype.
+    let reviewQuote: string | undefined;
+    try {
+      if (listing.cjProductId && isCJConfigured()) {
+        const reviews = extractReviews(await cjClient.getProductReviews(listing.cjProductId));
+        const best = reviews.filter(r => r.text && r.text.length > 12).sort((a, b) => b.rating - a.rating)[0];
+        reviewQuote = best?.text;
+      } else if (Array.isArray(listing.reviews) && listing.reviews[0]?.text) {
+        reviewQuote = listing.reviews[0].text;
+      }
+    } catch { /* non-fatal — fall back to generic proof line */ }
+
+    // 3) Render the winning creative (with the real review baked in) and host it.
+    const video = await generateProductVideo(product, imageUrl, { model, reviewQuote });
     const youtube = await uploadVideoToYouTube({
       videoUrl: video.videoUrl,
       title: (bestHook || product.productName).slice(0, 95),
       description: bestHook || video.brief.hooks[0],
     });
 
-    // 3) Create a PAUSED Google Ads VIDEO campaign for it (no spend until go-live).
+    // 4) Create a PAUSED Google Ads VIDEO campaign for it (no spend until go-live).
     //    Non-fatal: the video is already on YouTube even if campaign creation fails.
     let videoCampaign: any = null;
     try {

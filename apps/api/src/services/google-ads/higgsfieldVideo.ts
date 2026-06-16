@@ -99,10 +99,11 @@ export interface GeneratedVideo {
 export async function generateProductVideo(
   product: ProductAdData,
   imageUrl: string,
-  opts?: { model?: 'dop-lite' | 'dop-turbo' | 'dop-standard' }
+  opts?: { model?: 'dop-lite' | 'dop-turbo' | 'dop-standard'; reviewQuote?: string }
 ): Promise<GeneratedVideo> {
   if (!imageUrl) throw new Error('A product image URL is required to generate a video.');
-  const brief = buildCreativeBrief(product);
+  // Use a REAL customer review as the social-proof beat when available.
+  const brief = buildCreativeBrief(product, opts?.reviewQuote);
   // Pick the ad format from the product type so the creative matches the product
   // (try-on for apparel, unboxing for gadgets, demo for tools, review for jewelry).
   const format = pickAdFormat(product.productName, product.category);

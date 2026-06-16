@@ -46,6 +46,11 @@ const BRAND_DENYLIST: RegExp[] = [
   /\bray-?ban\b/i, /\binstant vortex\b/i, /\binstant pot\b/i, /\bvitamix\b/i, /\bcricut\b/i,
   // Internal test/QA junk that was seeded into the catalog.
   /^test\s*-/i, /google ads (integration|token verification)/i, /token verification/i,
+  // Hardcoded demo/seed products (repo campaign-assets / mock arrays) that keep
+  // reappearing — no real CJ supplier, can't be fulfilled, must never advertise.
+  /electric standing desk pro/i, /4k smart home security/i, /premium espresso machine/i,
+  /barista edition/i, /robot vacuum.*lidar/i, /herman miller/i, /ergonomic office chair/i,
+  /security system.*\d+\s*cam/i,
 ];
 
 const RESOLVER_OR_PLACEHOLDER = /\/(api\/)?product-image\/|example\.(com|org|net)|placeholder|via\.placeholder|dummyimage/i;
@@ -60,6 +65,10 @@ function hasRealSupplierUrl(url?: string): boolean {
   const u = (url || '').trim();
   if (!/^https?:\/\//i.test(u)) return false;
   if (PLACEHOLDER_HOST.test(u)) return false;
+  // A supplier URL pointing at our OWN storefront isn't a real supplier — these
+  // are seed/demo rows (e.g. arbi.creai.dev/product/espresso-machine-pro). You
+  // can't dropship from yourself, so this is a placeholder, not a real source.
+  if (/creai\.dev/i.test(u)) return false;
   return true;
 }
 

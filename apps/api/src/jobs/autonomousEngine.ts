@@ -30,12 +30,12 @@ import {
   CampaignConfig,
 } from '../services/google-ads/campaignAutomation';
 import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
-import { enforceAdvertisable } from '../services/google-ads/campaignCleanup';
+import { enforceAdvertisable, cleanupCampaigns } from '../services/google-ads/campaignCleanup';
 import { syncAdsToStock } from '../services/google-ads/stockSync';
 import { isAdvertisable, advertisableListings } from '../services/google-ads/advertisability';
 import { isConfigured as isVideoConfigured } from '../services/google-ads/higgsfieldVideo';
 import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
-import { updateJob as updateVideoJob } from '../services/google-ads/videoJobs';
+import { updateJob as updateVideoJob, getJob as getVideoJob } from '../services/google-ads/videoJobs';
 import { sourceTrendingFromCJ } from '../services/cjSourcing';
 import { sourceTrendingFromAmazon, isAmazonSourcingConfigured } from '../services/amazonSourcing';
 import { getAutonomousSettings } from '../services/autonomousSettings';
@@ -104,6 +104,11 @@ async function cycle(): Promise<void> {
     if (h.expiredListings || h.pausedCampaigns) {
       logger.info(`🧹 HYGIENE: expired ${h.expiredListings} non-advertisable listing(s), paused ${h.pausedCampaigns} campaign(s)`);
     }
+    // Also REMOVE brand/trademark + duplicate campaigns (e.g. the leftover
+    // "Arbi - Apple AirPods Pro 2" and the many duplicate "Infinity Love …")
+    // so the account self-cleans instead of waiting for a manual "Clean up".
+    const cc = await cleanupCampaigns({ dryRun: false });
+    if (cc.removed) logger.info(`🧹 HYGIENE: removed ${cc.removed} brand/duplicate campaign(s); de-duped ${cc.expiredListings} listing(s)`);
   } catch (e: any) {
     logger.error('🧹 HYGIENE error:', e?.message || e);
   }
@@ -171,10 +176,12 @@ async function cycle(): Promise<void> {
     }
   }
 
-  // 2.5) Auto-generate a UGC video ad for the top product that doesn't have one
-  //      yet, and create its PAUSED YouTube video campaign. Runs in this
-  //      background cycle (no HTTP timeout) — the right place for a 1-3 min
-  //      render. Capped at ONE per cycle to control Higgsfield credits.
+  // 2.5) Auto-generate UGC video ads for ALL advertisable products that don't
+  //      have one yet — rendered SIMULTANEOUSLY (bounded concurrency) so the
+  //      operator sees several "rendering" at once, not one trickling per cycle.
+  //      Runs in this background cycle (no HTTP timeout) — the right place for a
+  //      1-3 min render. AUTO_VIDEO_CONCURRENCY caps parallel renders (credits/
+  //      rate limits); AUTO_VIDEO_MAX caps how many we kick off per cycle.
   if (cfg.autoVideo && isVideoConfigured()) {
     try {
       const eligible = advertisableListings(await getListings('active')) as any[];
@@ -184,13 +191,40 @@ async function cycle(): Promise<void> {
       const videoKeys = new Set(
         campaigns.filter((c) => /^Arbi Video - /i.test(c.name || '')).map((c) => productCampaignKey(stripVideo(c.name)))
       );
-      const next = eligible
+      const maxPerCycle = Math.max(Number(process.env.AUTO_VIDEO_MAX) || 4, 1);
+      const concurrency = Math.max(Number(process.env.AUTO_VIDEO_CONCURRENCY) || 2, 1);
+      // CREDIT SAFETY — render each product AT MOST ONCE. Skip anything that:
+      //   • already has a persisted videoUrl (render succeeded before — survives
+      //     restarts even if campaign creation later failed), OR
+      //   • already has an "Arbi Video -" campaign, OR
+      //   • already has an in-memory job (attempted this process — don't re-kick a
+      //     timed-out/failed render every cycle and burn Higgsfield credits).
+      // Top demand ("most viral") first.
+      const queue = eligible
         .sort((a, b) => (Number(b.demandScore) || 0) - (Number(a.demandScore) || 0))
-        .find((l) => !videoKeys.has(productCampaignKey(String(l.productTitle || ''))));
-      if (next) {
-        logger.info(`🎬 AUTO_VIDEO: generating UGC video ad for "${next.productTitle}"`);
-        const r = await createVideoAdForListing(next);
-        logger.info(`🎬 AUTO_VIDEO: youtube=${r.youtube?.watchUrl ? 'ok' : 'none'} campaign=${r.videoCampaign?.status}${r.videoCampaign?.error ? ` (${r.videoCampaign.error})` : ''}`);
+        .filter((l) =>
+          !l.videoUrl &&
+          !videoKeys.has(productCampaignKey(String(l.productTitle || ''))) &&
+          !getVideoJob(l.listingId)
+        )
+        .slice(0, maxPerCycle);
+
+      if (queue.length) {
+        logger.info(`🎬 AUTO_VIDEO: rendering ${queue.length} UGC video ad(s) simultaneously (concurrency ${concurrency})`);
+        // Bounded-parallel worker pool: `concurrency` renders in flight at once.
+        let idx = 0;
+        const worker = async (): Promise<void> => {
+          while (idx < queue.length) {
+            const listing = queue[idx++];
+            try {
+              const r = await createVideoAdForListing(listing);
+              logger.info(`🎬 AUTO_VIDEO "${listing.productTitle}": youtube=${r.youtube?.watchUrl ? 'ok' : 'none'} campaign=${r.videoCampaign?.status}${r.videoCampaign?.error ? ` (${r.videoCampaign.error})` : ''}`);
+            } catch (e: any) {
+              logger.error(`🎬 AUTO_VIDEO "${listing.productTitle}" failed:`, e?.message || e);
+            }
+          }
+        };
+        await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, () => worker()));
       }
     } catch (e: any) {
       logger.error('🎬 AUTO_VIDEO error:', e?.message || e);

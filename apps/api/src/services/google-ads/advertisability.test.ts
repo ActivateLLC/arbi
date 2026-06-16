@@ -35,7 +35,19 @@ describe('advertisability gate', () => {
     expect(air.reason).toMatch(/brand|trademark/i);
     expect(isAdvertisable({ ...base, productTitle: 'Nintendo Switch OLED Model White', cjVariantId: 'vid_1' })).toBe(false);
     // A generic product with no brand still passes.
-    expect(isAdvertisable({ ...base, productTitle: 'Electric Standing Desk Pro 72 inch', cjVariantId: 'vid_1' })).toBe(true);
+    expect(isAdvertisable({ ...base, productTitle: 'Anti-Cellulite Scrunch Leggings', cjVariantId: 'vid_1' })).toBe(true);
+  });
+
+  it('rejects the hardcoded demo/seed products that keep reappearing', () => {
+    for (const title of ['Premium Espresso Machine - Barista Edition 15 Bar', 'Electric Standing Desk Pro 72" - Dual Motor', '4K Smart Home Security System (8 Cameras + NVR)', 'Robot Vacuum & Mop Combo - LiDAR Navigation']) {
+      expect(isAdvertisable({ ...base, productTitle: title, cjVariantId: 'vid_1' })).toBe(false);
+    }
+  });
+
+  it('rejects a self-referential supplier URL (our own storefront is not a supplier)', () => {
+    const r = checkAdvertisable({ ...base, productTitle: 'Generic Gadget', supplierUrl: 'https://arbi.creai.dev/product/espresso-machine-pro' });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toMatch(/supplier/i);
   });
 
   it('rejects out-of-stock listings', () => {

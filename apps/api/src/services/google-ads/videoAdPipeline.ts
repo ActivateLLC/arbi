@@ -64,34 +64,51 @@ export async function createVideoAdForListing(listing: any, opts?: { model?: any
       }
     } catch { /* fall back to generic proof line */ }
 
-    // 3) Render + host on YouTube.
+    // 3) RENDER the video (the expensive Higgsfield step).
     updateJob(listing.listingId, { stage: 'rendering' });
     const video = await generateProductVideo(product, imageUrl, { model: opts?.model, reviewQuote });
-    updateJob(listing.listingId, { stage: 'uploading', format: video.format });
-    const youtube = await uploadVideoToYouTube({
-      videoUrl: video.videoUrl,
-      title: (bestHook || product.productName).slice(0, 95),
-      description: bestHook || video.brief.hooks[0],
-    });
 
-    // Persist the YouTube URL on the listing so it's reviewable from the catalog
-    // (autonomously-generated videos need a home, not just a session link).
-    try { await updateListing(listing.listingId, { videoUrl: youtube.watchUrl } as any); } catch { /* non-fatal */ }
-    updateJob(listing.listingId, { videoUrl: youtube.watchUrl });
+    // PERSIST THE RAW RENDER IMMEDIATELY — this is the bare-minimum success: a
+    // reviewable UGC video. We save it BEFORE YouTube/campaign so a failure in
+    // those later (auth/scope/quota) can never throw away a video that already
+    // rendered. "Video ready / review" must appear the moment the render lands.
+    try { await updateListing(listing.listingId, { videoUrl: video.videoUrl } as any); } catch { /* non-fatal */ }
+    updateJob(listing.listingId, { stage: 'uploading', format: video.format, videoUrl: video.videoUrl });
 
-    // 4) PAUSED video campaign (non-fatal). Go-live happens in the autonomous
-    //    sequence (AUTO_VIDEO_GO_LIVE) so the operator never has to tap YouTube.
+    // 3b) Host on YouTube — NON-FATAL. If it fails, the raw render is still the
+    //     reviewable video; we just can't create a YouTube ad campaign for it.
+    let youtube: VideoAdResult['youtube'];
+    try {
+      youtube = await uploadVideoToYouTube({
+        videoUrl: video.videoUrl,
+        title: (bestHook || product.productName).slice(0, 95),
+        description: bestHook || video.brief.hooks[0],
+      });
+      // Prefer the YouTube watch URL for review once hosted.
+      try { await updateListing(listing.listingId, { videoUrl: youtube.watchUrl } as any); } catch { /* non-fatal */ }
+      updateJob(listing.listingId, { videoUrl: youtube.watchUrl });
+    } catch (e: any) {
+      // Keep the raw render as the reviewable video; surface why YouTube failed.
+      youtube = undefined;
+    }
+
+    // 4) PAUSED video campaign — needs a YouTube video id, so skip cleanly if the
+    //    upload failed. Go-live happens in the autonomous sequence. Non-fatal.
     updateJob(listing.listingId, { stage: 'launching' });
     let videoCampaign: VideoAdResult['videoCampaign'];
-    try {
-      const cfg: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, geoTargeting: ['US'], maxCPC: 1.5 };
-      const created = await createVideoCampaign(product, youtube.videoId, cfg);
-      videoCampaign = { status: 'created_paused', campaignId: created.campaignId };
-      updateJob(listing.listingId, { stage: 'ready', campaignId: created.campaignId });
-    } catch (e: any) {
-      videoCampaign = { status: 'failed', error: e?.message || String(e) };
-      // The creative is rendered + hosted; only the campaign wiring failed.
-      updateJob(listing.listingId, { stage: 'ready' });
+    if (youtube?.videoId) {
+      try {
+        const cfg: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, geoTargeting: ['US'], maxCPC: 1.5 };
+        const created = await createVideoCampaign(product, youtube.videoId, cfg);
+        videoCampaign = { status: 'created_paused', campaignId: created.campaignId };
+        updateJob(listing.listingId, { stage: 'ready', campaignId: created.campaignId });
+      } catch (e: any) {
+        videoCampaign = { status: 'failed', error: e?.message || String(e) };
+        updateJob(listing.listingId, { stage: 'ready' }); // creative is rendered + hosted
+      }
+    } else {
+      videoCampaign = { status: 'failed', error: 'YouTube upload failed — video rendered and reviewable, but no YouTube id for an ad campaign.' };
+      updateJob(listing.listingId, { stage: 'ready' }); // raw render is reviewable
     }
 
     return { listingId: listing.listingId, sourceVideoUrl: video.videoUrl, youtube, virality, videoCampaign };

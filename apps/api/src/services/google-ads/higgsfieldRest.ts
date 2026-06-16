@@ -76,15 +76,36 @@ export async function submitAndWait(
 ): Promise<RestResult> {
   const auth = authHeader();
   if (!auth) throw new Error('Higgsfield not configured (HF_API_KEY/HF_API_SECRET).');
-  const timeoutMs = opts.timeoutMs ?? 5 * 60_000;
+  const timeoutMs = opts.timeoutMs ?? Math.max(Number(process.env.HF_RENDER_TIMEOUT_MS) || 8 * 60_000, 60_000);
   const intervalMs = opts.intervalMs ?? 4_000;
 
   const url = `${BASE}/${modelId}${opts.webhookUrl ? `?hf_webhook=${encodeURIComponent(opts.webhookUrl)}` : ''}`;
   const headers = { Authorization: auth, 'Content-Type': 'application/json', Accept: 'application/json' };
 
+  // Robustly extract a video URL — Higgsfield's completed payload shape varies by
+  // model/version (video.url, results[].url, output.video_url, raw .mp4 string…).
+  // Missing the field would silently throw "no video" even on a SUCCESSFUL render,
+  // so we probe every common location and any nested *.mp4 URL as a last resort.
+  const findVideoUrl = (d: any): string | undefined => {
+    if (!d) return undefined;
+    const direct =
+      d.video?.url || d.video_url || (typeof d.video === 'string' ? d.video : undefined) ||
+      d.output?.video?.url || d.output?.url || d.output?.video_url ||
+      d.result?.video?.url || d.result?.url ||
+      (Array.isArray(d.results) ? (d.results[0]?.video?.url || d.results[0]?.url) : undefined) ||
+      (Array.isArray(d.videos) ? (d.videos[0]?.url || (typeof d.videos[0] === 'string' ? d.videos[0] : undefined)) : undefined) ||
+      (Array.isArray(d.assets) ? d.assets.find((a: any) => /\.mp4/i.test(a?.url || a?.type || ''))?.url : undefined) ||
+      (Array.isArray(d.outputs) ? (d.outputs[0]?.url || d.outputs[0]?.video?.url) : undefined);
+    if (direct) return direct;
+    // Last resort: deep-scan for the first http(s) .mp4/.mov/.webm URL anywhere.
+    try {
+      const m = JSON.stringify(d).match(/https?:\/\/[^"'\\\s]+\.(?:mp4|mov|webm)[^"'\\\s]*/i);
+      return m ? m[0] : undefined;
+    } catch { return undefined; }
+  };
   const pick = (d: any): RestResult => ({
     status: d?.status,
-    videoUrl: d?.video?.url,
+    videoUrl: findVideoUrl(d),
     imageUrl: Array.isArray(d?.images) ? d.images[0]?.url : undefined,
     requestId: d?.request_id,
   });

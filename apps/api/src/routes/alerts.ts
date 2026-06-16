@@ -18,7 +18,7 @@ import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { getAutonomousSettings } from '../services/autonomousSettings';
 import { listCampaigns } from '../services/google-ads/campaignAutomation';
-import { checkAdvertisable, isBrandRestricted } from '../services/google-ads/advertisability';
+import { checkAdvertisable } from '../services/google-ads/advertisability';
 import { getListings, MarketplaceListing } from '../routes/marketplace';
 
 const router = Router();
@@ -98,37 +98,11 @@ router.get('/', async (_req: Request, res: Response) => {
       const totalImpressions = enabled.reduce((s, c) => s + (Number(c.impressions) || 0), 0);
       const totalSpend = enabled.reduce((s, c) => s + (Number(c.spend) || 0), 0);
 
-      // Brand/duplicate campaign clutter → offer one-tap cleanup.
-      const ours = campaigns.filter((c) => /^Arbi - /i.test(c.name || '') && c.status !== 'REMOVED');
-      const keyCount = new Map<string, number>();
-      let brandCampaigns = 0;
-      for (const c of ours) {
-        if (isBrandRestricted(String(c.name).replace(/^Arbi\s*-\s*/i, '').replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, ''))) { brandCampaigns++; continue; }
-        const k = String(c.name).toLowerCase().replace(/^arbi\s*-\s*/, '').replace(/\s*-\s*[a-z]{2}\s*-\s*\d+\s*$/i, '').trim();
-        keyCount.set(k, (keyCount.get(k) || 0) + 1);
-      }
-      const duplicateExtras = Array.from(keyCount.values()).reduce((s, n) => s + Math.max(0, n - 1), 0);
-      // Duplicate catalog products (same normalized title listed more than once).
-      const titleCount = new Map<string, number>();
-      for (const l of listings) {
-        const k = (l.productTitle || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 60);
-        if (k) titleCount.set(k, (titleCount.get(k) || 0) + 1);
-      }
-      const duplicateListings = Array.from(titleCount.values()).reduce((s, n) => s + Math.max(0, n - 1), 0);
-      const clutter = brandCampaigns + duplicateExtras + duplicateListings;
-      if (clutter > 0) {
-        const parts = [
-          brandCampaigns ? `${brandCampaigns} brand/trademark` : '',
-          duplicateExtras ? `${duplicateExtras} duplicate campaign(s)` : '',
-          duplicateListings ? `${duplicateListings} duplicate product(s)` : '',
-        ].filter(Boolean).join(', ');
-        alerts.push({
-          id: 'campaign-cleanup', severity: 'warning',
-          title: `${clutter} item${clutter === 1 ? '' : 's'} to clean up`,
-          message: `${parts}. Clean up removes brand/duplicate campaigns AND de-duplicates the catalog.`,
-          action: { label: 'Clean up', internal: 'cleanupCampaigns' },
-        });
-      }
+      // NOTE: there is intentionally NO "duplicate campaigns to clean up" alert.
+      // Duplicates are now structurally impossible (DB-enforced exactly-once via
+      // the campaign registry), so there is nothing for the operator to detect,
+      // approve, or clean up. The system never surfaces a problem it prevents
+      // itself; brand/duplicate removal is a silent, internal concern.
 
       // Engine off while there's something ready to launch.
       if (!settings.autonomous && (advertisable.length > 0 || campaigns.some((c) => c.status === 'PAUSED'))) {

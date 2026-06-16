@@ -118,6 +118,37 @@ export async function releaseFailedReservation(
   memory.delete(key(tenantId, listingId, channel));
 }
 
+/** Count existing slots — used to decide whether the one-time backfill is needed. */
+export async function countSlots(): Promise<number> {
+  if (db) {
+    try {
+      const r: any = await (db as any).query(`SELECT COUNT(*)::int AS n FROM "tenant_campaigns";`);
+      const rows = Array.isArray(r) ? r[0] : r?.rows;
+      const n = Array.isArray(rows) ? Number(rows[0]?.n) : Number(r?.rows?.[0]?.n);
+      return Number.isFinite(n) ? n : 0;
+    } catch (e: any) { console.error('⚠️  countSlots DB error:', e?.message || e); }
+  }
+  return memory.size;
+}
+
+/** Verify the load-bearing UNIQUE index exists. Without it, exactly-once is not
+ *  guaranteed — log loudly so we never silently regress to duplicates. */
+export async function verifyUniqueIndex(): Promise<boolean> {
+  if (!db) return false;
+  try {
+    const r: any = await (db as any).query(
+      `SELECT 1 FROM pg_indexes WHERE indexname = 'uq_tenant_campaigns_slot' LIMIT 1;`
+    );
+    const rows = Array.isArray(r) ? r[0] : r?.rows;
+    const ok = Array.isArray(rows) ? rows.length > 0 : (r?.rowCount ?? 0) > 0;
+    if (!ok) console.error('🚨 CRITICAL: uq_tenant_campaigns_slot index is MISSING — exactly-once is not enforced!');
+    return ok;
+  } catch (e: any) {
+    console.error('⚠️  verifyUniqueIndex error:', e?.message || e);
+    return false;
+  }
+}
+
 export async function listSlots(tenantId: string): Promise<CampaignSlot[]> {
   if (db) {
     try {

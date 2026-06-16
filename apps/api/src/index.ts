@@ -105,6 +105,23 @@ const server = app.listen(port, '0.0.0.0', () => {
       } catch (e: any) {
         logger.error('⚠️  Engine-state rehydration failed (keeping env defaults):', e?.message || e);
       }
+      // Exactly-once health + one-time backfill: verify the UNIQUE index exists,
+      // and if the campaign mapping is empty, populate it from the campaigns that
+      // already live in Google Ads (and clear legacy duplicates). Idempotent;
+      // runs once. Non-fatal + backgrounded so it never blocks boot.
+      (async () => {
+        try {
+          const reg = require('./services/google-ads/campaignRegistry');
+          await reg.verifyUniqueIndex();
+          if ((await reg.countSlots()) === 0) {
+            const { backfillCampaignRegistry } = require('./services/google-ads/campaignCleanup');
+            const r = await backfillCampaignRegistry({});
+            logger.info(`🧱 Campaign registry backfill: mapped ${r.mapped}, removed ${r.removed} legacy dupe(s), skipped ${r.skipped}`);
+          }
+        } catch (e: any) {
+          logger.error('⚠️  Campaign registry backfill failed (non-fatal):', e?.message || e);
+        }
+      })();
     } catch (e: any) {
       logger.error('⚠️  Database not available — using in-memory storage (no persistence):', e?.message || e);
     }

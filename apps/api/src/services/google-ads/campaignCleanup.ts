@@ -35,6 +35,27 @@ import { DEFAULT_TENANT_ID } from '../tenantContext';
  * product can't be uniquely identified. A sanity cap aborts removal if it would
  * nuke an implausible share of the account (guards a name-parsing bug).
  */
+/**
+ * Purge brand/trademark + seed-junk campaigns from the account (e.g. "Apple
+ * AirPods", "Nintendo Switch", "Premium Espresso Machine"). They can never
+ * legally serve, so REMOVE them outright. Runs at boot every time — idempotent
+ * (a REMOVED campaign is skipped). Safe: only ever removes our own brand-flagged
+ * "Arbi -"/"Arbi Video -" campaigns.
+ */
+export async function purgeBrandCampaigns(opts: { customerId?: string } = {}): Promise<{ removed: number }> {
+  let campaigns: any[] = [];
+  try { campaigns = (await listCampaigns(opts.customerId)) as any[]; } catch { return { removed: 0 }; }
+  let removed = 0;
+  for (const c of campaigns) {
+    const name = c.name || '';
+    if (!/^Arbi (Video )?- /i.test(name) || c.status === 'REMOVED') continue;
+    if (isBrandRestricted(name)) {
+      try { await setCampaignStatus(String(c.id), 'REMOVED', opts.customerId); removed++; } catch { /* keep going */ }
+    }
+  }
+  return { removed };
+}
+
 export async function backfillCampaignRegistry(opts: { customerId?: string; dryRun?: boolean } = {}): Promise<{ mapped: number; removed: number; skipped: number }> {
   const dryRun = opts.dryRun ?? false;
   const tenantId = DEFAULT_TENANT_ID;

@@ -23,6 +23,7 @@ export interface GovernorConfig {
   accountMaxDailySpend: number;  // global daily-spend target (sum of campaign budgets)
   minSpendToAct: number;         // learning floor
   staleHours: number;            // metrics older than this => no scale-ups
+  stopLossUsd: number;           // HARD net-P&L circuit breaker: halt ALL spend if (profit − spend) < −this
 }
 
 export interface SourcingConfig {
@@ -58,6 +59,7 @@ export const DEFAULT_GOVERNOR: GovernorConfig = {
   accountMaxDailySpend: num('GOVERNOR_ACCOUNT_MAX_DAILY', 500),
   minSpendToAct: num('OPTIMIZER_MIN_SPEND', 20),
   staleHours: num('GOVERNOR_STALE_HOURS', 26),
+  stopLossUsd: num('STOP_LOSS_USD', 50),
 };
 
 // Sourcing toward EXPECTED ROI (demand × margin-after-CPA; virality + realized
@@ -173,6 +175,7 @@ export function setAutonomousSettings(patch: Partial<AutonomousSettings>, update
     merged.targetRoas = clampNum(merged.targetRoas, 0.1, 100, DEFAULT_GOVERNOR.targetRoas);
     merged.maxStepPct = clampNum(merged.maxStepPct, 0, 1, DEFAULT_GOVERNOR.maxStepPct);
     merged.minStepPct = clampNum(merged.minStepPct, 0, merged.maxStepPct, DEFAULT_GOVERNOR.minStepPct);
+    merged.stopLossUsd = clampNum(merged.stopLossUsd, 0, 1_000_000, DEFAULT_GOVERNOR.stopLossUsd);
     settings.governor = merged;
   }
   // Sourcing config (unit-economics / margin optimizer). Clamps fail toward FEWER

@@ -118,6 +118,11 @@ const server = app.listen(port, '0.0.0.0', () => {
             const r = await backfillCampaignRegistry({});
             logger.info(`🧱 Campaign registry backfill: mapped ${r.mapped}, removed ${r.removed} legacy dupe(s), skipped ${r.skipped}`);
           }
+          // Always purge brand/seed-junk campaigns (AirPods, Nintendo, Espresso…)
+          // — they can never serve. Idempotent; runs every boot.
+          const { purgeBrandCampaigns } = require('./services/google-ads/campaignCleanup');
+          const bp = await purgeBrandCampaigns({});
+          if (bp.removed) logger.info(`🧹 Purged ${bp.removed} brand/seed campaign(s) from the account`);
         } catch (e: any) {
           logger.error('⚠️  Campaign registry backfill failed (non-fatal):', e?.message || e);
         }

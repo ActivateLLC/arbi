@@ -35,6 +35,7 @@ import { captureSnapshots, latestSnapshotAgeHours, persistRealizedScores } from 
 import { refreshObservedCpa, getCachedObservedCpa } from '../services/scoring/observedCpa';
 import { expectedRoiScore, bestVirality } from '../services/scoring/expectedRoi';
 import { refreshOrganicStats, ORGANIC_PROOF_VIEWS } from '../services/google-ads/organicTraction';
+import { checkStopLoss } from '../services/google-ads/stopLoss';
 import { enforceAdvertisable, cleanupCampaigns } from '../services/google-ads/campaignCleanup';
 import { reserveCampaignSlot, markCampaignCreated, releaseFailedReservation } from '../services/google-ads/campaignRegistry';
 import { DEFAULT_TENANT_ID } from '../services/tenantContext';
@@ -110,6 +111,20 @@ function activeProducts(listings: any[], limit: number, minMargin: number): Prod
 async function cycle(): Promise<void> {
   const cfg = getAutonomousSettings();
   if (!cfg.autonomous) return; // master switch (runtime-toggleable from the dashboard)
+
+  // 0.0) STOP-LOSS — hard net-P&L circuit breaker, FIRST so it runs before any
+  //      spend decision. If cumulative ad spend has beaten profit by more than
+  //      the limit, halt everything (pause live campaigns + Auto Go-Live off) and
+  //      abort the rest of the cycle. Bounds the worst case to a fixed number.
+  try {
+    const sl = await checkStopLoss();
+    if (sl.triggered) {
+      logger.error(`🛑 STOP-LOSS: net $${sl.net} < -$${sl.limit} (spend $${sl.spend.toFixed(2)}, profit $${sl.profit.toFixed(2)}) — paused ${sl.paused} campaign(s), Auto Go-Live OFF`);
+      return; // no creation/go-live this cycle — spend is halted
+    }
+  } catch (e: any) {
+    logger.error('🛑 STOP-LOSS error:', e?.message || e);
+  }
 
   // 0) Source fresh products from every configured retailer (CJ + Amazon).
   if (cfg.autoSource) {

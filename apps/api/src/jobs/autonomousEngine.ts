@@ -60,6 +60,7 @@ function activeProducts(listings: any[], limit: number, minMargin: number): Prod
           profitMargin,
           category: l.supplierPlatform || 'general',
           targetCountry: 'US',
+          imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
           landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
         } as ProductAdData,
         demandScore: Number(l.demandScore) || 0,

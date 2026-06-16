@@ -39,7 +39,10 @@ const BRAND_DENYLIST: RegExp[] = [
   /\bnike\b/i, /\badidas\b/i, /\bgucci\b/i, /\blouis vuitton\b/i, /\bchanel\b/i, /\brolex\b/i,
   /\bdisney\b/i, /\bpok[eé]mon\b/i, /\bmarvel\b/i, /\bstar wars\b/i,
   /\byeti\b/i, /\blululemon\b/i, /\bstanley\b/i,
+  /\byamaha\b/i, /\bcasio\b/i, /\broland\b/i, /\bfender\b/i, /\bgibson\b/i, /\bkorg\b/i, // instruments
 ];
+
+const RESOLVER_OR_PLACEHOLDER = /\/(api\/)?product-image\/|example\.(com|org|net)|placeholder|via\.placeholder|dummyimage/i;
 
 /** True when a product title references a protected brand we can't advertise. */
 export function isBrandRestricted(title?: string): boolean {
@@ -80,8 +83,11 @@ export function checkAdvertisable(listing: Partial<MarketplaceListing>): Adverti
     return { ok: false, reason: 'no real supplier reference (cjVariantId or supplierUrl)' };
   }
 
-  const hasImage = Array.isArray(listing.productImages) && listing.productImages.some((i) => (i || '').trim());
-  if (!hasImage) return { ok: false, reason: 'no product image' };
+  // Require a REAL product photo — not empty, not the placeholder/resolver path.
+  // No photo means a placeholder landing page and no creative for video ads.
+  const hasImage = Array.isArray(listing.productImages)
+    && listing.productImages.some((i) => /^https?:\/\//i.test((i || '').trim()) && !RESOLVER_OR_PLACEHOLDER.test(i));
+  if (!hasImage) return { ok: false, reason: 'no real product image' };
 
   return { ok: true };
 }

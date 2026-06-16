@@ -49,7 +49,21 @@ export interface ProductAdData {
   category: string;
   targetCountry: string;
   videoUrl?: string; // Cloudinary URL from ad extraction
+  imageUrl?: string; // first real product image — REQUIRED to advertise (no photo, no ad)
   landingPageUrl: string;
+}
+
+/**
+ * A product is only advertisable with a REAL product photo — a placeholder
+ * landing page wastes ad spend and looks untrustworthy. Reject empty values, the
+ * server-side image-resolver/placeholder path, data URIs, and known placeholders.
+ */
+export function hasRealProductImage(url?: string): boolean {
+  const u = (url || '').trim();
+  if (!/^https?:\/\//i.test(u)) return false;
+  if (/\/(api\/)?product-image\//i.test(u)) return false; // our placeholder resolver
+  if (/(example\.(com|org|net)|placeholder|via\.placeholder|dummyimage)/i.test(u)) return false;
+  return true;
 }
 
 export interface CampaignConfig {
@@ -325,6 +339,12 @@ export async function createAutomatedCampaign(
     throw new Error(`Automated ads not allowed in ${product.targetCountry}. Manual creation required.`);
   }
 
+  // HARD RULE: never advertise a product without a real photo. No image means a
+  // placeholder landing page and no creative for video ads — so we don't run it.
+  if (!hasRealProductImage(product.imageUrl)) {
+    throw new Error('No product image — skipping campaign (no photo, no ad).');
+  }
+
   console.log(`🎯 Creating SEARCH campaign for: ${product.productName}`);
   const ts = Date.now();
 
@@ -570,6 +590,14 @@ export async function createBulkCampaigns(
   const results = [];
   let success = 0;
   let failed = 0;
+
+  // HARD RULE: a campaign requires a real product photo. Drop anything without
+  // one up front (no photo → no ad), with a clear skipped reason.
+  const skippedNoImage = queue.filter((p) => !hasRealProductImage(p.imageUrl));
+  for (const p of skippedNoImage) {
+    results.push({ product: p.productName, status: 'skipped', reason: 'no product image' });
+  }
+  queue = queue.filter((p) => hasRealProductImage(p.imageUrl));
 
   for (const product of queue) {
     try {

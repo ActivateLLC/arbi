@@ -49,7 +49,7 @@ const PROVEN = {
   asin: 'B0PROVEN1',
   price: { value: 25 },
   ratings_total: 50000, // proven demand
-  image: 'https://example.com/proven.jpg',
+  image: 'https://m.media-amazon.com/images/I/proven.jpg',
   link: 'https://www.amazon.com/dp/B0PROVEN1',
 };
 const NICHE = {
@@ -57,7 +57,7 @@ const NICHE = {
   asin: 'B0NICHE01',
   price: { value: 25 },
   ratings_total: 75, // above the demand floor, but far less proven
-  image: 'https://example.com/niche.jpg',
+  image: 'https://m.media-amazon.com/images/I/niche.jpg',
   link: 'https://www.amazon.com/dp/B0NICHE01',
 };
 

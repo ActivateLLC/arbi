@@ -37,6 +37,7 @@ function listingToProduct(l: any): ProductAdData {
     profitMargin: price > 0 ? Math.round((profit / price) * 100) : 0,
     category: l.supplierPlatform || 'general',
     targetCountry: 'US',
+    imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
     landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
   };
 }
@@ -63,6 +64,7 @@ export async function getActiveProductsForAds(limit: number, minProfitMargin = 0
           profitMargin,
           category: l.supplierPlatform || 'general',
           targetCountry: 'US',
+          imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
           landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
           videoUrl: undefined,
         } as ProductAdData,

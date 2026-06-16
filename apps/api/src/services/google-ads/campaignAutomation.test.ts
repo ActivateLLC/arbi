@@ -50,6 +50,7 @@ const product: ProductAdData = {
   profitMargin: 40,
   category: 'Electronics',
   targetCountry: 'US',
+  imageUrl: 'https://cdn.example-store.io/earbuds.jpg', // real photo required to advertise
   landingPageUrl: 'https://api.arbi.creai.dev/product/listing_test',
 };
 
@@ -157,6 +158,14 @@ describe('ad campaign automation (revenue-critical path)', () => {
     await expect(
       createAutomatedCampaign({ ...product, targetCountry: 'CN' }, config)
     ).rejects.toThrow(/not allowed/i);
+  });
+
+  it('refuses to create a campaign without a real product photo (no photo, no ad)', async () => {
+    await expect(createAutomatedCampaign({ ...product, imageUrl: undefined }, config)).rejects.toThrow(/no product image/i);
+    // The placeholder/resolver path does not count as a real photo.
+    await expect(
+      createAutomatedCampaign({ ...product, imageUrl: 'https://api.arbi.creai.dev/api/product-image/listing_test' }, config)
+    ).rejects.toThrow(/no product image/i);
   });
 
   it('scopes the campaign to a tenant child account when customerId is given', async () => {

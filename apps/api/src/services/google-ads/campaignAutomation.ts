@@ -634,7 +634,7 @@ export async function getCampaignMetrics(campaignId: string, customerIdOverride?
  */
 export async function setCampaignStatus(
   campaignId: string,
-  status: 'ENABLED' | 'PAUSED',
+  status: 'ENABLED' | 'PAUSED' | 'REMOVED',
   customerIdOverride?: string
 ): Promise<string> {
   const cid = digits(customerIdOverride || '') || customerId();

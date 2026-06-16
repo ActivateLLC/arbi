@@ -97,6 +97,26 @@ router.get('/', async (_req: Request, res: Response) => {
       const totalImpressions = enabled.reduce((s, c) => s + (Number(c.impressions) || 0), 0);
       const totalSpend = enabled.reduce((s, c) => s + (Number(c.spend) || 0), 0);
 
+      // Brand/duplicate campaign clutter → offer one-tap cleanup.
+      const ours = campaigns.filter((c) => /^Arbi - /i.test(c.name || '') && c.status !== 'REMOVED');
+      const keyCount = new Map<string, number>();
+      let brandCampaigns = 0;
+      for (const c of ours) {
+        if (isBrandRestricted(String(c.name).replace(/^Arbi\s*-\s*/i, '').replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, ''))) { brandCampaigns++; continue; }
+        const k = String(c.name).toLowerCase().replace(/^arbi\s*-\s*/, '').replace(/\s*-\s*[a-z]{2}\s*-\s*\d+\s*$/i, '').trim();
+        keyCount.set(k, (keyCount.get(k) || 0) + 1);
+      }
+      const duplicateExtras = Array.from(keyCount.values()).reduce((s, n) => s + Math.max(0, n - 1), 0);
+      const clutter = brandCampaigns + duplicateExtras;
+      if (clutter > 0) {
+        alerts.push({
+          id: 'campaign-cleanup', severity: 'warning',
+          title: `${clutter} campaign${clutter === 1 ? '' : 's'} to clean up`,
+          message: `Your Google Ads account has ${brandCampaigns} brand/trademark and ${duplicateExtras} duplicate campaign(s). Remove them to keep the account clean and spend focused.`,
+          action: { label: 'Clean up campaigns', internal: 'cleanupCampaigns' },
+        });
+      }
+
       // Engine off while there's something ready to launch.
       if (!settings.autonomous && (advertisable.length > 0 || campaigns.some((c) => c.status === 'PAUSED'))) {
         alerts.push({

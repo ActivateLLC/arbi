@@ -15,7 +15,25 @@ import { runCycleNow } from '../jobs/autonomousEngine';
 import { listCampaigns, campaignProductKey, productCampaignKey } from '../services/google-ads/campaignAutomation';
 import { checkAdvertisable } from '../services/google-ads/advertisability';
 import { getListings, MarketplaceListing } from '../routes/marketplace';
+import { cleanupCampaigns } from '../services/google-ads/campaignCleanup';
 const router = Router();
+
+/**
+ * Clean up the Google Ads account: REMOVE brand/trademark campaigns and
+ * duplicate campaigns (keeping the best one per product). GET = dry run
+ * (browser-clickable, lists what would go); POST = execute.
+ */
+async function handleCleanupCampaigns(req: Request, res: Response) {
+  const dryRun = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
+  try {
+    const result = await cleanupCampaigns({ dryRun });
+    res.json({ success: true, ...result });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e?.message || String(e) });
+  }
+}
+router.get('/cleanup-campaigns', handleCleanupCampaigns);
+router.post('/cleanup-campaigns', handleCleanupCampaigns);
 
 /**
  * GET /api/autonomous-control/settings — current autonomous-engine settings.

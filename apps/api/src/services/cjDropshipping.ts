@@ -35,6 +35,7 @@ const ENDPOINTS = {
   getBalance: '/shopping/pay/getBalance',
   listV2: '/product/listV2',
   productQuery: '/product/query',
+  productComments: '/product/productComments',
 };
 
 export interface CJShippingAddress {

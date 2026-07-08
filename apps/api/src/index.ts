@@ -120,9 +120,16 @@ const server = app.listen(port, '0.0.0.0', () => {
           }
           // Always purge brand/seed-junk campaigns (AirPods, Nintendo, Espresso…)
           // — they can never serve. Idempotent; runs every boot.
-          const { purgeBrandCampaigns } = require('./services/google-ads/campaignCleanup');
+          const { purgeBrandCampaigns, cleanupCampaigns } = require('./services/google-ads/campaignCleanup');
           const bp = await purgeBrandCampaigns({});
           if (bp.removed) logger.info(`🧹 Purged ${bp.removed} brand/seed campaign(s) from the account`);
+          // Silent legacy-duplicate sweep. The registry makes NEW duplicates
+          // impossible, but ~26 legacy dupes predate it and the one-time backfill
+          // skipped removal on an early aborted run. cleanupCampaigns keeps the
+          // best campaign per product and REMOVEs the extras; after the first
+          // pass this is a no-op every boot. Never a user-facing chore.
+          const cc = await cleanupCampaigns({ dryRun: false });
+          if (cc.removed) logger.info(`🧹 Removed ${cc.removed} legacy duplicate campaign(s) (kept best per product)`);
         } catch (e: any) {
           logger.error('⚠️  Campaign registry backfill failed (non-fatal):', e?.message || e);
         }

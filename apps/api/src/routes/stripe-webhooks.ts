@@ -59,6 +59,15 @@ router.post('/', async (req: Request, res: Response) => {
       console.log('   ❌ Payment failed');
       break;
 
+    // Refunds/disputes made in the Stripe dashboard must flip the order status,
+    // otherwise revenue keeps counting refunded sales forever.
+    case 'charge.refunded':
+      await handleChargeRefunded(event.data.object as Stripe.Charge);
+      break;
+    case 'charge.dispute.created':
+      console.error(`   🚨 DISPUTE opened on charge ${(event.data.object as Stripe.Charge).id} — respond in the Stripe dashboard`);
+      break;
+
     default:
       console.log(`   ℹ️  Unhandled event type: ${event.type}`);
   }
@@ -124,6 +133,18 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
     // Save order to database
     const db = getDatabase();
+
+    // IDEMPOTENCY: Stripe retries webhooks — the same session must never create
+    // two orders (double supplier purchase + double-counted revenue).
+    const paymentKey = session.payment_intent?.toString() || session.id;
+    try {
+      const existing = await db.findOne('BuyerOrder', { where: { paymentIntentId: paymentKey } });
+      if (existing) {
+        console.log(`   ↩️  Duplicate webhook delivery for ${paymentKey} — order already recorded, skipping.`);
+        return;
+      }
+    } catch { /* findOne failure → proceed (never drop a paid order) */ }
+
     const order = {
       orderId: `order_${Date.now()}_${Math.random().toString(36).substring(7)}`,
       listingId,
@@ -249,13 +270,35 @@ async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       console.log('      ', `${shippingAddress.line1}, ${shippingAddress.city}, ${shippingAddress.state} ${shippingAddress.postal_code}`);
     }
 
-    // TODO: Send confirmation email to customer
-    console.log('\n📧 TODO: Send order confirmation email');
-    console.log('   To:', session.customer_details?.email);
+    // 📧 Customer confirmation (the success page promises this email) + owner alert.
+    try {
+      const { emailNotifier } = await import('../services/emailNotifier');
+      let productTitle = listingId || 'your item';
+      try {
+        const { getListing } = await import('./marketplace');
+        const listing: any = await getListing(listingId);
+        if (listing?.productTitle) productTitle = listing.productTitle;
+      } catch { /* fall back to listingId */ }
 
-    // TODO: Send notification to you
-    console.log('\n💰 TODO: Send profit notification to you');
-    console.log('   Subject: New Sale! Profit: $' + estimatedProfit);
+      const buyerEmail = session.customer_details?.email || '';
+      await emailNotifier.sendOrderConfirmation(buyerEmail, {
+        orderId: order.orderId,
+        productTitle,
+        quantity: isNaN(quantity) ? 1 : quantity,
+        variantLabel,
+        amountPaid: session.amount_total! / 100,
+      });
+      await emailNotifier.notifySale({
+        orderId: order.orderId,
+        productTitle,
+        salePrice: session.amount_total! / 100,
+        supplierCost,
+        profit: isNaN(estimatedProfit) ? 0 : estimatedProfit,
+        customerEmail: buyerEmail,
+      });
+    } catch (e: any) {
+      console.error('   ⚠️  Email dispatch failed (order unaffected):', e?.message);
+    }
 
   } catch (error: any) {
     console.error('\n❌ Error processing checkout:', error.message);
@@ -274,13 +317,65 @@ async function attemptCjFulfillment(orderId: string): Promise<boolean> {
     const cj = await fulfillBuyerOrderViaCJ(orderId);
     if (cj.attempted && cj.success) {
       console.log('   ✅ Fulfilled via CJ Dropshipping (supplier → customer)');
+      // If CJ returned tracking immediately, tell the customer it shipped.
+      try {
+        const db = getDatabase();
+        const o: any = await db.findOne('BuyerOrder', { where: { orderId } });
+        if (o?.shipmentTrackingNumber && o?.buyerEmail) {
+          const { emailNotifier } = await import('../services/emailNotifier');
+          await emailNotifier.sendShippingUpdate(o.buyerEmail, {
+            orderId, productTitle: o.listingId, trackingNumber: o.shipmentTrackingNumber, carrier: o.shipmentCarrier,
+          });
+        }
+      } catch { /* non-fatal */ }
       return true;
     }
-    if (cj.attempted) console.warn(`   ⚠️  CJ fulfillment failed: ${cj.reason}`);
+    if (cj.attempted) {
+      // A paid order that failed to fulfill must never fail silently: mark it and
+      // ALERT the owner (this is the refund/chargeback pipeline if ignored).
+      console.error(`   🚨 CJ fulfillment FAILED for paid order ${orderId}: ${cj.reason}`);
+      try {
+        const db = getDatabase();
+        await db.update('BuyerOrder', { supplierPurchaseStatus: 'failed' }, { where: { orderId } });
+        const o: any = await db.findOne('BuyerOrder', { where: { orderId } });
+        const { emailNotifier } = await import('../services/emailNotifier');
+        await emailNotifier.notifySale({
+          orderId,
+          productTitle: `⚠️ FULFILLMENT FAILED (${cj.reason}) — ${o?.listingId || ''}`,
+          salePrice: Number(o?.amountPaid) || 0,
+          supplierCost: 0,
+          profit: 0,
+          customerEmail: o?.buyerEmail || '',
+        });
+      } catch { /* non-fatal */ }
+    }
   } catch (e: any) {
     console.error('   ❌ CJ fulfillment error:', e?.message);
   }
   return false;
+}
+
+/** Flip the order to refunded when a refund is issued (dashboard or API), so
+ *  revenue accounting stops counting it. */
+async function handleChargeRefunded(charge: Stripe.Charge) {
+  try {
+    const piId = charge.payment_intent?.toString();
+    if (!piId) return;
+    const db = getDatabase();
+    const order: any = await db.findOne('BuyerOrder', { where: { paymentIntentId: piId } });
+    if (!order) {
+      console.warn(`   ⚠️  Refund for unknown order (payment_intent ${piId})`);
+      return;
+    }
+    await db.update('BuyerOrder', {
+      status: 'refunded',
+      refundId: charge.refunds?.data?.[0]?.id || charge.id,
+      refundedAt: new Date(),
+    }, { where: { orderId: order.orderId } });
+    console.log(`   💸 Order ${order.orderId} marked refunded — revenue accounting updated`);
+  } catch (e: any) {
+    console.error('   ❌ Failed to process refund event:', e?.message);
+  }
 }
 
 export default router;

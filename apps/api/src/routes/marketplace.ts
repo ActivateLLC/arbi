@@ -491,9 +491,20 @@ router.delete('/listings/:listingId', async (req: Request, res: Response, next: 
 
 /**
  * POST /api/marketplace/checkout
- * Buyer initiates purchase (pays FIRST)
+ * ⛔ DISABLED — this legacy path charged real cards but SIMULATED fulfillment
+ * (fake supplier order + fake tracking via setTimeout/Date.now()). Taking money
+ * with no real fulfillment is a refund machine and a Misrepresentation
+ * violation. The real, live checkout is the Stripe Checkout Session flow on the
+ * product page (public-product.ts /product/:id/checkout and direct-checkout.ts),
+ * fulfilled by the Stripe webhook → CJ pipeline.
  */
 router.post('/checkout', async (req: Request, res: Response, next: NextFunction) => {
+  return res.status(410).json({
+    success: false,
+    error: 'This checkout endpoint is disabled. Use the product page checkout.',
+    checkoutUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${req.body?.listingId || ''}`,
+  });
+  /* eslint-disable no-unreachable */
   try {
     // Validate checkout data
     const validatedData = validateSchema(checkoutSchema, req.body);

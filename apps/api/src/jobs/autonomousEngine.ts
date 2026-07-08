@@ -435,6 +435,17 @@ async function cycle(): Promise<void> {
   } catch (e: any) {
     logger.error('🤖 STOCK error:', e?.message || e);
   }
+
+  // 5) FULFILLMENT SWEEP — release paid orders held for funds once the customer's
+  //    money has settled in Stripe (no external cron needed; a held order must
+  //    never park forever). Runs even when other automation flags are off.
+  try {
+    const { releaseFundedOrders } = await import('../services/fulfillmentPolicy');
+    const fr = await releaseFundedOrders();
+    if (fr.released) logger.info(`📦 FULFILL: released ${fr.released} funded order(s) to CJ (${fr.waiting} still settling)`);
+  } catch (e: any) {
+    logger.error('📦 FULFILL sweep error:', e?.message || e);
+  }
 }
 
 // Guard so overlapping triggers (interval + a dashboard toggle) don't run the

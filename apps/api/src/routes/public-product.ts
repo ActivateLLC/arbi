@@ -356,12 +356,14 @@ function generateProductLandingPage(listing: any): string {
        </section>`
     : '';
 
-  // Social proof — use REAL review data when we have it, else a modest estimate.
-  const avgReal = reviews.length ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) : 0;
-  const randomRating = reviews.length ? avgReal.toFixed(1) : (4.6 + Math.random() * 0.3).toFixed(1);
-  const randomReviews = reviews.length ? reviews.length : Math.floor(50 + Math.random() * 200);
-  const randomStock = Math.floor(3 + Math.random() * 12);
-  const randomViewers = Math.floor(8 + Math.random() * 25);
+  // Social proof — REAL review data ONLY. Fabricated ratings/counts/stock are a
+  // Google Ads Misrepresentation + FTC violation; when we have no real reviews we
+  // simply show none. hasRealReviews gates every proof element below.
+  const hasRealReviews = reviews.length > 0;
+  const avgReal = hasRealReviews ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) : 0;
+  const realRating = hasRealReviews ? avgReal.toFixed(1) : '';
+  const realReviewCount = reviews.length;
+  const maxPerOrder = 10; // honest per-order limit, not a fake scarcity counter
 
   return `
 <!DOCTYPE html>
@@ -444,12 +446,12 @@ function generateProductLandingPage(listing: any): string {
             }
           }
         }
-      },
+      }${hasRealReviews ? `,
       "aggregateRating": {
         "@type": "AggregateRating",
-        "ratingValue": "4.8",
-        "reviewCount": "127"
-      }
+        "ratingValue": "${realRating}",
+        "reviewCount": "${realReviewCount}"
+      }` : ''}
     }
     </script>
 
@@ -1200,9 +1202,9 @@ function generateProductLandingPage(listing: any): string {
             </div>
             ` : ''}
 
-            <!-- Rotary Dial Quantity Selector -->
+            <!-- Rotary Dial Quantity Selector (honest limit — no fake scarcity) -->
             <div class="inventory-dial">
-                <div class="dial-label">UNITS AVAILABLE: ${randomStock}</div>
+                <div class="dial-label">QUANTITY (max ${maxPerOrder} per order)</div>
                 <div class="dial-container">
                     <button class="dial-btn dial-minus" id="dialMinus" aria-label="Decrease quantity">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -1210,7 +1212,7 @@ function generateProductLandingPage(listing: any): string {
                         </svg>
                     </button>
                     <div class="dial-display">
-                        <input type="number" id="quantity" value="1" min="1" max="${randomStock}" readonly>
+                        <input type="number" id="quantity" value="1" min="1" max="${maxPerOrder}" readonly>
                     </div>
                     <button class="dial-btn dial-plus" id="dialPlus" aria-label="Increase quantity">
                         <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -1238,12 +1240,13 @@ function generateProductLandingPage(listing: any): string {
                 <span class="trust-text">• No card data stored</span>
             </div>
 
-            <!-- Quiet Social Proof -->
+            <!-- Quiet Social Proof — shown ONLY when real supplier reviews exist -->
+            ${hasRealReviews ? `
             <div class="social-proof">
-                <span>${randomReviews} verified purchases</span>
+                <span>${realReviewCount} customer review${realReviewCount === 1 ? '' : 's'}</span>
                 <span class="separator">•</span>
-                <span>${randomRating} average device rating</span>
-            </div>
+                <span>${realRating} average rating</span>
+            </div>` : ''}
 
             ${reviewsHtml}
         </div>

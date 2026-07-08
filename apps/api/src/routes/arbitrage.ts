@@ -46,8 +46,11 @@ if (scoutsEnabled === 0) {
   // console.error('   - EBAY_APP_ID (eBay data)');
   console.error('   - Web Scraper is always enabled');
 } else {
-  console.log(`✅ PRODUCTION MODE: ${scoutsEnabled} real data scout(s) enabled`);
-  // console.log('   Mock data DISABLED - only real opportunities will be returned');
+  // HONEST SIGNAL: these legacy scouts are effectively inert (Rainforest returns
+  // [] and WebScraper uses placeholder pricing). Real product sourcing lives in
+  // services/cjSourcing + services/amazonSourcing, driven by the autonomous
+  // engine. Don't let this log (or /api/arbitrage responses) imply otherwise.
+  console.log(`ℹ️  Legacy scout engine: ${scoutsEnabled} scout(s) registered (inert/demo — real sourcing = CJ/Amazon services)`);
 }
 
 // Default user settings (in production, this would come from database)

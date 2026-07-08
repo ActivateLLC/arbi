@@ -96,6 +96,9 @@ importers:
       '@higgsfield/client':
         specifier: ^0.2.1
         version: 0.2.1
+      '@types/nodemailer':
+        specifier: ^8.0.1
+        version: 8.0.1
       axios:
         specifier: ^1.6.5
         version: 1.13.2
@@ -129,6 +132,9 @@ importers:
       morgan:
         specifier: ^1.10.0
         version: 1.10.1
+      nodemailer:
+        specifier: ^9.0.3
+        version: 9.0.3
       stripe:
         specifier: ^20.0.0
         version: 20.2.0(@types/node@20.19.30)
@@ -3940,6 +3946,12 @@ packages:
     resolution: {integrity: sha512-MciR4AKGHWl7xwxkBa6xUGxQJ4VBOmPTF7sL+iGzuahOFaO0jHCsuEfS80pan1ef4gWId1oWOweIhrDEYLuaOw==}
     dependencies:
       undici-types: 6.21.0
+
+  /@types/nodemailer@8.0.1:
+    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
+    dependencies:
+      '@types/node': 20.19.30
+    dev: false
 
   /@types/normalize-package-data@2.4.4:
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
@@ -8902,6 +8914,11 @@ packages:
 
   /node-releases@2.0.27:
     resolution: {integrity: sha512-nmh3lCkYZ3grZvqcCH+fjmQ7X+H0OeZgP40OierEaAptX4XofMh5kwNbWh7lBduUzCcV/8kZ+NDLCwm2iorIlA==}
+
+  /nodemailer@9.0.3:
+    resolution: {integrity: sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==}
+    engines: {node: '>=6.0.0'}
+    dev: false
 
   /nopt@7.2.1:
     resolution: {integrity: sha512-taM24ViiimT/XntxbPyJQzCG+p4EKOpgD3mxFwW38mGjVUrfERQOeY4EDHjdnptttfHuHQXFx+lTP08Q+mLa/w==}

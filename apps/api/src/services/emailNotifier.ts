@@ -102,6 +102,91 @@ export class EmailNotifierService {
     }
   }
 
+  /** Whether a real transport is configured (otherwise sends are simulated logs). */
+  get enabled(): boolean {
+    return this.isEnabled;
+  }
+
+  /**
+   * CUSTOMER order-confirmation email — sent by the Stripe webhook the moment a
+   * checkout completes. The success page promises this email, so the promise
+   * must be kept (a paid order with no email is a refund/chargeback machine).
+   */
+  async sendOrderConfirmation(to: string, o: {
+    orderId: string; productTitle: string; quantity: number;
+    variantLabel?: string; amountPaid: number;
+  }): Promise<void> {
+    if (!to || to === 'unknown@email.com') return;
+    if (!this.isEnabled) {
+      console.log(`📧 [SIMULATED] Order confirmation → ${to} (${o.orderId}) — configure NOTIFICATION_EMAIL/PASSWORD to actually send`);
+      return;
+    }
+    try {
+      await this.transporter.sendMail({
+        from: `"Arbi Store" <${process.env.NOTIFICATION_EMAIL}>`,
+        to,
+        subject: `Order confirmed — ${o.productTitle.slice(0, 60)}`,
+        html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color:#2e7d32;">✅ Thanks for your order!</h2>
+          <div style="background:#f5f5f5;padding:20px;border-radius:8px;margin:20px 0;">
+            <p><strong>Order:</strong> ${o.orderId}</p>
+            <p><strong>Item:</strong> ${o.productTitle}${o.variantLabel ? ` — ${o.variantLabel}` : ''}</p>
+            <p><strong>Quantity:</strong> ${o.quantity}</p>
+            <p><strong>Total paid:</strong> $${o.amountPaid.toFixed(2)}</p>
+          </div>
+          <p>Your order is being processed (1–2 business days). You'll receive a tracking
+          number by email as soon as it ships — typically 5–12 business days for US delivery.</p>
+          <p>Questions? Just reply to this email. Returns are accepted within 30 days of delivery.</p>
+          <div style="margin-top:30px;padding-top:20px;border-top:1px solid #ddd;color:#666;font-size:12px;">
+            <p>Arbi Store · <a href="https://api.arbi.creai.dev/returns">Returns</a> ·
+            <a href="https://api.arbi.creai.dev/shipping">Shipping</a> ·
+            <a href="https://api.arbi.creai.dev/contact">Contact</a></p>
+          </div>
+        </div>`,
+      });
+      console.log(`📧 Order confirmation sent to customer ${to}`);
+    } catch (error: any) {
+      console.error('❌ Failed to send order confirmation:', error.message);
+    }
+  }
+
+  /** CUSTOMER shipping/tracking email — sent when a tracking number is recorded. */
+  async sendShippingUpdate(to: string, o: {
+    orderId: string; productTitle: string; trackingNumber: string; carrier?: string;
+  }): Promise<void> {
+    if (!to || to === 'unknown@email.com') return;
+    if (!this.isEnabled) {
+      console.log(`📧 [SIMULATED] Shipping update → ${to} (${o.orderId}, ${o.trackingNumber})`);
+      return;
+    }
+    try {
+      await this.transporter.sendMail({
+        from: `"Arbi Store" <${process.env.NOTIFICATION_EMAIL}>`,
+        to,
+        subject: `Your order has shipped — ${o.productTitle.slice(0, 60)}`,
+        html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color:#1565c0;">📦 Your order is on the way!</h2>
+          <div style="background:#f5f5f5;padding:20px;border-radius:8px;margin:20px 0;">
+            <p><strong>Order:</strong> ${o.orderId}</p>
+            <p><strong>Item:</strong> ${o.productTitle}</p>
+            <p><strong>Tracking number:</strong> ${o.trackingNumber}${o.carrier ? ` (${o.carrier})` : ''}</p>
+          </div>
+          <p>US delivery typically takes 5–12 business days. Track it with the number above
+          on your carrier's site or <a href="https://www.17track.net/en">17track.net</a>.</p>
+          <div style="margin-top:30px;padding-top:20px;border-top:1px solid #ddd;color:#666;font-size:12px;">
+            <p>Arbi Store · <a href="https://api.arbi.creai.dev/returns">Returns</a> ·
+            <a href="https://api.arbi.creai.dev/contact">Contact</a></p>
+          </div>
+        </div>`,
+      });
+      console.log(`📧 Shipping update sent to customer ${to}`);
+    } catch (error: any) {
+      console.error('❌ Failed to send shipping update:', error.message);
+    }
+  }
+
   /**
    * Notify when a sale happens
    */

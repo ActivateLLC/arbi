@@ -75,3 +75,41 @@ export async function areFundsAvailable(stripe: Stripe, paymentIntentId: string)
     return false;
   }
 }
+
+/**
+ * Sweep orders held as `awaiting_funds` and fulfill the ones whose customer
+ * payment has settled. This is the automation the funding gate was missing —
+ * previously only the manual POST /api/fulfillment/release-funded could release
+ * them and no cron existed, so high-ticket orders parked forever. Called every
+ * autonomous-engine cycle; safe no-op with no held orders / no Stripe / no DB.
+ */
+export async function releaseFundedOrders(): Promise<{ released: number; waiting: number }> {
+  if (!process.env.STRIPE_SECRET_KEY) return { released: 0, waiting: 0 };
+  try {
+    const StripeMod = (await import('stripe')).default;
+    const stripe = new StripeMod(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' as any });
+    const { getDatabase } = await import('../config/database');
+    const db = getDatabase();
+    const orders = (await db.find('BuyerOrder', { where: { status: 'awaiting_funds' } })) as any[];
+    if (!orders?.length) return { released: 0, waiting: 0 };
+
+    let released = 0, waiting = 0;
+    for (const o of orders) {
+      const ok = o.paymentIntentId ? await areFundsAvailable(stripe, o.paymentIntentId) : false;
+      if (!ok) { waiting++; continue; }
+      await db.update('BuyerOrder', { status: 'funds_available', supplierPurchaseStatus: 'ready' }, { where: { orderId: o.orderId } });
+      try {
+        const { fulfillBuyerOrderViaCJ } = await import('./cjFulfillment');
+        const cj = await fulfillBuyerOrderViaCJ(o.orderId);
+        if (cj.attempted && !cj.success) console.warn(`   ⚠️  Funded-release CJ fulfill failed for ${o.orderId}: ${cj.reason}`);
+      } catch (e: any) {
+        console.error(`   ❌ Funded-release fulfill error for ${o.orderId}:`, e?.message);
+      }
+      released++;
+    }
+    return { released, waiting };
+  } catch (e: any) {
+    console.error('⚠️  releaseFundedOrders sweep error:', e?.message || e);
+    return { released: 0, waiting: 0 };
+  }
+}

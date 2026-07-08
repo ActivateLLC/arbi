@@ -2,7 +2,11 @@
 export * from './types';
 
 // Export main data manager
-export * from './DataManager';
+// DISABLED (security): DataManager imports DataAnalyzer → pandas-js → vulnerable
+// immutable@3/underscore code into the shipped API bundle, and NOTHING in the
+// repo uses DataManager/getAnalyzer (verified). Live consumers of this package
+// are DatabaseManager + CacheManager only.
+// export * from './DataManager';
 
 // Export storage modules
 export * from './storage/DatabaseManager';

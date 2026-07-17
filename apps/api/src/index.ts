@@ -6,6 +6,7 @@ import morgan from 'morgan';
 
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
+import { getDatabase } from './config/database';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
@@ -36,7 +37,7 @@ if (missingVars.length > 0 && process.env.NODE_ENV === 'production') {
 
 // Create Express app
 const app = express();
-const port = process.env.PORT || 3000;
+const port = Number(process.env.PORT) || 3000;
 
 // Apply middleware
 app.use(helmet());
@@ -60,7 +61,8 @@ app.use(cors({
     if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      // Deny without throwing: request succeeds but browser blocks it (no CORS headers)
+      callback(null, false);
     }
   },
   credentials: true,
@@ -73,7 +75,13 @@ app.use(morgan('dev'));
 
 // Health check endpoint with database verification
 app.get('/health', async (req, res) => {
-  const health = {
+  const health: {
+    status: string;
+    timestamp: string;
+    database: string;
+    environment: string;
+    error?: string;
+  } = {
     status: 'ok',
     timestamp: new Date().toISOString(),
     database: 'unknown',
@@ -81,18 +89,10 @@ app.get('/health', async (req, res) => {
   };
 
   try {
-    // Try to query database to verify connection
-    const { getDatabaseManager } = await import('./config/database');
-    const db = getDatabaseManager();
-
-    if (db) {
-      // Simple query to test connection
-      await db.query('SELECT 1');
-      health.database = 'connected';
-    } else {
-      health.database = 'not_configured';
-    }
-
+    // Simple query to verify database connection
+    const db = getDatabase();
+    await db.query('SELECT 1');
+    health.database = 'connected';
     res.status(200).json(health);
   } catch (error) {
     health.status = 'degraded';

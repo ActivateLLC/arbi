@@ -1,6 +1,8 @@
 import { AutonomousEngine, AutonomousConfig } from '@arbi/arbitrage-engine';
 import { AdCampaignManager } from '../services/adCampaigns';
 import { saveListing, MarketplaceListing } from '../routes/marketplace';
+import { checkAdvertisable } from '../services/google-ads/advertisability';
+import { productValidator } from '../services/productValidator';
 
 class AutonomousListingJob {
   private running = false;
@@ -56,8 +58,8 @@ class AutonomousListingJob {
       const scanConfig: AutonomousConfig = {
         minScore: config.minScore || 75,
         minROI: config.minROI || 15,
-        minProfit: config.minProfit || 20,
-        maxPrice: 1000,
+        minProfit: config.minProfit || 3, // tiny fee-cover floor; ROI% is the real gate
+        maxPrice: 0, // 0 = no price ceiling; selection is demand-driven, not price-bounded
         categories: [],
         scanInterval: 15,
         autoBuyEnabled: false,
@@ -70,11 +72,16 @@ class AutonomousListingJob {
       const opportunities = await this.engine.runScan(scanConfig);
       console.log(`   Found ${opportunities.length} opportunities`);
 
-      // 2. Process each opportunity
+      // 2. Process each opportunity. The engine's runScan already applied the
+      //    RATING process (minScore / minROI / minProfit). Whatever scout found
+      //    it, every product must ALSO clear the same advertisability standards
+      //    (real non-placeholder supplier, real price + image, no brand/
+      //    trademark) and an IN-STOCK valuation before we list it or spend on
+      //    ads. Mock/demo scouts return nothing, so only real products reach here.
       for (const opp of opportunities) {
         // TODO: Check if already listed
 
-        // 3. Create Listing and save to marketplace storage
+        // 3. Build the candidate listing.
         const listingId = `auto-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
         const listing: MarketplaceListing = {
           listingId,
@@ -91,6 +98,27 @@ class AutonomousListingJob {
           listedAt: new Date(),
           expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 days
         };
+
+        // Quality gate: real supplier, price, image, no brand/trademark, active.
+        const gate = checkAdvertisable(listing);
+        if (!gate.ok) {
+          console.log(`   ⏭️  Skipping (${gate.reason}): ${listing.productTitle}`);
+          continue;
+        }
+
+        // In-stock valuation — don't list/advertise what can't be fulfilled.
+        // If stock can't be verified (unsupported source / transient error) we
+        // allow it through; the continuous stock guard pauses it later if needed.
+        try {
+          const v = await productValidator.validateProduct({
+            ...(listing as any),
+            supplierPrice: String(listing.supplierPrice),
+          });
+          if (v && v.inStock === false) {
+            console.log(`   ⏭️  Skipping (out of stock): ${listing.productTitle}`);
+            continue;
+          }
+        } catch { /* unverifiable — allow; stockSync is the backstop */ }
 
         console.log(`   📝 Creating listing for: ${listing.productTitle}`);
         console.log(`      Supplier: ${listing.supplierPlatform} - $${listing.supplierPrice}`);

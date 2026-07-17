@@ -9,7 +9,7 @@ import { USGlobalScout } from '../scouts/USGlobalScout';
 import { LatAmGlobalScout } from '../scouts/LatAmGlobalScout';
 import { ProfitCalculator, ProfitCalculation } from '../calculators/profitCalculator';
 import { OpportunityScorer, OpportunityScore } from '../scorers/opportunityScorer';
-import type { OpportunityScout, GenericProduct } from '../types';
+import type { OpportunityScout, GenericProduct, Opportunity } from '../types';
 
 export interface ArbitrageOpportunity {
   id: string;
@@ -25,8 +25,8 @@ export interface ArbitrageOpportunity {
 export interface AutonomousConfig {
   minScore: number; // Minimum score to alert (default: 70)
   minROI: number; // Minimum ROI percentage (default: 20)
-  minProfit: number; // Minimum profit in dollars (default: 5)
-  maxPrice: number; // Maximum purchase price (default: 100)
+  minProfit: number; // Tiny fee-cover floor in dollars; ROI% is the real gate
+  maxPrice: number; // 0 = no price ceiling (selection is demand-driven, price-agnostic)
   categories: string[]; // eBay category IDs to monitor
   scanInterval: number; // Minutes between scans (default: 15)
   autoBuyEnabled: boolean; // Enable autonomous purchases (default: false)
@@ -156,6 +156,68 @@ export class AutonomousEngine {
 
     this.lastScanTime = new Date();
     return foundOpportunities;
+  }
+
+  /**
+   * Convert a scout Opportunity into the ArbitrageOpportunity the engine stores
+   * and the dashboard/OPP RADAR reads. This was referenced in runScan but never
+   * implemented — every scout that returned results threw
+   * "this.convertToArbitrageOpportunity is not a function", so NO opportunities
+   * were ever persisted (the radar stayed empty).
+   */
+  private convertToArbitrageOpportunity(opp: Opportunity, platform: string): ArbitrageOpportunity {
+    const sourcePrice = Number(opp.buyPrice) || 0;
+    const targetPrice = Number(opp.sellPrice) || 0;
+    const shipping = Number(opp.shippingCost) || 0;
+    const netProfit = Number.isFinite(Number(opp.estimatedProfit)) ? Number(opp.estimatedProfit) : (targetPrice - sourcePrice);
+    const roi = Number.isFinite(Number(opp.roi)) ? Number(opp.roi) : (sourcePrice > 0 ? (netProfit / sourcePrice) * 100 : 0);
+    const profitMargin = targetPrice > 0 ? (netProfit / targetPrice) * 100 : 0;
+
+    const profit: ProfitCalculation = {
+      sourcePrice,
+      targetPrice,
+      sourceFees: { platform: opp.buySource || platform, listingFee: 0, finalValueFee: 0, paymentProcessingFee: 0, totalFees: 0 },
+      targetFees: { platform: opp.sellSource || platform, listingFee: 0, finalValueFee: 0, paymentProcessingFee: 0, totalFees: 0 },
+      shippingCosts: { inbound: 0, outbound: shipping, packaging: 0, total: shipping },
+      totalCost: sourcePrice + shipping,
+      totalRevenue: targetPrice,
+      netProfit: parseFloat(netProfit.toFixed(2)),
+      profitMargin: parseFloat(profitMargin.toFixed(2)),
+      roi: parseFloat(roi.toFixed(2)),
+    };
+
+    const score100 = Math.max(0, Math.min(100, Number(opp.confidence) || 0));
+    const tier: OpportunityScore['tier'] =
+      score100 >= 85 ? 'excellent' : score100 >= 70 ? 'high' : score100 >= 50 ? 'medium' : 'low';
+    const score: OpportunityScore = {
+      score: score100,
+      confidence: score100 / 100,
+      tier,
+      reasoning: [`${platform} • ROI ${roi.toFixed(0)}% • $${netProfit.toFixed(2)} net`],
+      redFlags: opp.riskLevel === 'high' ? ['High risk level'] : [],
+      greenFlags: roi >= 30 ? ['Strong ROI'] : [],
+    };
+
+    const product = {
+      id: opp.id,
+      title: opp.title || opp.productInfo?.title || 'Product',
+      price: sourcePrice,
+      imageUrl: opp.productInfo?.imageUrl,
+      itemWebUrl: (opp.metadata && (opp.metadata.url || opp.metadata.itemWebUrl)) || undefined,
+      condition: opp.productInfo?.condition || 'new',
+      seller: opp.buySource || platform,
+    } as unknown as GenericProduct;
+
+    return {
+      id: opp.id,
+      product,
+      profit,
+      score,
+      foundAt: opp.discoveredAt ? new Date(opp.discoveredAt) : new Date(),
+      expiresAt: opp.expiresAt ? new Date(opp.expiresAt) : new Date(Date.now() + 24 * 60 * 60 * 1000),
+      status: 'pending',
+      source: platform,
+    };
   }
 
   /**

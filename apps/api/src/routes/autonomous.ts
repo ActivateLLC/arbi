@@ -13,8 +13,8 @@ const engine = new AutonomousEngine();
 const defaultConfig: AutonomousConfig = {
   minScore: 75,
   minROI: 25,
-  minProfit: 150,
-  maxPrice: 3000,
+  minProfit: 3, // tiny fee-cover floor; ROI%/margin% gate the premium, not absolute $
+  maxPrice: 0, // 0 = no price ceiling; rank by demand + premium %, at any price point
   categories: [],
   scanInterval: 5,
   autoBuyEnabled: false,

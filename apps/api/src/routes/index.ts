@@ -11,6 +11,17 @@ import payoutRoutes from './payout';
 import revenueRoutes from './revenue';
 import dropshippingWebhooks from './dropshipping-webhooks';
 import marketplaceRoutes from './marketplace';
+import trendsRoutes from './trends';
+import testGoogleAdsRoutes from './test-google-ads';
+import campaignLauncherRoutes from './campaign-launcher';
+import googleAdsRoutes from './google-ads';
+import productImageRoutes from './product-image';
+import fulfillmentRoutes from './fulfillment';
+import cjRoutes from './cj';
+import tiktokRoutes from './tiktok';
+import tenantRoutes from './tenants';
+import sourcingRoutes from './sourcing';
+import alertsRoutes from './alerts';
 
 const router = Router();
 
@@ -43,4 +54,39 @@ router.use('/autonomous-control', autonomousControlRoutes);
 router.use('/revenue', revenueRoutes);
 // Dropshipping webhooks
 router.use('/webhooks/dropshipping', dropshippingWebhooks);
+
+// Trend detection routes (Kalodata TikTok Shop integration)
+router.use('/trends', trendsRoutes);
+
+// Test routes
+router.use('/test', testGoogleAdsRoutes);
+
+// Campaign management
+router.use('/campaigns', campaignLauncherRoutes);
+
+// Google Ads campaign automation (real google-ads-api; campaigns created PAUSED)
+router.use('/google-ads', googleAdsRoutes);
+
+// Product image resolver (guarantees a real product photo per listing)
+router.use('/product-image', productImageRoutes);
+
+// Fulfillment release (never front cash for high-ticket; wait for settled funds)
+router.use('/fulfillment', fulfillmentRoutes);
+
+// CJ Dropshipping sourcing + account (creates fulfillable, CJ-sourced listings)
+router.use('/cj', cjRoutes);
+
+// TikTok Ads automation (campaigns created PAUSED)
+router.use('/tiktok', tiktokRoutes);
+
+// Multi-tenant advertisers — each subscribed customer gets their own Google Ads
+// child account under the manager (MCC); campaigns are scoped to that account.
+router.use('/tenants', tenantRoutes);
+
+// Multi-source product sourcing (CJ + Amazon/Rainforest, extensible).
+router.use('/sourcing', sourcingRoutes);
+
+// Operator action items / alerts (what needs attention + quick links).
+router.use('/alerts', alertsRoutes);
+
 export default router;

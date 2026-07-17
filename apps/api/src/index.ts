@@ -1,4 +1,11 @@
 import 'dotenv/config';
+
+// google-auth-library (used by google-ads-api) otherwise probes the GCP metadata
+// server on first call. On non-GCP hosts (Railway) that probe stalls/retries and
+// can hang outbound API calls. Disable detection so it goes straight to the
+// provided OAuth refresh-token credentials.
+process.env.METADATA_SERVER_DETECTION = process.env.METADATA_SERVER_DETECTION || 'none';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -6,10 +13,14 @@ import morgan from 'morgan';
 
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
-import { getDatabase } from './config/database';
+import { getDatabase, initializeDatabase } from './config/database';
+import { getOrders } from './routes/marketplace';
+import { seedRevenueFromOrders } from './routes/revenue';
 import apiRoutes from './routes';
 import publicProductRoutes from './routes/public-product';
 import directCheckoutRoutes from './routes/direct-checkout';
+import legalRoutes from './routes/legal';
+import stripeWebhookRoutes from './routes/stripe-webhooks';
 
 // Initialize logger
 const logger = createLogger();
@@ -39,36 +50,55 @@ if (missingVars.length > 0 && process.env.NODE_ENV === 'production') {
 const app = express();
 const port = Number(process.env.PORT) || 3000;
 
-// Apply middleware
-app.use(helmet());
-
-// CORS configuration - allow specific origins
-const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',')
-  : [
-      'http://localhost:5173', // Vite dev server
-      'http://localhost:3000', // API dev server
-      'http://localhost:4200', // Angular dev server
-      'https://arbi-dashboard.vercel.app',
-      'https://arbi-landing.vercel.app'
-    ];
-
-app.use(cors({
-  origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
-      callback(null, true);
-    } else {
-      // Deny without throwing: request succeeds but browser blocks it (no CORS headers)
-      callback(null, false);
-    }
+// Apply middleware.
+// The public product/checkout pages are server-rendered HTML that legitimately
+// loads product images from external CDNs (Cloudinary and scraped retailer/CDN
+// hosts), Google Fonts, and a charting/animation CDN, and uses inline scripts
+// and inline handlers. Helmet's DEFAULT Content-Security-Policy sets
+// `img-src 'self' data:` and `script-src-attr 'none'`, which silently BLOCKS
+// every cross-origin product image and every inline onerror/onclick handler —
+// that was leaving product images as empty boxes. Relax the CSP to permit
+// https images/styles/scripts while keeping helmet's other protections.
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'img-src': ["'self'", 'data:', 'https:', 'blob:'],
+      'script-src': ["'self'", "'unsafe-inline'", 'https:'],
+      'script-src-attr': ["'unsafe-inline'"],
+      'style-src': ["'self'", "'unsafe-inline'", 'https:'],
+      'font-src': ["'self'", 'https:', 'data:'],
+      'connect-src': ["'self'", 'https:'],
+      'frame-src': ["'self'", 'https://js.stripe.com', 'https://checkout.stripe.com'],
+    },
   },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// CORS: strict origin whitelist when ALLOWED_ORIGINS is set (comma-separated);
+// otherwise allow all origins so deployments keep working until it's configured.
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim());
+if (allowedOrigins?.length) {
+  app.use(cors({
+    origin: (origin, callback) => {
+      // Allow requests with no Origin header (webhooks, curl, mobile apps)
+      if (!origin) return callback(null, true);
+      // Deny without throwing: request succeeds but browser blocks it (no CORS headers)
+      callback(null, allowedOrigins.includes(origin));
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+  }));
+} else {
+  logger.warn('⚠️  ALLOWED_ORIGINS not set — CORS allows all origins. Set it in production.');
+  app.use(cors());
+}
+
+// Stripe webhook signature verification requires the raw, unparsed request
+// body, so this route must be mounted BEFORE express.json(). This closes the
+// fulfillment loop: on checkout.session.completed it saves the BuyerOrder and
+// (when ENABLE_AUTO_FULFILLMENT=true) triggers supplier purchase.
+app.use('/api/webhooks/stripe', express.raw({ type: 'application/json' }), stripeWebhookRoutes);
 
 app.use(express.json());
 app.use(morgan('dev'));
@@ -105,6 +135,9 @@ app.get('/health', async (req, res) => {
 // Direct checkout links (shortest path: ad → checkout)
 app.use('/', directCheckoutRoutes);
 
+// Legal / policy pages (footer links — required for Google Ads, Stripe, stores)
+app.use('/', legalRoutes);
+
 // Public product landing pages (for ad destinations)
 app.use('/', publicProductRoutes);
 
@@ -120,6 +153,34 @@ const server = app.listen(port, '0.0.0.0', () => {
   logger.info(`✅ Health check: http://0.0.0.0:${port}/health`);
   logger.info(`✅ Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`✅ API ready at: http://0.0.0.0:${port}/api`);
+
+  // Connect + sync the database so orders/listings PERSIST across redeploys,
+  // then rehydrate the revenue tracker from those orders so the dashboard total
+  // is durable and reconciles to logged sales. Non-fatal: if the DB is
+  // unavailable we keep running on the in-memory fallback.
+  (async () => {
+    try {
+      await initializeDatabase();
+      logger.info('✅ Database connected + models synced (orders will persist)');
+    } catch (e: any) {
+      logger.error('⚠️  Database not available — using in-memory storage (no persistence):', e?.message || e);
+    }
+    try {
+      const orders = await getOrders();
+      const { totalRevenue, tradesExecuted } = seedRevenueFromOrders(orders as any);
+      logger.info(`✅ Revenue rehydrated: $${totalRevenue.toFixed(2)} from ${tradesExecuted} order(s)`);
+    } catch (e: any) {
+      logger.error('⚠️  Revenue rehydration failed:', e?.message || e);
+    }
+  })();
+
+  // 24/7 autonomous engine (no-op unless ENABLE_AUTONOMOUS=true).
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    require('./jobs/autonomousEngine').startAutonomousEngine();
+  } catch (e: any) {
+    logger.error('Autonomous engine failed to start:', e?.message || e);
+  }
 });
 
 // Handle server errors

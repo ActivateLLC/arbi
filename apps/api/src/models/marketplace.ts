@@ -56,6 +56,27 @@ const MarketplaceListingModel: ModelDefinition = {
       type: 'decimal',
       allowNull: false
     },
+    demandScore: {
+      type: 'decimal', // proven-demand proxy (Amazon reviews / CJ listed count)
+      allowNull: true,
+      defaultValue: 0
+    },
+    cjVariantId: {
+      type: 'string', // CJ variant id (vid) — required for CJ auto-fulfillment
+      allowNull: true
+    },
+    cjProductId: {
+      type: 'string', // CJ product id (pid) — used to fetch variants/details
+      allowNull: true
+    },
+    variants: {
+      type: 'json', // selectable size/color variants [{ vid, label, price }]
+      allowNull: true
+    },
+    videoUrl: {
+      type: 'text', // generated UGC video (YouTube watch URL)
+      allowNull: true
+    },
     status: {
       type: 'string',
       allowNull: false,
@@ -116,6 +137,19 @@ const BuyerOrderModel: ModelDefinition = {
     buyerEmail: {
       type: 'string',
       allowNull: false
+    },
+    quantity: {
+      type: 'integer',
+      allowNull: true,
+      defaultValue: 1
+    },
+    variantId: {
+      type: 'string',
+      allowNull: true
+    },
+    variantLabel: {
+      type: 'string',
+      allowNull: true
     },
     buyerShippingAddress: {
       type: 'json',

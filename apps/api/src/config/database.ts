@@ -17,14 +17,25 @@ export function getDatabase(): DatabaseManager {
 
   // Check for Railway's DATABASE_URL first
   if (process.env.DATABASE_URL) {
+    // SSL: Railway's public proxy URLs need it, but the internal network
+    // (postgres.railway.internal) and local dev postgres reject SSL entirely.
+    // Respect sslmode in the URL and the DB_SSL override instead of forcing it.
+    const url = process.env.DATABASE_URL;
+    const ssl = process.env.DB_SSL === 'true' ||
+      (process.env.DB_SSL !== 'false' &&
+        !/sslmode=disable/.test(url) &&
+        !url.includes('.railway.internal') &&
+        !url.includes('@localhost') &&
+        !url.includes('@127.0.0.1'));
+
     console.log('   Using DATABASE_URL (Railway PostgreSQL)');
-    console.log('   SSL: enabled');
+    console.log(`   SSL: ${ssl ? 'enabled' : 'disabled'}`);
 
     dbInstance = new DatabaseManager({
-      url: process.env.DATABASE_URL,
+      url,
       dialect: 'postgres' as const,
       logging: process.env.NODE_ENV === 'development',
-      ssl: true
+      ssl
     } as any);
   } else {
     // Fall back to individual config parameters

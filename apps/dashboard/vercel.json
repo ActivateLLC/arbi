@@ -3,5 +3,6 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": null,
-  "installCommand": "npx pnpm@8.14.0 install --no-frozen-lockfile"
+  "installCommand": "npx pnpm@8.14.0 install --no-frozen-lockfile",
+  "ignoreCommand": "exit 0"
 }

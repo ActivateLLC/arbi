@@ -42,18 +42,19 @@ import { DEFAULT_TENANT_ID } from '../tenantContext';
  * (a REMOVED campaign is skipped). Safe: only ever removes our own brand-flagged
  * "Arbi -"/"Arbi Video -" campaigns.
  */
-export async function purgeBrandCampaigns(opts: { customerId?: string } = {}): Promise<{ removed: number }> {
+export async function purgeBrandCampaigns(opts: { customerId?: string } = {}): Promise<{ removed: number; failed: number; errors: string[] }> {
   let campaigns: any[] = [];
-  try { campaigns = (await listCampaigns(opts.customerId)) as any[]; } catch { return { removed: 0 }; }
-  let removed = 0;
+  try { campaigns = (await listCampaigns(opts.customerId)) as any[]; } catch (e: any) { return { removed: 0, failed: 0, errors: [`listCampaigns: ${e?.message || e}`] }; }
+  let removed = 0, failed = 0; const errors: string[] = [];
   for (const c of campaigns) {
     const name = c.name || '';
     if (!/^Arbi (Video )?- /i.test(name) || c.status === 'REMOVED') continue;
     if (isBrandRestricted(name)) {
-      try { await setCampaignStatus(String(c.id), 'REMOVED', opts.customerId); removed++; } catch { /* keep going */ }
+      try { await setCampaignStatus(String(c.id), 'REMOVED', opts.customerId); removed++; }
+      catch (e: any) { failed++; if (errors.length < 5) errors.push(`${c.id} ${name.slice(0, 40)}: ${e?.message || e}`); }
     }
   }
-  return { removed };
+  return { removed, failed, errors };
 }
 
 export async function backfillCampaignRegistry(opts: { customerId?: string; dryRun?: boolean } = {}): Promise<{ mapped: number; removed: number; skipped: number }> {
@@ -210,6 +211,7 @@ export interface CleanupResult {
   toRemove: CleanupPlanItem[];
   removed: number;
   failed: number;
+  errors?: string[];
   duplicateListings: number;   // duplicate catalog products found
   expiredListings: number;     // duplicate catalog products expired
 }
@@ -254,15 +256,22 @@ export async function cleanupCampaigns(opts: { dryRun?: boolean; customerId?: st
   }
 
   let removed = 0, failed = 0;
+  const errors: string[] = [];
   if (!dryRun) {
     for (const item of toRemove) {
       try { await setCampaignStatus(item.campaignId, 'REMOVED', opts.customerId); removed++; }
-      catch { failed++; }
+      catch (e: any) {
+        failed++;
+        // Never swallow removal errors silently again — this hid a broken REMOVE
+        // mutation for weeks (update{status:REMOVED} vs the required remove op).
+        if (errors.length < 5) errors.push(`${item.campaignId}: ${e?.message || e}`);
+      }
     }
+    if (failed) console.error(`⚠️  cleanupCampaigns: ${failed}/${toRemove.length} removals FAILED — ${errors[0] || ''}`);
   }
 
   // Also de-duplicate the catalog (the root cause of duplicate campaigns).
   const dl = await dedupeListings({ dryRun }).catch(() => ({ duplicates: 0, expired: 0 }));
 
-  return { dryRun, totalCampaigns: ours.length, keep, toRemove, removed, failed, duplicateListings: dl.duplicates, expiredListings: dl.expired };
+  return { dryRun, totalCampaigns: ours.length, keep, toRemove, removed, failed, errors, duplicateListings: dl.duplicates, expiredListings: dl.expired };
 }

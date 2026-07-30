@@ -765,10 +765,13 @@ export async function setCampaignStatus(
   const resourceName = String(campaignId).includes('/')
     ? String(campaignId)
     : `customers/${cid}/campaigns/${campaignId}`;
-  const [updated] = await mutate('campaigns', [{
-    update: { resourceName, status },
-    updateMask: 'status',
-  }], customerIdOverride);
+  // REMOVED is a deletion, not a status update: the API rejects
+  // update{status:REMOVED} — it requires an explicit remove operation. (This
+  // rejection was being swallowed by callers, so purges silently no-oped.)
+  const op = status === 'REMOVED'
+    ? { remove: resourceName }
+    : { update: { resourceName, status }, updateMask: 'status' };
+  const [updated] = await mutate('campaigns', [op], customerIdOverride);
   return updated;
 }
 

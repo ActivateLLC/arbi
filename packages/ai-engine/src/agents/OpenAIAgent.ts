@@ -1,11 +1,11 @@
-import OpenAI from 'openai';
+import { BaseAgent } from './base/BaseAgent';
 
 import type {
   AgentConfig,
   AgentResponse,
   ToolCall,
 } from '../types';
-import { BaseAgent } from './base/BaseAgent';
+import type OpenAI from 'openai';
 
 export class OpenAIAgent extends BaseAgent {
   constructor(config: AgentConfig, client?: OpenAI) {

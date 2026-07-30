@@ -1,3 +1,5 @@
+import { GuardrailManager } from '../guardrails/GuardrailManager';
+
 import type { BaseAgent } from '../agents/base/BaseAgent';
 import type {
   GuardrailConfig,
@@ -6,7 +8,6 @@ import type {
   OrchestrationResult,
   TraceEvent,
 } from '../types';
-import { GuardrailManager } from '../guardrails/GuardrailManager';
 
 export class AgentOrchestrator {
   private agents: Map<string, BaseAgent>;

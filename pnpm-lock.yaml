@@ -10,7 +10,6 @@ overrides:
   sequelize: ^6.37.8
   lodash: ^4.18.1
   handlebars: ^4.7.9
-  undici: ^8.7.0
   express: ^4.22.1
   qs: ^6.15.3
   form-data: ^4.0.6
@@ -5148,7 +5147,7 @@ packages:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 8.7.0
+      undici: 7.29.0
       whatwg-mimetype: 4.0.0
     dev: false
 
@@ -11518,9 +11517,9 @@ packages:
   /undici-types@6.21.0:
     resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
 
-  /undici@8.7.0:
-    resolution: {integrity: sha512-N7iQtfyLhIMOFgQubvmLV26svHpO0bqKnAiWotTQCVKCmWrcGbBotPuW1x+xwYZ2VHdSTVUfPQQnlEt1/LouTQ==}
-    engines: {node: '>=22.19.0'}
+  /undici@7.29.0:
+    resolution: {integrity: sha512-IDxfleLmmbSskfWSUATiN1nfn2rDuvnMOqb5CWR92iIfojA0Ud+ulOAAEQ57LPr9rWmsreUyf5lwyao+7GNNVw==}
+    engines: {node: '>=20.18.1'}
     dev: false
 
   /unique-filename@3.0.0:

@@ -52,7 +52,26 @@ app.use(helmet({
     },
   },
 }));
-app.use(cors());
+// CORS: strict origin whitelist when ALLOWED_ORIGINS is set (comma-separated);
+// otherwise allow all origins (with a loud warning) so enabling it can't
+// silently break the deployed dashboard before it's configured. Ported from the
+// parallel session's live-verification fix; x-api-key added so the ARBI_API_KEY-
+// protected endpoints stay callable from whitelisted origins.
+const allowedOrigins = process.env.ALLOWED_ORIGINS?.split(',').map(o => o.trim()).filter(Boolean);
+if (allowedOrigins?.length) {
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true); // webhooks, curl, mobile apps
+      callback(null, allowedOrigins.includes(origin)); // deny = no CORS headers, no 500
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  }));
+} else {
+  logger.warn('⚠️  ALLOWED_ORIGINS not set — CORS allows all origins. Set it in production.');
+  app.use(cors());
+}
 
 // Stripe webhook signature verification requires the raw, unparsed request
 // body, so this route must be mounted BEFORE express.json(). This closes the

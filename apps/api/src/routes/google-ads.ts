@@ -394,12 +394,17 @@ router.get('/youtube-oauth/callback', async (req: Request, res: Response) => {
         hint: 'Ensure access_type=offline + prompt=consent and that the redirect URI matches the OAuth client exactly.',
       });
     }
-    res.json({
-      success: true,
-      message: 'Set GOOGLE_ADS_REFRESH_TOKEN to this value in Railway (arbi-production) — it covers Google Ads AND YouTube — then redeploy.',
-      refresh_token: r.data.refresh_token,
-      scope: r.data.scope,
-    });
+    // ONE-TAP CONNECT: persist the token server-side and use it immediately —
+    // no env paste, no redeploy. Then bounce back to the dashboard.
+    const { saveGoogleToken } = await import('../services/google-ads/googleAuthStore');
+    const { resetTokenCache } = await import('../services/google-ads/googleAdsRest');
+    await saveGoogleToken(r.data.refresh_token, r.data.scope || '');
+    resetTokenCache();
+    if (req.query.json === '1') {
+      return res.json({ success: true, connected: true, scope: r.data.scope });
+    }
+    const dash = (process.env.DASHBOARD_URL || 'https://arbi-command-center-production.vercel.app').replace(/\/$/, '');
+    res.redirect(`${dash}/?youtube=connected`);
   } catch (error: any) {
     res.status(500).json({ success: false, error: error?.message || String(error) });
   }
@@ -660,6 +665,9 @@ router.get('/status', (_req: Request, res: Response) => {
     autonomous: f('ENABLE_AUTONOMOUS'),
     autoGoLive: f('AUTO_GO_LIVE'),
     stockMonitor: f('ENABLE_STOCK_MONITOR'),
+    // Organic engine: true once the dashboard "Connect YouTube" flow has minted
+    // a token whose scope includes YouTube (stored server-side, no redeploy).
+    youtube: require('../services/google-ads/googleAuthStore').youtubeConnected(),
   });
 });
 

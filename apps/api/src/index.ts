@@ -121,6 +121,8 @@ const server = app.listen(port, '0.0.0.0', () => {
       // never resets the engine to env defaults (intent is sticky until stopped).
       try {
         await require('./services/autonomousSettings').hydrateAutonomousSettings();
+        // Restore the dashboard-connected Google/YouTube OAuth token (survives redeploys).
+        await require('./services/google-ads/googleAuthStore').hydrateGoogleToken();
       } catch (e: any) {
         logger.error('⚠️  Engine-state rehydration failed (keeping env defaults):', e?.message || e);
       }

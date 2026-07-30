@@ -22,12 +22,19 @@ export function envCustomerId(): string { return digits(trimEnv('GOOGLE_ADS_CUST
 export function managerId(): string { return digits(trimEnv('GOOGLE_ADS_LOGIN_CUSTOMER_ID')); }
 
 let _token: { value: string; expiresAt: number } | null = null;
+import { getStoredRefreshToken } from './googleAuthStore';
+
+/** Drop the cached access token (e.g. right after a new refresh token is saved). */
+export function resetTokenCache(): void { _token = null; }
+
 export async function getAccessToken(): Promise<string> {
   if (_token && Date.now() < _token.expiresAt) return _token.value;
   const body = new URLSearchParams({
     client_id: trimEnv('GOOGLE_ADS_CLIENT_ID'),
     client_secret: trimEnv('GOOGLE_ADS_CLIENT_SECRET'),
-    refresh_token: trimEnv('GOOGLE_ADS_REFRESH_TOKEN'),
+    // Dashboard-connected token (DB) wins over the env var — one-tap YouTube
+    // connect works with no redeploy; env remains the fallback.
+    refresh_token: getStoredRefreshToken() || trimEnv('GOOGLE_ADS_REFRESH_TOKEN'),
     grant_type: 'refresh_token',
   }).toString();
   const r = await axios.post('https://oauth2.googleapis.com/token', body, {

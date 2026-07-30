@@ -1,0 +1,67 @@
+
+IMAGE SPECIFICATIONS FOR: Electric Standing Desk Pro 72" - Dual Motor
+Size: 1200x1200 (square)
+
+DESIGN REQUIREMENTS:
+- Background: Clean gradient (white to light gray, or brand colors)
+- Product image: High-quality photo of Electric Standing Desk Pro 72" - Dual Motor
+- Price tag: $599.99 in bold, prominent position
+- Headline: "Transform Your Workspace Today"
+- Call-to-action: "Shop Now" button
+- Trust badges: Free shipping, warranty, secure checkout
+
+LAYOUT:
+
+- Center: Product image (60% of space)
+- Top: Headline text
+- Bottom: Price + CTA button
+- Corners: Trust badges
+
+
+KEY BENEFITS TO HIGHLIGHT:
+- Dual motor system for smooth operation
+- 72" wide desktop - plenty of space
+- 4 memory height presets
+- Cable management system
+- Anti-collision technology
+
+COLOR SCHEME:
+- Primary: Deep blue or brand color
+- Accent: Orange/red for CTA
+- Text: Dark gray on white background
+- Price: Green (savings emphasis)
+
+FONTS:
+- Heading: Bold, modern sans-serif (e.g., Montserrat Bold)
+- Body: Clean sans-serif (e.g., Open Sans)
+- Price: Extra bold
+
+TOOLS TO USE:
+1. Canva Pro (recommended):
+   - Use "Ad" template
+   - Select 1200x1200 custom size
+   - Upload product image or use stock photos
+   - Add text overlays and CTA button
+
+2. Adobe Express:
+   - Choose "Social media post" template
+   - Resize to 1200x1200
+   - Add layers for text and product image
+
+3. Photoshop/Figma:
+   - Create canvas 1200x1200
+   - Layer 1: Background gradient
+   - Layer 2: Product image (with clipping mask if needed)
+   - Layer 3: Text overlays
+   - Layer 4: CTA button
+   - Export as JPG (quality: 90)
+
+EXAMPLE TEXT PLACEMENT:
+
+        Transform Your Workspace Today
+
+        [PRODUCT IMAGE]
+
+        $599.99
+        [Shop Now Button]
+

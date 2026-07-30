@@ -7,7 +7,19 @@ const logger = createLogger();
 export class ApiError extends Error {
   statusCode: number;
   
-  constructor(message: string, statusCode = 500) {
+  constructor(arg1: string | number, arg2: string | number = 500) {
+    // Tolerate both (message, statusCode) and the (statusCode, message) order
+    // used across several routes, so a reversed call can't produce an invalid
+    // HTTP status code.
+    let message: string;
+    let statusCode: number;
+    if (typeof arg1 === 'number') {
+      statusCode = arg1;
+      message = String(arg2);
+    } else {
+      message = arg1;
+      statusCode = typeof arg2 === 'number' ? arg2 : 500;
+    }
     super(message);
     this.statusCode = statusCode;
     this.name = this.constructor.name;

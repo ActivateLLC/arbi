@@ -1,0 +1,729 @@
+/**
+ * Google Ads Campaign Automation API Routes
+ */
+
+import { Router, Request, Response, NextFunction } from 'express';
+import axios from 'axios';
+import { ApiError } from '../middleware/errorHandler';
+import {
+  createAutomatedCampaign,
+  createBulkCampaigns,
+  createVideoCampaign,
+  getCampaignMetrics,
+  setCampaignStatus,
+  listCampaigns,
+  demandRank,
+  DEFAULT_DAILY_BUDGET,
+  ProductAdData,
+  CampaignConfig,
+} from '../services/google-ads/campaignAutomation';
+import { getListings, getListing, updateListing } from './marketplace';
+import { buildCreativeBrief } from '../services/google-ads/adCreative';
+import { isConfigured as isVideoConfigured, generateProductVideo } from '../services/google-ads/higgsfieldVideo';
+import { createVideoAdForListing } from '../services/google-ads/videoAdPipeline';
+import { submitOnly, videoModelId, fetchRenderResult } from '../services/google-ads/higgsfieldRest';
+import { listJobs as listVideoJobs, stageProgress, clearJob as clearVideoJob } from '../services/google-ads/videoJobs';
+import { ensureConversionAction, conversionSendTo } from '../services/google-ads/googleAdsConversions';
+import { runOptimizationPass } from '../services/google-ads/campaignOptimizer';
+import { syncAdsToStock } from '../services/google-ads/stockSync';
+
+const router = Router();
+
+/** Map a marketplace listing to the ProductAdData shape. */
+function listingToProduct(l: any): ProductAdData {
+  const price = Number(l.marketplacePrice) || 0;
+  const profit = Number(l.estimatedProfit) || 0;
+  return {
+    productId: l.listingId,
+    productName: l.productTitle,
+    productPrice: price,
+    profitMargin: price > 0 ? Math.round((profit / price) * 100) : 0,
+    category: l.supplierPlatform || 'general',
+    targetCountry: 'US',
+    imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
+    landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
+  };
+}
+
+/**
+ * Fetch active marketplace listings (via getListings, which handles the DB +
+ * in-memory fallback) and map them into the ProductAdData shape the campaign
+ * automation expects. Optionally filter by a minimum profit margin (%).
+ */
+export async function getActiveProductsForAds(limit: number, minProfitMargin = 0): Promise<ProductAdData[]> {
+  const listings = await getListings('active');
+
+  return (listings as any[])
+    .map((l) => {
+      const price = Number(l.marketplacePrice) || 0;
+      const profit = Number(l.estimatedProfit) || 0;
+      const profitMargin = price > 0 ? Math.round((profit / price) * 100) : 0;
+      const demandScore = Number(l.demandScore) || 0;
+      return {
+        product: {
+          productId: l.listingId,
+          productName: l.productTitle,
+          productPrice: price,
+          profitMargin,
+          category: l.supplierPlatform || 'general',
+          targetCountry: 'US',
+          imageUrl: Array.isArray(l.productImages) ? l.productImages[0] : undefined,
+          landingPageUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${l.listingId}`,
+          videoUrl: undefined,
+        } as ProductAdData,
+        demandScore,
+        profit,
+      };
+    })
+    .filter((x) => x.product.profitMargin >= minProfitMargin)
+    // Demand-first: promote the most proven (highest-demand) products, breaking
+    // ties by estimated profit — so we spend on what's most likely to sell now.
+    .sort((a, b) => demandRank(b.demandScore, b.profit) - demandRank(a.demandScore, a.profit))
+    .slice(0, limit)
+    .map((x) => x.product);
+}
+
+/**
+ * POST /api/google-ads/create-campaign
+ * Create a single Google Ads campaign
+ */
+router.post('/create-campaign', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { product, config } = req.body;
+
+    if (!product || !product.productName || !product.landingPageUrl) {
+      throw new ApiError(400, 'Product data with productName and landingPageUrl is required');
+    }
+
+    if (!config || !config.dailyBudget) {
+      throw new ApiError(400, 'Campaign config with dailyBudget is required');
+    }
+
+    const result = await createAutomatedCampaign(product, config);
+
+    res.status(201).json({
+      success: true,
+      message: `Campaign created for ${product.productName}`,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('❌ Campaign creation failed:', error.message);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/create-bulk-campaigns
+ * Create campaigns for multiple products
+ */
+router.post('/create-bulk-campaigns', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { products, config } = req.body;
+
+    if (!products || !Array.isArray(products) || products.length === 0) {
+      throw new ApiError(400, 'products array is required');
+    }
+
+    if (!config || !config.dailyBudget) {
+      throw new ApiError(400, 'Campaign config with dailyBudget is required');
+    }
+
+    const result = await createBulkCampaigns(products, config);
+
+    res.status(201).json({
+      success: true,
+      message: `Created ${result.success} campaigns, ${result.failed} failed`,
+      ...result,
+    });
+  } catch (error: any) {
+    console.error('❌ Bulk campaign creation failed:', error.message);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/auto-campaign-from-marketplace
+ * Automatically create campaigns for top Arbi marketplace products
+ */
+router.post('/auto-campaign-from-marketplace', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { limit = 10, minProfitMargin = 20, dailyBudgetPerProduct = 50 } = req.body;
+
+    console.log(`🎯 Fetching top ${limit} products with ${minProfitMargin}% minimum profit margin...`);
+
+    // Get top profitable active listings from the marketplace data store
+    const productAdData = await getActiveProductsForAds(limit, minProfitMargin);
+
+    if (productAdData.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: `No products found with minimum ${minProfitMargin}% profit margin`,
+        campaigns: [],
+      });
+    }
+
+    console.log(`✅ Found ${productAdData.length} products. Creating campaigns...`);
+
+    // Create campaigns
+    const config: CampaignConfig = {
+      dailyBudget: dailyBudgetPerProduct,
+      targetROAS: 3.0, // Target $3 revenue per $1 spent
+      geoTargeting: ['US', 'CA', 'GB'],
+      maxCPC: 2.0, // Max $2 per click
+    };
+
+    const result = await createBulkCampaigns(productAdData, config);
+
+    res.status(201).json({
+      success: true,
+      message: `Created ${result.success} campaigns for top marketplace products`,
+      totalProducts: productAdData.length,
+      ...result,
+      totalBudget: productAdData.length * dailyBudgetPerProduct,
+      estimatedMonthlySpend: productAdData.length * dailyBudgetPerProduct * 30,
+    });
+  } catch (error: any) {
+    console.error('❌ Auto-campaign creation failed:', error.message);
+    next(error);
+  }
+});
+
+/**
+ * GET /api/google-ads/campaign/:campaignId/metrics
+ * Get performance metrics for a campaign
+ */
+router.get('/campaign/:campaignId/metrics', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { campaignId } = req.params;
+
+    if (!campaignId) {
+      throw new ApiError(400, 'campaignId is required');
+    }
+
+    const metrics = await getCampaignMetrics(campaignId);
+
+    res.status(200).json({
+      success: true,
+      campaignId,
+      metrics,
+    });
+  } catch (error: any) {
+    console.error('❌ Failed to get metrics:', error.message);
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/quick-start
+ * One-click setup: Create campaigns for all high-profit products
+ */
+router.post('/quick-start', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    console.log('🚀 Google Ads Quick Start - Automated Campaign Creation');
+
+    // Step 1: Get top 5 highest-margin active listings (30%+ margin)
+    const products = await getActiveProductsForAds(5, 30);
+
+    if (products.length === 0) {
+      return res.status(200).json({
+        success: false,
+        message: 'No products with 30%+ profit margin found. Add products first.',
+      });
+    }
+
+    console.log(`✅ Found ${products.length} high-margin products`);
+
+    // Step 2: Create campaigns with conservative budget
+    const config: CampaignConfig = {
+      dailyBudget: DEFAULT_DAILY_BUDGET, // low test budget — spread across many products
+      targetROAS: 4.0, // Target $4 revenue per $1 spent (aggressive)
+      geoTargeting: ['US'],
+      maxCPC: 1.5,
+    };
+
+    const result = await createBulkCampaigns(products, config);
+
+    res.status(201).json({
+      success: true,
+      message: `🎉 Quick Start Complete! Created ${result.success} campaigns`,
+      campaigns: result.results,
+      budget: {
+        dailyBudget: products.length * 20,
+        estimatedMonthlySpend: products.length * 20 * 30,
+        projectedMonthlyRevenue: products.length * 20 * 30 * 4, // 4x ROAS target
+      },
+      nextSteps: [
+        'Review campaigns in Google Ads dashboard',
+        'Enable campaigns when ready to start spending',
+        'Monitor performance and adjust budgets',
+        'Extract winning ad videos to improve performance',
+      ],
+    });
+  } catch (error: any) {
+    console.error('❌ Quick start failed:', error.message);
+    next(error);
+  }
+});
+
+/**
+ * GET /api/google-ads/quick-start-now?confirm=yes
+ * Mobile-tappable trigger for quick-start (creates PAUSED campaigns).
+ */
+router.get('/quick-start-now', async (req: Request, res: Response, next: NextFunction) => {
+  if (req.query.confirm !== 'yes') {
+    return res.status(400).json({ success: false, error: 'Add ?confirm=yes to create campaigns (they are created PAUSED).' });
+  }
+  try {
+    // ?count=1 keeps the request fast (each campaign is several sequential
+    // Google API calls; 5 can exceed a mobile browser's timeout).
+    const count = Math.min(Math.max(Number(req.query.count) || 5, 1), 5);
+    const products = await getActiveProductsForAds(count, 30);
+    if (products.length === 0) {
+      return res.status(200).json({ success: false, message: 'No products with 30%+ profit margin found.' });
+    }
+    const config: CampaignConfig = { dailyBudget: DEFAULT_DAILY_BUDGET, targetROAS: 4.0, geoTargeting: ['US'], maxCPC: 1.5 };
+    const result = await createBulkCampaigns(products, config);
+    res.status(201).json({ success: true, message: `Created ${result.success} PAUSED campaign(s)`, ...result });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/google-ads/creative-briefs?count=N
+ * Preview the UGC-style creative (hooks, 5-beat captioned video script, social
+ * copy) we'd generate for the top active products. This is the "brain" that
+ * feeds video generation (Higgsfield/Reap), TikTok, and Demand Gen/PMax copy.
+ */
+router.get('/creative-briefs', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const count = Math.min(Math.max(Number(req.query.count) || 3, 1), 10);
+    const products = await getActiveProductsForAds(count, 0);
+    const briefs = products.map((p) => buildCreativeBrief(p));
+    res.json({ success: true, count: briefs.length, briefs });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/** GET /api/google-ads/video-config — is Higgsfield video generation configured? */
+router.get('/video-config', (_req: Request, res: Response) => {
+  res.json({ configured: isVideoConfigured() });
+});
+
+/**
+ * POST /api/google-ads/generate-video  Body: { listingId, model? }
+ * Generate a UGC-style 9:16 video from a listing's real product image.
+ */
+router.post('/generate-video', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!isVideoConfigured()) {
+      throw new ApiError(503, 'Higgsfield not configured: set HF_API_KEY and HF_API_SECRET.');
+    }
+    const { listingId, model } = req.body || {};
+    if (!listingId) throw new ApiError(400, 'listingId is required');
+    const listing: any = await getListing(listingId);
+    if (!listing) throw new ApiError(404, 'Listing not found');
+    const imageUrl = Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) throw new ApiError(409, 'Listing has no product image to animate');
+
+    const result = await generateProductVideo(listingToProduct(listing), imageUrl, { model });
+    res.status(201).json({ success: true, listingId, ...result });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * YouTube permission setup (one-time, admin). Grants the youtube.upload scope so
+ * generated videos can be hosted on YouTube and used as Google Ads video assets.
+ * The minted refresh token covers BOTH adwords + youtube, so one credential
+ * drives ads AND uploads — replace GOOGLE_ADS_REFRESH_TOKEN with it.
+ */
+const youtubeRedirectUri = () =>
+  process.env.GOOGLE_OAUTH_REDIRECT_URI ||
+  `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/api/google-ads/youtube-oauth/callback`;
+
+router.get('/youtube-oauth/url', (_req: Request, res: Response) => {
+  const clientId = (process.env.GOOGLE_ADS_CLIENT_ID || '').trim();
+  if (!clientId) return res.status(503).json({ success: false, error: 'GOOGLE_ADS_CLIENT_ID not set.' });
+  const redirectUri = youtubeRedirectUri();
+  const scope = [
+    'https://www.googleapis.com/auth/adwords',
+    'https://www.googleapis.com/auth/youtube.upload',
+    'https://www.googleapis.com/auth/youtube',
+  ].join(' ');
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope,
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+  });
+  res.json({
+    success: true,
+    authUrl: `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
+    redirectUri,
+    note: 'First: in Google Cloud Console add this exact redirectUri to the OAuth client, and enable "YouTube Data API v3". Then open authUrl with the Google account that owns your YouTube channel + Google Ads.',
+  });
+});
+
+router.get('/youtube-oauth/callback', async (req: Request, res: Response) => {
+  const code = String(req.query.code || '');
+  if (!code) return res.status(400).json({ success: false, error: 'Missing ?code. Start at /api/google-ads/youtube-oauth/url.' });
+  try {
+    const body = new URLSearchParams({
+      client_id: (process.env.GOOGLE_ADS_CLIENT_ID || '').trim(),
+      client_secret: (process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim(),
+      code,
+      redirect_uri: youtubeRedirectUri(),
+      grant_type: 'authorization_code',
+    }).toString();
+    const r = await axios.post('https://oauth2.googleapis.com/token', body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      validateStatus: () => true,
+      timeout: 15000,
+    });
+    if (r.status !== 200 || !r.data?.refresh_token) {
+      return res.status(400).json({
+        success: false,
+        error: r.data?.error || `status ${r.status}`,
+        error_description: r.data?.error_description,
+        hint: 'Ensure access_type=offline + prompt=consent and that the redirect URI matches the OAuth client exactly.',
+      });
+    }
+    // ONE-TAP CONNECT: persist the token server-side and use it immediately —
+    // no env paste, no redeploy. Then bounce back to the dashboard.
+    const { saveGoogleToken } = await import('../services/google-ads/googleAuthStore');
+    const { resetTokenCache } = await import('../services/google-ads/googleAdsRest');
+    await saveGoogleToken(r.data.refresh_token, r.data.scope || '');
+    resetTokenCache();
+    if (req.query.json === '1') {
+      return res.json({ success: true, connected: true, scope: r.data.scope });
+    }
+    const dash = (process.env.DASHBOARD_URL || 'https://arbi-command-center-production.vercel.app').replace(/\/$/, '');
+    res.redirect(`${dash}/?youtube=connected`);
+  } catch (error: any) {
+    res.status(500).json({ success: false, error: error?.message || String(error) });
+  }
+});
+
+/**
+ * POST /api/google-ads/youtube/upload-from-listing  Body: { listingId, model? }
+ * Generate a UGC video for a listing and host it on YouTube (unlisted). Returns
+ * the YouTube video id to use as a Google Ads video asset.
+ */
+router.post('/youtube/upload-from-listing', async (req: Request, res: Response) => {
+  // Return readable errors (200 + {success:false,error}) so the UI shows WHY it
+  // failed instead of a generic 500. Video gen has many external failure points
+  // (Higgsfield render, YouTube scope, Ads payload) — each must be diagnosable.
+  try {
+    const { listingId, model } = req.body || {};
+    if (!isVideoConfigured()) return res.json({ success: false, error: 'Higgsfield not configured (HF_API_KEY/HF_API_SECRET).' });
+    if (!listingId) return res.json({ success: false, error: 'listingId is required' });
+    const listing: any = await getListing(listingId);
+    if (!listing) return res.json({ success: false, error: 'Listing not found' });
+    const imageUrl = Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) return res.json({ success: false, error: 'Listing has no product image to animate' });
+
+    // Full chain (hook scoring → CJ review → render → YouTube → PAUSED campaign).
+    const result = await createVideoAdForListing(listing, { model });
+    res.status(201).json({ success: true, ...result });
+  } catch (error: any) {
+    console.error('youtube/upload-from-listing failed:', error?.response?.data || error?.message || error);
+    res.json({ success: false, error: error?.message || String(error) });
+  }
+});
+
+/**
+ * GET /api/google-ads/video-jobs — the live UGC video lifecycle so the Command
+ * Center can show a native, sequential status (queued → scripting → rendering →
+ * uploading → launching → ready/live) for each product, no YouTube tab needed.
+ */
+router.get('/video-jobs', (_req: Request, res: Response) => {
+  const jobs = listVideoJobs().map((j) => ({ ...j, progress: stageProgress(j.stage) }));
+  res.json({ success: true, jobs, active: jobs.filter((j) => !['live', 'ready', 'failed'].includes(j.stage)).length });
+});
+
+/**
+ * GET /api/google-ads/video-assets — every generated video ASSET across the
+ * catalog (proof + downloadable links), newest first. Powers the UI gallery.
+ */
+router.get('/video-assets', async (_req: Request, res: Response) => {
+  try {
+    const listings = (await getListings('active')) as any[];
+    const assets: any[] = [];
+    for (const l of listings) {
+      const list = Array.isArray(l.videoAssets) ? l.videoAssets : (l.videoUrl ? [{ url: l.videoUrl, createdAt: l.listedAt, posted: /youtube/.test(l.videoUrl) }] : []);
+      for (const a of list) assets.push({ listingId: l.listingId, productTitle: l.productTitle, ...a });
+    }
+    assets.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+    res.json({ success: true, count: assets.length, assets });
+  } catch (e: any) {
+    res.json({ success: false, error: e?.message || String(e), assets: [] });
+  }
+});
+
+/**
+ * POST /api/google-ads/regenerate-video — re-render with the current (improved)
+ * vision-informed pipeline. Body: { listingId } regenerates ONE now (background);
+ * { all: true } clears saved videos so the engine re-renders them over cycles
+ * (credit-safe, bounded concurrency — never fires a flood at once).
+ */
+router.post('/regenerate-video', async (req: Request, res: Response) => {
+  try {
+    if (!isVideoConfigured()) return res.json({ success: false, error: 'Higgsfield not configured.' });
+    const { listingId, all } = req.body || {};
+
+    if (all === true) {
+      const listings = (await getListings('active')) as any[];
+      const withVideo = listings.filter((l) => l.videoUrl || (Array.isArray(l.videoAssets) && l.videoAssets.length));
+      for (const l of withVideo) {
+        clearVideoJob(l.listingId);
+        try { await updateListing(l.listingId, { videoUrl: undefined } as any); } catch { /* keep going */ }
+      }
+      return res.json({ success: true, cleared: withVideo.length, note: 'Cleared saved videos; the engine will re-render them with the new pipeline over the next cycles (credit-safe).' });
+    }
+
+    if (!listingId) return res.json({ success: false, error: 'Pass { listingId } or { all: true }.' });
+    const listing: any = await getListing(listingId);
+    if (!listing) return res.json({ success: false, error: 'Listing not found.' });
+    clearVideoJob(listingId);
+    try { await updateListing(listingId, { videoUrl: undefined } as any); } catch { /* non-fatal */ }
+    // Re-render in the BACKGROUND (1-3 min) so the request returns immediately;
+    // the lifecycle UI shows progress and the asset persists when done.
+    void createVideoAdForListing({ ...listing, videoUrl: undefined })
+      .catch((e) => console.error('regenerate-video failed:', e?.message || e));
+    res.status(202).json({ success: true, listingId, status: 'regenerating', note: 'Re-rendering with the vision-informed pipeline — watch the card lifecycle.' });
+  } catch (e: any) {
+    res.json({ success: false, error: e?.message || String(e) });
+  }
+});
+
+/**
+ * GET /api/google-ads/video-diag — fast, browser-clickable diagnostic. Submits a
+ * Higgsfield render request (no waiting) and returns the immediate response/error
+ * so we can tell in seconds whether the model/auth/credits work vs. the render
+ * itself. Pass ?listingId=... or it uses the first active product with an image.
+ */
+router.get('/video-diag', async (req: Request, res: Response) => {
+  try {
+    if (!isVideoConfigured()) return res.json({ ok: false, stage: 'config', error: 'Higgsfield not configured (HF_API_KEY/HF_API_SECRET).' });
+    const listingId = String(req.query.listingId || '');
+    const all = await getListings('active');
+    const listing: any = listingId ? all.find((l: any) => l.listingId === listingId) : all.find((l: any) => Array.isArray(l.productImages) && l.productImages[0]);
+    const imageUrl = listing && Array.isArray(listing.productImages) ? listing.productImages[0] : undefined;
+    if (!imageUrl) return res.json({ ok: false, stage: 'listing', error: 'No active product with an image found.' });
+
+    // Try the documented image-to-video models in order; stop at the first the
+    // account accepts (queues). Invalid models 404 without consuming credits.
+    const candidates = [
+      videoModelId(),
+      'higgsfield-ai/dop/standard',
+      'kling-video/v2.1/pro/image-to-video',
+      'bytedance/seedance/v1/pro/image-to-video',
+    ].filter((v, i, a) => v && a.indexOf(v) === i);
+    const args = { image_url: imageUrl, prompt: 'Short vertical UGC product ad, dynamic, scroll-stopping.' };
+    const attempts: any[] = [];
+    let working: string | null = null;
+    for (const m of candidates) {
+      const r = await submitOnly(m, args);
+      // Surface request_id + status_url so the result can be polled (see
+      // /video-diag-result) to confirm the render COMPLETES and yields a URL.
+      attempts.push({ modelId: m, ok: r.ok, httpStatus: r.httpStatus, status: r.status, request_id: r.request_id, status_url: r.data?.status_url, error: r.error });
+      if (r.ok) { working = m; break; }
+    }
+    const last = attempts.find((a) => a.ok) || attempts[attempts.length - 1];
+    res.json({
+      workingModelId: working,
+      hint: working ? `Set HF_VIDEO_MODEL_ID=${working}` : 'No documented model accepted — check Higgsfield plan/credits',
+      testedListing: listing.productTitle,
+      pollResult: last?.request_id ? `/api/google-ads/video-diag-result?requestId=${encodeURIComponent(last.request_id)}` : undefined,
+      attempts,
+    });
+  } catch (e: any) {
+    res.json({ ok: false, stage: 'exception', error: e?.message || String(e) });
+  }
+});
+
+/**
+ * GET /api/google-ads/video-diag-result?requestId=…  (or ?statusUrl=…)
+ * Polls a queued render's status ONCE and returns the completed payload + the
+ * video URL we extract from it — so we can confirm the render finishes AND that
+ * our parser pulls the URL (the last mile of "why no video"). No new render, no
+ * extra credits — it just reads an already-submitted job.
+ */
+router.get('/video-diag-result', async (req: Request, res: Response) => {
+  try {
+    const id = String(req.query.statusUrl || req.query.requestId || '').trim();
+    if (!id) return res.json({ ok: false, error: 'Pass ?requestId=… (from /video-diag) or ?statusUrl=…' });
+    const r = await fetchRenderResult(id);
+    res.json({ ok: true, status: r.status, videoUrl: r.videoUrl, extracted: !!r.videoUrl, raw: r.raw });
+  } catch (e: any) {
+    res.json({ ok: false, error: e?.response?.data || e?.message || String(e) });
+  }
+});
+
+/**
+ * GET /api/google-ads/campaigns — list campaigns with status + metrics.
+ * Powers the dashboard "go live" view (what's PAUSED vs serving).
+ */
+router.get('/campaigns', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, campaigns: await listCampaigns() });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/campaign/:id/enable — start serving (real spend begins).
+ * POST /api/google-ads/campaign/:id/pause  — stop serving.
+ * One-tap go-live: no Google Ads console needed.
+ */
+router.post('/campaign/:id/enable', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const resourceName = await setCampaignStatus(req.params.id, 'ENABLED');
+    res.json({ success: true, campaignId: req.params.id, status: 'ENABLED', resourceName });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+router.post('/campaign/:id/pause', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const resourceName = await setCampaignStatus(req.params.id, 'PAUSED');
+    res.json({ success: true, campaignId: req.params.id, status: 'PAUSED', resourceName });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/google-ads/conversions/setup
+ * Create (idempotently) the purchase conversion action and return its gtag
+ * send_to. Set GOOGLE_ADS_CONVERSION_SEND_TO to the returned value + redeploy,
+ * and Smart Bidding starts learning from real purchases.
+ */
+router.get('/conversions/setup', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const info = await ensureConversionAction();
+    res.json({
+      success: true,
+      ...info,
+      alreadyConfigured: conversionSendTo() === info.sendTo && !!info.sendTo,
+      next: info.sendTo
+        ? `Set GOOGLE_ADS_CONVERSION_SEND_TO=${info.sendTo} on arbi-production, then redeploy.`
+        : 'Conversion action created, but the tag is still propagating — re-run in a minute to get the send_to.',
+    });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/optimize — run one autonomous optimization pass now
+ * (scale winners / pause losers within caps). Safe: never enables a campaign.
+ */
+router.post('/optimize', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, ...(await runOptimizationPass()) });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/google-ads/stock-sync — pause ads for out-of-stock products
+ * (don't pay for clicks on things you can't ship). Only pauses, never enables.
+ */
+router.post('/stock-sync', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.json({ success: true, ...(await syncAdsToStock()) });
+  } catch (error: any) {
+    next(error);
+  }
+});
+
+/**
+ * GET /api/google-ads/status — setup health for the dashboard's Setup panel.
+ * Reports config presence only (no secrets, no token exchange) so it's cheap to
+ * poll: credentials present, manager header set, conversion tracking wired.
+ */
+router.get('/status', (_req: Request, res: Response) => {
+  const t = (k: string) => (process.env[k] || '').trim();
+  const f = (k: string) => t(k).toLowerCase() === 'true';
+  res.json({
+    credsPresent: !!(t('GOOGLE_ADS_CLIENT_ID') && t('GOOGLE_ADS_CLIENT_SECRET') &&
+      t('GOOGLE_ADS_REFRESH_TOKEN') && t('GOOGLE_ADS_DEVELOPER_TOKEN') && t('GOOGLE_ADS_CUSTOMER_ID')),
+    managerLinked: !!t('GOOGLE_ADS_LOGIN_CUSTOMER_ID'),
+    conversionTracking: !!t('GOOGLE_ADS_CONVERSION_SEND_TO'),
+    // Added-feature automations (so the dashboard can show what's live).
+    amazonSourcing: !!t('RAINFOREST_API_KEY'),
+    autonomous: f('ENABLE_AUTONOMOUS'),
+    autoGoLive: f('AUTO_GO_LIVE'),
+    stockMonitor: f('ENABLE_STOCK_MONITOR'),
+    // Organic engine: true once the dashboard "Connect YouTube" flow has minted
+    // a token whose scope includes YouTube (stored server-side, no redeploy).
+    youtube: require('../services/google-ads/googleAuthStore').youtubeConnected(),
+  });
+});
+
+/** GET /api/google-ads/conversions/status — is conversion tracking wired? */
+router.get('/conversions/status', (_req: Request, res: Response) => {
+  const sendTo = conversionSendTo();
+  res.json({ configured: !!sendTo, sendTo: sendTo || null });
+});
+
+/**
+ * GET /api/google-ads/debug-auth
+ * Diagnostic: shows the (masked) credentials the SERVICE actually sees, and
+ * directly exchanges the refresh token with Google so we get the exact error.
+ * Remove after debugging. Secrets are masked.
+ */
+router.get('/debug-auth', async (req: Request, res: Response) => {
+  // Optional query overrides let you test a freshly-minted token directly,
+  // bypassing Railway env entirely: ?rt=<refresh_token>[&cid=...&cs=...]
+  const clientId = (String(req.query.cid || '') || process.env.GOOGLE_ADS_CLIENT_ID || '').trim();
+  const clientSecret = (String(req.query.cs || '') || process.env.GOOGLE_ADS_CLIENT_SECRET || '').trim();
+  const refreshToken = (String(req.query.rt || '') || process.env.GOOGLE_ADS_REFRESH_TOKEN || '').trim();
+  const source = req.query.rt ? 'QUERY OVERRIDE (bypassing Railway env)' : 'Railway env';
+
+  const env = {
+    source,
+    clientId: clientId ? `${clientId.slice(0, 30)}… (len ${clientId.length})` : '(MISSING)',
+    clientSecretPresent: !!clientSecret,
+    clientSecretLen: clientSecret.length,
+    refreshTokenMasked: refreshToken ? `${refreshToken.slice(0, 6)}…${refreshToken.slice(-6)} (len ${refreshToken.length})` : '(MISSING)',
+    refreshTokenStartsWith1Slash: refreshToken.startsWith('1//'),
+    customerId: process.env.GOOGLE_ADS_CUSTOMER_ID || '(MISSING)',
+    loginCustomerId: process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID || '(not set)',
+    developerTokenPresent: !!process.env.GOOGLE_ADS_DEVELOPER_TOKEN,
+  };
+
+  let googleTokenExchange: any;
+  try {
+    const body = new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: 'refresh_token',
+    }).toString();
+    const r = await axios.post('https://oauth2.googleapis.com/token', body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      validateStatus: () => true,
+      timeout: 15000,
+    });
+    googleTokenExchange = r.status === 200
+      ? { status: 200, ok: true, hasAccessToken: !!r.data.access_token }
+      : { status: r.status, error: r.data?.error, error_description: r.data?.error_description };
+  } catch (e: any) {
+    googleTokenExchange = { error: e.message };
+  }
+
+  res.json({ env, googleTokenExchange });
+});
+
+export default router;

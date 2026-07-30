@@ -13,6 +13,70 @@
 
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
+import { getListings, getListing } from './marketplace';
+import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../services/google-ads/googleAdsConversions';
+import { cjClient, isCJConfigured } from '../services/cjDropshipping';
+import { extractVariants, extractImages, extractReviews, SupplierReview } from '../services/cjSourcing';
+
+// --- CJ response cache (keyed by cjProductId) ---------------------------------
+// Product pages are ad destinations hit repeatedly; without caching, each view
+// fires up to 2 CJ calls (detail + reviews) and would rate-limit under traffic.
+// Cache the extracted results in-memory with a TTL, INCLUDING empty results
+// (negative cache) so products CJ has no data for aren't retried every hit.
+// ~1h is fine — product detail/reviews change slowly.
+const CJ_CACHE_TTL_MS = 60 * 60 * 1000;
+const detailCache = new Map<string, { at: number; variants: any[]; images: string[] }>();
+const reviewsCache = new Map<string, { at: number; reviews: SupplierReview[] }>();
+const fresh = (e?: { at: number }) => !!e && (Date.now() - e.at) < CJ_CACHE_TTL_MS;
+
+/**
+ * Ensure a listing has its selectable variants (size/color) AND its full image
+ * set populated — from the listing, the cache, or one live CJ detail call.
+ * Never throws.
+ */
+async function ensureProductDetail(listing: any): Promise<{ vid: string; label: string; price?: number }[]> {
+  const hasVariants = Array.isArray(listing?.variants) && listing.variants.length;
+  const hasGallery = Array.isArray(listing?.productImages) && listing.productImages.length > 1;
+  if (hasVariants && hasGallery) return listing.variants;
+  const pid = listing?.cjProductId;
+  if (!pid || !isCJConfigured()) return listing?.variants || [];
+
+  let entry = detailCache.get(pid);
+  if (!fresh(entry)) {
+    try {
+      const detail = await cjClient.getProductDetail(pid);
+      entry = { at: Date.now(), variants: extractVariants(detail), images: extractImages(detail) };
+    } catch {
+      entry = { at: Date.now(), variants: [], images: [] }; // negative cache
+    }
+    detailCache.set(pid, entry);
+  }
+  if (!hasVariants && entry!.variants.length) listing.variants = entry!.variants;
+  if (!hasGallery && entry!.images.length) listing.productImages = entry!.images;
+  return listing.variants || [];
+}
+
+/**
+ * Fetch supplier (CJ) product reviews — from cache or one live call. REAL
+ * supplier reviews, shown clearly attributed; [] when none / CJ down.
+ */
+async function ensureReviews(listing: any): Promise<SupplierReview[]> {
+  if (Array.isArray(listing?.reviews)) return listing.reviews;
+  const pid = listing?.cjProductId;
+  if (!pid || !isCJConfigured()) return [];
+
+  let entry = reviewsCache.get(pid);
+  if (!fresh(entry)) {
+    try {
+      entry = { at: Date.now(), reviews: extractReviews(await cjClient.getProductReviews(pid)) };
+    } catch {
+      entry = { at: Date.now(), reviews: [] }; // negative cache
+    }
+    reviewsCache.set(pid, entry);
+  }
+  listing.reviews = entry!.reviews;
+  return listing.reviews;
+}
 
 const router = Router();
 
@@ -21,30 +85,85 @@ const stripe = process.env.STRIPE_SECRET_KEY
   : null;
 
 /**
+ * DEBUG: Test endpoint to see what's in the database
+ */
+router.get('/product-debug/:listingId', async (req: Request, res: Response) => {
+  const { listingId } = req.params;
+  try {
+    const listings = await getListings('active');
+    const listing = listings.find((l: any) => l.listingId === listingId);
+
+    res.json({
+      requested: listingId,
+      totalListings: listings.length,
+      found: !!listing,
+      allListingIds: listings.map((l: any) => l.listingId),
+      listing: listing || null
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message, stack: error.stack });
+  }
+});
+
+/**
  * GET /product/:listingId
  * Public product landing page (HTML)
  */
 router.get('/product/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
+  console.log(`\n🌐 Product page requested: ${listingId}`);
 
   try {
-    // Fetch listing from marketplace API
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
-    const { listings } = await listingResponse.json();
+    console.log(`   Step 1: Calling getListings('active')...`);
+    // Get listing directly from database (no HTTP fetch needed!)
+    const listings = await getListings('active');
+    console.log(`   Step 2: Retrieved ${listings.length} active listings`);
 
+    if (listings.length > 0) {
+      console.log(`   First listing ID: ${listings[0].listingId}`);
+    }
+
+    console.log(`   Step 3: Searching for listingId: ${listingId}`);
     const listing = listings.find((l: any) => l.listingId === listingId);
+    console.log(`   Step 4: Found listing: ${listing ? 'YES' : 'NO'}`);
+
+    if (listing) {
+      console.log(`   Listing details: ${JSON.stringify({ listingId: listing.listingId, title: listing.productTitle, status: listing.status })}`);
+    }
 
     if (!listing || listing.status !== 'active') {
+      console.log(`   ❌ Listing not found or inactive - returning 404`);
       return res.status(404).send(generate404Page());
     }
 
+    console.log(`   Step 5: Generating page for: ${listing.productTitle}`);
+    // Pull size/color variants + full image gallery (from the listing, or live
+    // from CJ for older listings) so the customer can pick + swipe before buying.
+    await ensureProductDetail(listing);
+    // Real supplier reviews (best-effort), shown clearly attributed.
+    await ensureReviews(listing);
     // Generate beautiful landing page HTML
     const html = generateProductLandingPage(listing);
+    console.log(`   Step 6: HTML generated successfully (${html.length} chars)`);
 
     res.setHeader('Content-Type', 'text/html');
+    console.log(`   Step 7: Sending response...`);
     res.send(html);
+    console.log(`   ✅ Page sent successfully`);
   } catch (error: any) {
-    console.error('Error loading product page:', error);
+    console.error('❌ Error loading product page:', error);
+    console.error('   Message:', error.message);
+    console.error('   Stack:', error.stack);
+
+    // If debug query param is present, return error details
+    if (req.query.debug === 'true') {
+      return res.status(500).json({
+        error: error.message,
+        stack: error.stack,
+        listingId: req.params.listingId
+      });
+    }
+
     res.status(500).send(generate404Page());
   }
 });
@@ -55,36 +174,65 @@ router.get('/product/:listingId', async (req: Request, res: Response) => {
  */
 router.post('/product/:listingId/checkout', async (req: Request, res: Response) => {
   const { listingId } = req.params;
+  const { quantity, variantId, variantLabel } = req.body;
 
   try {
-    // Fetch listing
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
-    const { listings } = await listingResponse.json();
+    // Validate quantity
+    const qty = parseInt(quantity) || 1;
+    if (qty < 1 || qty > 99) {
+      return res.status(400).json({ error: 'Quantity must be between 1 and 99' });
+    }
+
+    // Get listing directly from database (no HTTP fetch needed!)
+    const listings = await getListings('active');
     const listing = listings.find((l: any) => l.listingId === listingId);
 
     if (!listing || listing.status !== 'active') {
       return res.status(404).json({ error: 'Product not found' });
     }
 
+    // Variant (size/color) handling: if the product has selectable variants, the
+    // customer MUST pick one, and it must be a real option — so we fulfill the
+    // exact supplier variant (vid) they ordered.
+    const variants = await ensureProductDetail(listing);
+    let chosen: { vid: string; label: string; price?: number } | undefined;
+    if (variants.length) {
+      chosen = variants.find((v) => v.vid === String(variantId || ''));
+      if (!chosen) {
+        return res.status(400).json({ error: 'Please select a valid option (e.g. size) before checkout.' });
+      }
+    }
+    const variantSuffix = chosen ? ` — ${chosen.label}` : '';
+
     if (!stripe) {
       return res.status(500).json({ error: 'Payment processing not configured' });
     }
 
-    // Create Stripe Checkout Session
+    // Calculate total profit for this order
+    const totalProfit = Number(listing.estimatedProfit) * qty;
+
+    // Create Stripe Checkout Session with multiple payment options
+    // Including Klarna, Afterpay, Affirm for "Buy Now, Pay Later"
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card'],
+      payment_method_types: [
+        'card',              // Credit/debit cards
+        'klarna',            // Klarna - Pay in 4 installments
+        'afterpay_clearpay', // Afterpay - Pay in 4
+        'affirm',            // Affirm - Monthly financing
+        'cashapp',           // Cash App Pay
+      ],
       line_items: [
         {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: listing.productTitle,
+              name: `${listing.productTitle}${variantSuffix}`,
               description: listing.productDescription,
               images: listing.productImages.length > 0 ? listing.productImages : undefined,
             },
-            unit_amount: Math.round(listing.marketplacePrice * 100), // Convert to cents
+            unit_amount: Math.round(Number(listing.marketplacePrice) * 100), // Convert to cents
           },
-          quantity: 1,
+          quantity: qty,
         },
       ],
       mode: 'payment',
@@ -93,8 +241,17 @@ router.post('/product/:listingId/checkout', async (req: Request, res: Response) 
       metadata: {
         listingId,
         opportunityId: listing.opportunityId,
+        quantity: qty.toString(),
         supplierPrice: listing.supplierPrice.toString(),
-        estimatedProfit: listing.estimatedProfit.toString(),
+        estimatedProfit: totalProfit.toString(),
+        supplierUrl: listing.supplierUrl || '',
+        // The exact supplier variant (vid) + label the customer chose, so
+        // fulfillment orders the right size/color from CJ.
+        variantId: chosen?.vid || listing.cjVariantId || '',
+        variantLabel: chosen?.label || '',
+      },
+      shipping_address_collection: {
+        allowed_countries: ['US'], // Collect shipping address for fulfillment
       },
     });
 
@@ -122,10 +279,17 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
     const session = await stripe.checkout.sessions.retrieve(session_id as string);
 
     if (session.payment_status === 'paid') {
-      // TODO: Trigger automatic supplier purchase here
-      // This would call the marketplace checkout endpoint to fulfill the order
+      // Report PROFIT (the margin) as the Google Ads conversion value — NOT the
+      // gross sale price — so Smart Bidding + our optimizer optimize net profit.
+      // Falls back to gross if the listing/margin can't be read.
+      let conversionValue = (session.amount_total || 0) / 100;
+      try {
+        const listing: any = await getListing(listingId);
+        const margin = Number(listing?.estimatedProfit);
+        if (Number.isFinite(margin) && margin > 0) conversionValue = margin;
+      } catch { /* keep gross fallback */ }
 
-      const html = generateSuccessPage(session);
+      const html = generateSuccessPage(session, conversionValue);
       res.setHeader('Content-Type', 'text/html');
       res.send(html);
     } else {
@@ -141,210 +305,1298 @@ router.get('/product/:listingId/success', async (req: Request, res: Response) =>
  * Generate beautiful product landing page HTML
  */
 function generateProductLandingPage(listing: any): string {
-  const imageUrl = listing.productImages[0] || 'https://via.placeholder.com/600x600?text=Product+Image';
+  // Prefer real product images (Cloudinary), but accept any valid http(s) image
+  // rather than dropping to an empty slot.
+  const productImages = listing.productImages && Array.isArray(listing.productImages) && listing.productImages.length > 0
+    ? listing.productImages.filter((img: string) => typeof img === 'string' && /^https?:\/\//.test(img))
+    : [];
+
+  // When a product has no usable image, fall back to a server-side resolver that
+  // fetches a REAL product photo (scraped from the web, cached to Cloudinary) —
+  // never a placeholder or SVG. The same resolver is used as the onerror target
+  // so a broken image URL is replaced by a real one too.
+  const resolverUrl = `/api/product-image/${encodeURIComponent(listing.listingId)}`;
+
+  const mainImageUrl = productImages.length > 0
+    ? productImages[0]
+    : resolverUrl;
+
+  // Only show gallery if we have 2+ REAL images
+  const thumbnailsHtml = productImages.length > 1
+    ? `<div class="thumbnail-gallery">
+        ${productImages.map((img: string, idx: number) =>
+          `<img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="thumbnail${idx === 0 ? ' active' : ''}" data-index="${idx}" loading="lazy" onerror="this.onerror=null;this.src='${resolverUrl}'">`
+        ).join('\n        ')}
+       </div>`
+    : '';
+
+  const imageUrl = mainImageUrl;
+
+  // Real supplier reviews (clearly attributed). Build the section + use them for
+  // the rating/count when present (more honest than synthetic numbers).
+  const reviews: SupplierReview[] = Array.isArray(listing.reviews) ? listing.reviews : [];
+  const esc = (s: string) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const stars = (n: number) => '★★★★★'.slice(0, Math.max(0, Math.min(5, Math.round(n)))) + '☆☆☆☆☆'.slice(0, 5 - Math.max(0, Math.min(5, Math.round(n))));
+  const reviewsHtml = reviews.length
+    ? `<section class="reviews-section">
+        <div class="reviews-head">
+          <h2 class="reviews-title">Customer Reviews</h2>
+          <span class="reviews-attrib">Verified supplier reviews</span>
+        </div>
+        ${reviews.map((r) => `
+          <div class="review-card">
+            <div class="review-top">
+              <span class="review-author">${esc(r.author)}${r.country ? ` · ${esc(r.country)}` : ''}</span>
+              <span class="review-stars" aria-label="${r.rating} out of 5">${stars(r.rating)}</span>
+            </div>
+            <p class="review-text">${esc(r.text)}</p>
+            ${(r.images && r.images.length) ? `<div class="review-imgs">${r.images.map((u) => `<img src="${esc(u)}" alt="Customer photo" loading="lazy" onerror="this.style.display='none'">`).join('')}</div>` : ''}
+            ${r.date ? `<span class="review-date">${esc(r.date)}</span>` : ''}
+          </div>`).join('')}
+       </section>`
+    : '';
+
+  // Social proof — REAL review data ONLY. Fabricated ratings/counts/stock are a
+  // Google Ads Misrepresentation + FTC violation; when we have no real reviews we
+  // simply show none. hasRealReviews gates every proof element below.
+  const hasRealReviews = reviews.length > 0;
+  const avgReal = hasRealReviews ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length) : 0;
+  const realRating = hasRealReviews ? avgReal.toFixed(1) : '';
+  const realReviewCount = reviews.length;
+  const maxPerOrder = 10; // honest per-order limit, not a fake scarcity counter
 
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${listing.productTitle}</title>
-    <meta name="description" content="${listing.productDescription}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 
-    <!-- Open Graph for social sharing -->
+    <!-- GSAP & Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- SEO Meta Tags -->
+    <title>${listing.productTitle} - Digital Vending Machine | Arbi</title>
+    <meta name="description" content="${listing.productDescription} | Free shipping, 30-day returns, secure checkout. Buy now at Arbi.">
+    <meta name="keywords" content="${listing.productTitle}, buy ${listing.productTitle.toLowerCase()}, best price, free shipping">
+    <link rel="canonical" href="https://api.arbi.creai.dev/product/${listing.listingId}">
+    ${googleAdsGlobalTagHtml()}
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="product">
+    <meta property="og:url" content="https://api.arbi.creai.dev/product/${listing.listingId}">
     <meta property="og:title" content="${listing.productTitle}">
     <meta property="og:description" content="${listing.productDescription}">
     <meta property="og:image" content="${imageUrl}">
-    <meta property="og:type" content="product">
+    <meta property="og:site_name" content="Arbi">
+    <meta property="product:price:amount" content="${Number(listing.marketplacePrice).toFixed(2)}">
+    <meta property="product:price:currency" content="USD">
+    <meta property="product:availability" content="in stock">
+    <meta property="product:brand" content="Arbi">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="https://api.arbi.creai.dev/product/${listing.listingId}">
+    <meta name="twitter:title" content="${listing.productTitle}">
+    <meta name="twitter:description" content="${listing.productDescription}">
+    <meta name="twitter:image" content="${imageUrl}">
+    <meta name="twitter:label1" content="Price">
+    <meta name="twitter:data1" content="$${Number(listing.marketplacePrice).toFixed(2)}">
+    <meta name="twitter:label2" content="Availability">
+    <meta name="twitter:data2" content="In Stock">
+
+    <!-- Product Schema (JSON-LD) for Google Rich Snippets -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org/",
+      "@type": "Product",
+      "name": "${listing.productTitle}",
+      "image": "${imageUrl}",
+      "description": "${listing.productDescription}",
+      "brand": {
+        "@type": "Brand",
+        "name": "Arbi"
+      },
+      "offers": {
+        "@type": "Offer",
+        "url": "https://api.arbi.creai.dev/product/${listing.listingId}",
+        "priceCurrency": "USD",
+        "price": "${Number(listing.marketplacePrice).toFixed(2)}",
+        "priceValidUntil": "${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}",
+        "availability": "https://schema.org/InStock",
+        "seller": {
+          "@type": "Organization",
+          "name": "Arbi Inc."
+        },
+        "shippingDetails": {
+          "@type": "OfferShippingDetails",
+          "shippingRate": {
+            "@type": "MonetaryAmount",
+            "value": "0",
+            "currency": "USD"
+          },
+          "deliveryTime": {
+            "@type": "ShippingDeliveryTime",
+            "handlingTime": {
+              "@type": "QuantitativeValue",
+              "minValue": 1,
+              "maxValue": 2,
+              "unitCode": "DAY"
+            }
+          }
+        }
+      }${hasRealReviews ? `,
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "${realRating}",
+        "reviewCount": "${realReviewCount}"
+      }` : ''}
+    }
+    </script>
 
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        @keyframes gridPulse {
+            0%, 100% { opacity: 0.1; }
+            50% { opacity: 0.2; }
+        }
+
+        @keyframes lightSweep {
+            0% { transform: translateX(-100%) rotate(45deg); }
+            100% { transform: translateX(200%) rotate(45deg); }
+        }
+
+        @keyframes priceGlow {
+            0%, 100% { text-shadow: 0 0 20px rgba(102, 126, 234, 0.3); }
+            50% { text-shadow: 0 0 30px rgba(102, 126, 234, 0.6); }
+        }
+
+        @keyframes indicatorBlink {
+            0%, 45%, 55%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f1624 100%);
+            background-attachment: fixed;
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            padding: 20px;
+            justify-content: flex-start;
+            padding: 40px 20px;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image:
+                linear-gradient(rgba(102, 126, 234, 0.1) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(102, 126, 234, 0.1) 1px, transparent 1px);
+            background-size: 50px 50px;
+            animation: gridPulse 4s ease-in-out infinite;
+            pointer-events: none;
         }
 
         .container {
             max-width: 900px;
             width: 100%;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            box-shadow:
+                0 30px 90px rgba(0, 0, 0, 0.6),
+                0 0 0 1px rgba(255, 255, 255, 0.1),
+                inset 0 1px 0 rgba(255, 255, 255, 0.8);
             overflow: hidden;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0;
+            position: relative;
+            margin-bottom: 20px;
         }
 
         @media (max-width: 768px) {
+            body {
+                padding: 12px;
+            }
             .container {
-                grid-template-columns: 1fr;
+                border-radius: 16px;
+                margin-bottom: 12px;
             }
         }
 
-        .image-section {
-            background: #f8f9fa;
+        /* Product Display - Black Glass Panel */
+        .product-display {
+            padding: 40px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .glass-panel {
+            position: relative;
+            background: linear-gradient(135deg, #1a1a2e 0%, #2d3748 100%);
+            border-radius: 20px;
             padding: 40px;
+            overflow: hidden;
+            box-shadow:
+                0 20px 60px rgba(0, 0, 0, 0.5),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .light-sweep {
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                45deg,
+                transparent 30%,
+                rgba(255, 255, 255, 0.1) 50%,
+                transparent 70%
+            );
+            animation: lightSweep 8s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        .product-image {
+            position: relative;
+            width: 100%;
+            max-width: 500px;
+            height: auto;
+            object-fit: contain;
+            filter: drop-shadow(0 10px 30px rgba(0, 0, 0, 0.3));
+            transition: transform 0.3s ease;
+        }
+
+        .glass-panel:hover .product-image {
+            transform: scale(1.02) translateY(-5px);
+        }
+
+        /* Swipeable gallery */
+        .gallery-track {
+            display: flex;
+            width: 100%;
+            overflow-x: auto;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+            scroll-behavior: smooth;
+        }
+        .gallery-track::-webkit-scrollbar { display: none; }
+        .gallery-slide {
+            flex: 0 0 100%;
+            scroll-snap-align: center;
             display: flex;
             align-items: center;
             justify-content: center;
         }
+        .gallery-dots {
+            display: flex;
+            gap: 7px;
+            justify-content: center;
+            margin-top: 14px;
+        }
+        .gallery-dot {
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            border: none;
+            padding: 0;
+            background: rgba(255,255,255,0.22);
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+        .gallery-dot.active { background: #00f0ff; transform: scale(1.25); }
 
-        .image-section img {
-            max-width: 100%;
-            height: auto;
-            border-radius: 10px;
+        /* Thumbnail Gallery */
+        .thumbnail-gallery {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+            padding: 0 20px;
+            max-width: 500px;
+        }
+
+        .thumbnail {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 12px;
+            cursor: pointer;
+            border: 3px solid transparent;
+            transition: all 0.3s ease;
+            opacity: 0.6;
+        }
+
+        .thumbnail:hover {
+            opacity: 1;
+            transform: scale(1.05);
+        }
+
+        .thumbnail.active {
+            opacity: 1;
+            border-color: #667eea;
+            box-shadow: 0 0 0 1px #667eea, 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        @media (max-width: 768px) {
+            .product-display {
+                padding: 16px 12px;
+                gap: 16px;
+            }
+            .glass-panel {
+                padding: 20px;
+                border-radius: 16px;
+            }
+            .product-image {
+                max-width: 100%;
+            }
+            .thumbnail-gallery {
+                padding: 0 12px;
+                gap: 8px;
+            }
+            .thumbnail {
+                width: 60px;
+                height: 60px;
+                border-radius: 8px;
+            }
         }
 
         .info-section {
-            padding: 40px;
+            padding: 30px 40px 40px;
             display: flex;
             flex-direction: column;
-            justify-content: center;
+            gap: 24px;
         }
 
-        h1 {
-            font-size: 28px;
+        @media (max-width: 768px) {
+            .info-section {
+                padding: 16px 16px 24px;
+                gap: 16px;
+            }
+        }
+
+        .product-title {
+            font-size: clamp(20px, 5.5vw, 28px);
+            font-weight: 600;
+            color: #1a202c;
+            line-height: 1.4;
+            margin: 0;
+        }
+
+        /* Status Chips */
+        .status-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #374151;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .chip:hover {
+            background: rgba(102, 126, 234, 0.15);
+            transform: translateY(-1px);
+        }
+
+        .chip-icon {
+            width: 16px;
+            height: 16px;
+            flex-shrink: 0;
+        }
+
+        .chip-stock .chip-icon {
+            color: #10b981;
+        }
+
+        .chip-shipping .chip-icon {
+            color: #f59e0b;
+        }
+
+        .chip-secure .chip-icon {
+            color: #667eea;
+        }
+
+        .chip-return .chip-icon {
+            color: #8b5cf6;
+        }
+
+        .chip-text {
+            white-space: nowrap;
+        }
+
+        @media (max-width: 768px) {
+            .chip {
+                padding: 7px 12px;
+                font-size: 13px;
+            }
+            .chip-icon {
+                width: 14px;
+                height: 14px;
+            }
+        }
+
+        /* Mechanical Price Display */
+        .price-display {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .price-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #6b7280;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .price-value {
+            font-family: 'SF Mono', 'Courier New', monospace;
+            font-size: clamp(36px, 9vw, 48px);
+            font-weight: 700;
+            color: #667eea;
+            line-height: 1;
+            animation: priceGlow 3s ease-in-out infinite;
+        }
+
+        @media (max-width: 768px) {
+            .price-display {
+                padding: 16px;
+            }
+            .price-label {
+                font-size: 11px;
+                letter-spacing: 1.2px;
+                margin-bottom: 6px;
+            }
+        }
+
+        .product-description {
+            font-size: 16px;
+            color: #4b5563;
+            line-height: 1.6;
+            margin: 0;
+        }
+
+        @media (max-width: 768px) {
+            .product-description {
+                font-size: 15px;
+                line-height: 1.6;
+            }
+        }
+
+        /* Inventory Dial (Rotary Selector) */
+        .inventory-dial {
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .dial-label {
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            color: #6b7280;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            text-align: center;
+        }
+
+        .dial-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+        }
+
+        .dial-btn {
+            width: 48px;
+            height: 48px;
+            min-width: 44px;
+            min-height: 44px;
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #667eea;
+        }
+
+        .dial-btn:hover, .dial-btn:active {
+            border-color: #667eea;
+            background: #f3f4f6;
+            transform: scale(1.05);
+        }
+
+        .dial-display {
+            background: white;
+            border: 2px solid #dee2e6;
+            border-radius: 12px;
+            padding: 0;
+            min-width: 80px;
+        }
+
+        .dial-display input {
+            width: 100%;
+            height: 52px;
+            text-align: center;
+            font-family: 'SF Mono', 'Courier New', monospace;
+            font-size: 24px;
             font-weight: 700;
             color: #1a202c;
-            margin-bottom: 16px;
-            line-height: 1.3;
-        }
-
-        .price {
-            font-size: 36px;
-            font-weight: 800;
-            color: #667eea;
-            margin-bottom: 20px;
-        }
-
-        .description {
-            font-size: 16px;
-            color: #4a5568;
-            line-height: 1.6;
-            margin-bottom: 30px;
-        }
-
-        .features {
-            list-style: none;
-            margin-bottom: 30px;
-        }
-
-        .features li {
-            padding: 8px 0;
-            color: #2d3748;
-            font-size: 15px;
-        }
-
-        .features li:before {
-            content: "✓ ";
-            color: #48bb78;
-            font-weight: bold;
-            margin-right: 8px;
-        }
-
-        .buy-button {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
             border: none;
-            padding: 18px 40px;
-            font-size: 18px;
-            font-weight: 600;
-            border-radius: 10px;
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
+            background: transparent;
+            outline: none;
+        }
+
+        @media (max-width: 768px) {
+            .inventory-dial {
+                padding: 16px;
+            }
+            .dial-label {
+                font-size: 10px;
+                letter-spacing: 1px;
+                margin-bottom: 10px;
+            }
+            .dial-display input {
+                height: 48px;
+                font-size: 20px;
+            }
+        }
+
+        /* Dispense Device Button */
+        .dispense-button {
+            position: relative;
             width: 100%;
+            height: 64px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            overflow: hidden;
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+            transition: all 0.3s;
         }
 
-        .buy-button:hover {
+        .dispense-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 8px 24px rgba(102, 126, 234, 0.5);
         }
 
-        .buy-button:active {
+        .dispense-button:active {
             transform: translateY(0);
         }
 
-        .guarantee {
-            margin-top: 20px;
-            padding: 16px;
-            background: #f7fafc;
-            border-radius: 8px;
-            text-align: center;
-            font-size: 14px;
-            color: #4a5568;
+        .dispense-text {
+            position: relative;
+            z-index: 2;
+            display: block;
+            font-size: clamp(14px, 3vw, 16px);
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: white;
+            text-transform: uppercase;
         }
 
-        .badge {
-            display: inline-block;
-            background: #48bb78;
-            color: white;
-            padding: 6px 12px;
-            border-radius: 20px;
+        .dispense-progress {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            width: 0%;
+            background: rgba(255, 255, 255, 0.3);
+            transition: width 0.05s linear;
+            pointer-events: none;
+        }
+
+        /* Trust Layer */
+        .trust-layer {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 16px;
+            background: #f8f9fa;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
             font-size: 13px;
-            font-weight: 600;
+            color: #6b7280;
+        }
+
+        .trust-icon {
+            color: #667eea;
+        }
+
+        .trust-text {
+            font-weight: 500;
+        }
+
+        .stripe-logo {
+            margin: 0 4px;
+        }
+
+        /* Quiet Social Proof */
+        .social-proof {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            font-size: 13px;
+            color: #9ca3af;
+            font-weight: 500;
+            padding: 8px 0;
+        }
+
+        .separator {
+            color: #d1d5db;
+        }
+
+        /* Supplier reviews (on the white info card) */
+        .reviews-section { margin-top: 26px; padding-top: 22px; border-top: 1px solid #e5e7eb; }
+        .reviews-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+        .reviews-title { font-size: 18px; font-weight: 800; color: #1a202c; margin: 0; letter-spacing: 0.01em; }
+        .reviews-attrib { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: #667eea; font-weight: 700; }
+        .review-card { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 14px; padding: 14px 16px; margin-bottom: 10px; }
+        .review-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; }
+        .review-author { font-size: 12px; font-weight: 700; color: #374151; }
+        .review-stars { font-size: 13px; color: #f59e0b; letter-spacing: 1px; white-space: nowrap; }
+        .review-text { font-size: 13px; line-height: 1.55; color: #4b5563; margin: 0; }
+        .review-imgs { display: flex; gap: 6px; margin-top: 8px; }
+        .review-imgs img { width: 54px; height: 54px; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; }
+        .review-date { display: block; font-size: 10px; color: #9ca3af; margin-top: 8px; }
+
+        @media (max-width: 768px) {
+            .trust-layer {
+                padding: 12px;
+                font-size: 12px;
+            }
+            .trust-icon {
+                width: 14px;
+                height: 14px;
+            }
+            .stripe-logo {
+                width: 36px;
+                height: auto;
+            }
+            .social-proof {
+                font-size: 12px;
+                padding: 4px 0;
+            }
+        }
+
+        /* Control Panel (Footer) */
+        .control-panel {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            border-top: 2px solid #4a5568;
+            padding: 24px 20px;
+            text-align: center;
+            margin-top: 0;
+            width: 100%;
+            max-width: 900px;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        }
+
+        .panel-indicator {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .indicator-light {
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%;
+            animation: indicatorBlink 2s ease-in-out infinite;
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+        }
+
+        .indicator-text {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: #9ca3af;
+            text-transform: uppercase;
+        }
+
+        .panel-brand {
+            font-size: 16px;
+            font-weight: 700;
+            color: #f3f4f6;
+            margin-bottom: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .panel-subtitle {
+            font-size: 12px;
+            color: #9ca3af;
             margin-bottom: 16px;
+            font-style: italic;
+        }
+
+        .panel-links {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            margin-bottom: 16px;
+        }
+
+        .panel-link {
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .panel-link svg {
+            color: rgba(255, 255, 255, 0.7);
+            transition: all 0.2s;
+        }
+
+        .panel-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-2px);
+        }
+
+        .panel-link:hover svg {
+            color: #667eea;
+            transform: scale(1.1);
+        }
+
+        .panel-footer {
+            font-size: 12px;
+            color: #6b7280;
+            font-weight: 500;
+        }
+
+        @media (max-width: 768px) {
+            .control-panel {
+                padding: 20px 16px;
+                border-radius: 12px;
+            }
+            .panel-links {
+                gap: 8px;
+            }
+            .panel-link {
+                width: 36px;
+                height: 36px;
+            }
+            .panel-link svg {
+                width: 16px;
+                height: 16px;
+            }
+            .panel-brand {
+                font-size: 14px;
+            }
+            .panel-subtitle {
+                font-size: 11px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="image-section">
-            <img src="${imageUrl}" alt="${listing.productTitle}">
+        <!-- Product Image gallery — swipeable carousel (scroll-snap) -->
+        <div class="product-display" id="productDisplay">
+            <div class="glass-panel">
+                <div class="light-sweep"></div>
+                <div class="gallery-track" id="galleryTrack">
+                    ${productImages.map((img: string, idx: number) => `
+                    <div class="gallery-slide">
+                        <img src="${img}" alt="${listing.productTitle} - Image ${idx + 1}" class="product-image"${idx === 0 ? ' id="productImage"' : ''} loading="${idx === 0 ? 'eager' : 'lazy'}" onerror="this.onerror=null;this.src='${resolverUrl}'">
+                    </div>`).join('')}
+                </div>
+            </div>
+            ${productImages.length > 1 ? `
+            <div class="gallery-dots" id="galleryDots">
+                ${productImages.map((_: string, idx: number) => `<button class="gallery-dot${idx === 0 ? ' active' : ''}" data-index="${idx}" aria-label="Image ${idx + 1}"></button>`).join('')}
+            </div>` : ''}
         </div>
 
+        <!-- Product Info Section -->
         <div class="info-section">
-            <span class="badge">⚡ Limited Offer</span>
-            <h1>${listing.productTitle}</h1>
-            <div class="price">$${listing.marketplacePrice.toFixed(2)}</div>
+            <h1 class="product-title">${listing.productTitle}</h1>
 
-            <p class="description">${listing.productDescription}</p>
+            <!-- Status Chips -->
+            <div class="status-chips">
+                <div class="chip chip-stock">
+                    <svg class="chip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
+                    <span class="chip-text">In Stock</span>
+                </div>
+                <div class="chip chip-shipping">
+                    <svg class="chip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+                    <span class="chip-text">48h Dispatch</span>
+                </div>
+                <div class="chip chip-secure">
+                    <svg class="chip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    <span class="chip-text">Stripe Secured</span>
+                </div>
+                <div class="chip chip-return">
+                    <svg class="chip-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+                    <span class="chip-text">30-Day Return</span>
+                </div>
+            </div>
 
-            <ul class="features">
-                <li>Free Fast Shipping</li>
-                <li>30-Day Money-Back Guarantee</li>
-                <li>Secure Payment Processing</li>
-                <li>Ships Within 1-2 Business Days</li>
-            </ul>
+            <!-- Mechanical Price Display -->
+            <div class="price-display">
+                <div class="price-value" id="priceValue">$${Number(listing.marketplacePrice).toFixed(2)}</div>
+            </div>
 
-            <button class="buy-button" onclick="checkout()">
-                🛒 Buy Now - Secure Checkout
+            <!-- Product Description -->
+            <p class="product-description">${listing.productDescription}</p>
+
+            ${(listing.variants && listing.variants.length) ? `
+            <!-- Variant (size/color) selector — required so we fulfill the right item -->
+            <div class="variant-select-wrap" style="margin: 0 0 18px;">
+                <label for="variantSelect" style="display:block; font-size:11px; letter-spacing:0.12em; text-transform:uppercase; color:#6b7280; margin-bottom:8px; font-weight:700;">Select Option</label>
+                <select id="variantSelect" style="width:100%; padding:14px 16px; background:#f8f9fa; border:1px solid #d1d5db; border-radius:12px; color:#1a202c; font-size:15px; font-weight:600; outline:none; appearance:none; -webkit-appearance:none; background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%236b7280%22 stroke-width=%223%22><path d=%22M6 9l6 6 6-6%22/></svg>'); background-repeat:no-repeat; background-position:right 16px center;">
+                    <option value="" disabled selected>Choose an option…</option>
+                    ${listing.variants.map((v: any) => `<option value="${v.vid}" data-label="${(v.label || '').replace(/"/g, '&quot;')}">${v.label}</option>`).join('')}
+                </select>
+            </div>
+            ` : ''}
+
+            <!-- Rotary Dial Quantity Selector (honest limit — no fake scarcity) -->
+            <div class="inventory-dial">
+                <div class="dial-label">QUANTITY (max ${maxPerOrder} per order)</div>
+                <div class="dial-container">
+                    <button class="dial-btn dial-minus" id="dialMinus" aria-label="Decrease quantity">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                    <div class="dial-display">
+                        <input type="number" id="quantity" value="1" min="1" max="${maxPerOrder}" readonly>
+                    </div>
+                    <button class="dial-btn dial-plus" id="dialPlus" aria-label="Increase quantity">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+                            <path d="M10 4V16M4 10H16" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Dispense Device Button -->
+            <button class="dispense-button" id="dispenseButton">
+                <span class="dispense-text" id="dispenseText">SECURE CHECKOUT</span>
+                <div class="dispense-progress" id="dispenseProgress"></div>
             </button>
 
-            <div class="guarantee">
-                🔒 Secure payment powered by Stripe<br>
-                💯 100% satisfaction guaranteed
+            <!-- Minimal Trust Layer -->
+            <div class="trust-layer">
+                <svg class="trust-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+                    <path d="M8 1L3 3V7C3 10.3 5.4 13.4 8 14C10.6 13.4 13 10.3 13 7V3L8 1Z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+                </svg>
+                <span class="trust-text">Payment handled by</span>
+                <svg class="stripe-logo" width="40" height="17" viewBox="0 0 60 25" fill="none">
+                    <path d="M59.64 14.28h-8.06c.19 1.93 1.6 2.55 3.2 2.55 1.64 0 2.96-.37 4.05-.95v3.32a8.33 8.33 0 0 1-4.56 1.1c-4.01 0-6.83-2.5-6.83-7.48 0-4.19 2.39-7.52 6.3-7.52 3.92 0 5.96 3.28 5.96 7.5 0 .4-.04 1.26-.06 1.48zm-5.92-5.62c-1.03 0-2.17.73-2.17 2.58h4.25c0-1.85-1.07-2.58-2.08-2.58zM40.95 20.3c-1.44 0-2.32-.6-2.9-1.04l-.02 4.63-4.12.87V5.57h3.76l.08 1.02a4.7 4.7 0 0 1 3.23-1.29c2.9 0 5.62 2.6 5.62 7.4 0 5.23-2.7 7.6-5.65 7.6zM40 8.95c-.95 0-1.54.34-1.97.81l.02 6.12c.4.44.98.78 1.95.78 1.52 0 2.54-1.65 2.54-3.87 0-2.15-1.04-3.84-2.54-3.84zM28.24 5.57h4.13v14.44h-4.13V5.57zm0-4.7L32.37 0v3.36l-4.13.88V.88zm-4.32 9.35v9.79H19.8V5.57h3.7l.12 1.22c1-1.77 3.07-1.41 3.62-1.22v3.79c-.52-.17-2.29-.43-3.32.86zm-8.55 4.72c0 2.43 2.6 1.68 3.12 1.46v3.36c-.55.3-1.54.54-2.89.54a4.15 4.15 0 0 1-4.27-4.24l.01-13.17 4.02-.86v3.54h3.14V9.1h-3.13v5.85zm-4.91.7c0 2.97-2.31 4.66-5.73 4.66a11.2 11.2 0 0 1-4.46-.93v-3.93c1.38.75 3.1 1.31 4.46 1.31.92 0 1.53-.24 1.53-1C6.26 13.77 0 14.51 0 9.95 0 7.04 2.28 5.3 5.62 5.3c1.36 0 2.72.2 4.09.75v3.88a9.23 9.23 0 0 0-4.1-1.06c-.86 0-1.44.25-1.44.93 0 1.85 6.29.97 6.29 5.88z" fill="#635BFF"/>
+                </svg>
+                <span class="trust-text">• No card data stored</span>
             </div>
+
+            <!-- Quiet Social Proof — shown ONLY when real supplier reviews exist -->
+            ${hasRealReviews ? `
+            <div class="social-proof">
+                <span>${realReviewCount} customer review${realReviewCount === 1 ? '' : 's'}</span>
+                <span class="separator">•</span>
+                <span>${realRating} average rating</span>
+            </div>` : ''}
+
+            ${reviewsHtml}
         </div>
     </div>
 
+    <!-- Dark Steel Footer / Control Panel -->
+    <footer class="control-panel">
+        <div class="panel-indicator">
+            <div class="indicator-light"></div>
+            <span class="indicator-text">SYSTEM OPERATIONAL</span>
+        </div>
+        <div class="panel-brand">DIGITAL VENDING MACHINE™</div>
+        <div class="panel-subtitle">Autonomous commerce layer</div>
+        <div class="panel-links" id="panelLinks">
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/contact" aria-label="Contact">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            </button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/returns" aria-label="Returns">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+            </button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/shipping" aria-label="Shipping">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>
+            </button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/privacy" aria-label="Privacy">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </button>
+            <button class="panel-link" data-url="https://api.arbi.creai.dev/terms" aria-label="Terms">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></svg>
+            </button>
+        </div>
+        <div class="panel-footer">Arbi Inc. © 2026 • <a href="mailto:contact@creai.dev" style="color:inherit;">contact@creai.dev</a></div>
+    </footer>
+
     <script>
-        async function checkout() {
-            const button = document.querySelector('.buy-button');
-            button.textContent = 'Processing...';
-            button.disabled = true;
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elements
+            const quantityInput = document.getElementById('quantity');
+            const dialMinus = document.getElementById('dialMinus');
+            const dialPlus = document.getElementById('dialPlus');
+            const dispenseButton = document.getElementById('dispenseButton');
+            const dispenseText = document.getElementById('dispenseText');
+            const dispenseProgress = document.getElementById('dispenseProgress');
+            const productImage = document.getElementById('productImage');
+            const panelLinks = document.querySelectorAll('.panel-link');
+            const thumbnails = document.querySelectorAll('.thumbnail');
 
-            try {
-                const response = await fetch('/product/${listing.listingId}/checkout', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-
-                const { checkoutUrl } = await response.json();
-                window.location.href = checkoutUrl;
-            } catch (error) {
-                alert('Error processing checkout. Please try again.');
-                button.textContent = '🛒 Buy Now - Secure Checkout';
-                button.disabled = false;
+            if (!quantityInput || !dispenseButton) {
+                console.error('Required elements not found');
+                return;
             }
-        }
+
+            const maxQuantity = parseInt(quantityInput.max);
+
+            // Swipeable gallery: sync dots with scroll position; tap a dot to jump.
+            const galleryTrack = document.getElementById('galleryTrack');
+            const galleryDots = Array.prototype.slice.call(document.querySelectorAll('.gallery-dot'));
+            if (galleryTrack && galleryDots.length) {
+                const setActiveDot = function(i) {
+                    galleryDots.forEach(function(d, di) { d.classList.toggle('active', di === i); });
+                };
+                let scrollRaf = null;
+                galleryTrack.addEventListener('scroll', function() {
+                    if (scrollRaf) cancelAnimationFrame(scrollRaf);
+                    scrollRaf = requestAnimationFrame(function() {
+                        const i = Math.round(galleryTrack.scrollLeft / galleryTrack.clientWidth);
+                        setActiveDot(Math.max(0, Math.min(i, galleryDots.length - 1)));
+                    });
+                }, { passive: true });
+                galleryDots.forEach(function(dot, i) {
+                    dot.addEventListener('click', function() {
+                        galleryTrack.scrollTo({ left: i * galleryTrack.clientWidth, behavior: 'smooth' });
+                        if (navigator.vibrate) navigator.vibrate(8);
+                    });
+                });
+            }
+
+            // Image Gallery - Thumbnail Click Handler
+            thumbnails.forEach(function(thumbnail, index) {
+                thumbnail.addEventListener('click', function() {
+                    // Update main image
+                    const newImageSrc = this.src;
+                    if (productImage && newImageSrc) {
+                        // Fade out
+                        if (typeof gsap !== 'undefined') {
+                            gsap.to(productImage, {
+                                opacity: 0,
+                                duration: 0.15,
+                                onComplete: function() {
+                                    productImage.src = newImageSrc;
+                                    // Fade in
+                                    gsap.to(productImage, {
+                                        opacity: 1,
+                                        duration: 0.15
+                                    });
+                                }
+                            });
+                        } else {
+                            productImage.src = newImageSrc;
+                        }
+
+                        // Update active thumbnail
+                        thumbnails.forEach(function(t) {
+                            t.classList.remove('active');
+                        });
+                        this.classList.add('active');
+
+                        // Haptic feedback
+                        if (navigator.vibrate) {
+                            navigator.vibrate(10);
+                        }
+                    }
+                });
+            });
+
+            // Haptic feedback function
+            function hapticTick() {
+                if (navigator.vibrate) {
+                    navigator.vibrate(10);
+                }
+            }
+
+            // Rotary dial - decrease quantity
+            dialMinus.addEventListener('click', function() {
+                const currentValue = parseInt(quantityInput.value);
+                if (currentValue > 1) {
+                    quantityInput.value = currentValue - 1;
+                    hapticTick();
+                    // GSAP animation for click-stop effect
+                    if (typeof gsap !== 'undefined') {
+                        gsap.fromTo(quantityInput,
+                            { scale: 0.95 },
+                            { scale: 1, duration: 0.2, ease: 'back.out(3)' }
+                        );
+                    }
+                }
+            });
+
+            // Rotary dial - increase quantity
+            dialPlus.addEventListener('click', function() {
+                const currentValue = parseInt(quantityInput.value);
+                if (currentValue < maxQuantity) {
+                    quantityInput.value = currentValue + 1;
+                    hapticTick();
+                    // GSAP animation for click-stop effect
+                    if (typeof gsap !== 'undefined') {
+                        gsap.fromTo(quantityInput,
+                            { scale: 0.95 },
+                            { scale: 1, duration: 0.2, ease: 'back.out(3)' }
+                        );
+                    }
+                }
+            });
+
+            // Long-press dispense button
+            let longPressTimer = null;
+            let progressInterval = null;
+            let pressStartTime = 0;
+            const LONG_PRESS_DURATION = 300; // milliseconds
+
+            dispenseButton.addEventListener('mousedown', startLongPress);
+            dispenseButton.addEventListener('touchstart', startLongPress);
+            dispenseButton.addEventListener('mouseup', endLongPress);
+            dispenseButton.addEventListener('mouseleave', endLongPress);
+            dispenseButton.addEventListener('touchend', endLongPress);
+            dispenseButton.addEventListener('touchcancel', endLongPress);
+
+            function startLongPress(e) {
+                if (e.type === 'touchstart') {
+                    e.preventDefault();
+                }
+
+                pressStartTime = Date.now();
+                dispenseProgress.style.width = '0%';
+                hapticTick();
+
+                // Animate progress bar
+                progressInterval = setInterval(function() {
+                    const elapsed = Date.now() - pressStartTime;
+                    const progress = Math.min((elapsed / LONG_PRESS_DURATION) * 100, 100);
+                    dispenseProgress.style.width = progress + '%';
+
+                    if (progress >= 100) {
+                        clearInterval(progressInterval);
+                    }
+                }, 10);
+
+                // Trigger checkout after long press duration
+                longPressTimer = setTimeout(function() {
+                    handleDispense();
+                }, LONG_PRESS_DURATION);
+            }
+
+            function endLongPress(e) {
+                if (e.type === 'touchend') {
+                    e.preventDefault();
+                }
+
+                clearTimeout(longPressTimer);
+                clearInterval(progressInterval);
+
+                const elapsed = Date.now() - pressStartTime;
+                if (elapsed < LONG_PRESS_DURATION) {
+                    // Reset progress if released too early
+                    dispenseProgress.style.width = '0%';
+                }
+            }
+
+            // Dispense sequence with GSAP timeline
+            async function handleDispense() {
+                dispenseButton.disabled = true;
+                hapticTick();
+
+                if (typeof gsap !== 'undefined') {
+                    const tl = gsap.timeline();
+
+                    // State 1: Authorizing
+                    dispenseText.textContent = 'AUTHORIZING';
+                    tl.to(dispenseProgress, { width: '33%', duration: 0.3 });
+
+                    // State 2: Securing Inventory
+                    tl.call(function() {
+                        dispenseText.textContent = 'SECURING INVENTORY';
+                        hapticTick();
+                    });
+                    tl.to(dispenseProgress, { width: '66%', duration: 0.3 });
+
+                    // State 3: Redirecting
+                    tl.call(function() {
+                        dispenseText.textContent = 'REDIRECTING TO CHECKOUT';
+                        hapticTick();
+                    });
+                    tl.to(dispenseProgress, { width: '100%', duration: 0.3 });
+
+                    // Wait for timeline to complete
+                    await new Promise(resolve => {
+                        tl.call(resolve);
+                    });
+                }
+
+                // Proceed to checkout
+                handleCheckout();
+            }
+
+            // Checkout function
+            async function handleCheckout() {
+                const quantity = parseInt(quantityInput.value);
+
+                // Variant (size/color) is required when the product has options.
+                const variantSelect = document.getElementById('variantSelect');
+                let variantId = '', variantLabel = '';
+                if (variantSelect) {
+                    variantId = variantSelect.value;
+                    if (!variantId) {
+                        alert('Please select an option (e.g. size) before checkout.');
+                        dispenseText.textContent = 'SECURE CHECKOUT';
+                        dispenseProgress.style.width = '0%';
+                        dispenseButton.disabled = false;
+                        variantSelect.focus();
+                        return;
+                    }
+                    const opt = variantSelect.options[variantSelect.selectedIndex];
+                    variantLabel = opt ? (opt.getAttribute('data-label') || opt.textContent || '') : '';
+                }
+
+                try {
+                    const response = await fetch('/product/${listing.listingId}/checkout', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ quantity: quantity, variantId: variantId, variantLabel: variantLabel })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error('Checkout failed');
+                    }
+
+                    const data = await response.json();
+
+                    if (data.checkoutUrl) {
+                        window.location.href = data.checkoutUrl;
+                    } else {
+                        throw new Error('No checkout URL received');
+                    }
+                } catch (error) {
+                    console.error('Checkout error:', error);
+                    alert('Error processing checkout. Please try again.');
+                    dispenseText.textContent = 'SECURE CHECKOUT';
+                    dispenseProgress.style.width = '0%';
+                    dispenseButton.disabled = false;
+                }
+            }
+
+            // Panel links navigation
+            panelLinks.forEach(function(link) {
+                link.addEventListener('click', function() {
+                    const url = this.getAttribute('data-url');
+                    if (url) {
+                        window.location.href = url;
+                    }
+                });
+            });
+
+            // Product image parallax tilt (subtle, on hover)
+            // Parallax tilt only for single-image products — it would fight the
+            // swipe carousel when there are multiple images.
+            if (productImage && typeof gsap !== 'undefined' && ${productImages.length} <= 1) {
+                const glassPanelEl = productImage.closest('.glass-panel');
+                if (glassPanelEl) {
+                    glassPanelEl.addEventListener('mousemove', function(e) {
+                        const rect = glassPanelEl.getBoundingClientRect();
+                        const x = (e.clientX - rect.left) / rect.width - 0.5;
+                        const y = (e.clientY - rect.top) / rect.height - 0.5;
+
+                        gsap.to(productImage, {
+                            rotateY: x * 5,
+                            rotateX: -y * 5,
+                            duration: 0.5,
+                            ease: 'power2.out'
+                        });
+                    });
+
+                    glassPanelEl.addEventListener('mouseleave', function() {
+                        gsap.to(productImage, {
+                            rotateY: 0,
+                            rotateX: 0,
+                            duration: 0.5,
+                            ease: 'power2.out'
+                        });
+                    });
+                }
+            }
+
+            // Device orientation parallax for mobile
+            if (window.DeviceOrientationEvent && productImage) {
+                window.addEventListener('deviceorientation', function(e) {
+                    if (e.gamma !== null && e.beta !== null) {
+                        const tiltX = Math.max(-15, Math.min(15, e.gamma)) / 15;
+                        const tiltY = Math.max(-15, Math.min(15, e.beta - 45)) / 15;
+
+                        if (typeof gsap !== 'undefined') {
+                            gsap.to(productImage, {
+                                rotateY: tiltX * 3,
+                                rotateX: -tiltY * 3,
+                                duration: 0.3,
+                                ease: 'power1.out'
+                            });
+                        }
+                    }
+                });
+            }
+        });
     </script>
 </body>
 </html>
@@ -354,95 +1606,104 @@ function generateProductLandingPage(listing: any): string {
 /**
  * Generate success page after payment
  */
-function generateSuccessPage(session: any): string {
+function generateSuccessPage(session: any, conversionValue?: number): string {
+  // Friendly short order reference — never expose the raw Stripe session id.
+  const orderRef = String(session.id || '').replace(/^cs_(live|test)_/, '').slice(0, 8).toUpperCase() || 'CONFIRMED';
+  const email = session.customer_details?.email || 'your email';
+  const amount = ((session.amount_total || 0) / 100).toFixed(2);
   return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Confirmed!</title>
+    <title>Order Confirmed — ARBI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+    ${googleAdsGlobalTagHtml()}
+    ${googleAdsConversionEventHtml(conversionValue ?? (session.amount_total || 0) / 100, session.id)}
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: radial-gradient(1100px 560px at 50% -8%, #15203f 0%, #0b0f22 62%);
+            color: #e2e8f0;
             min-height: 100vh;
             display: flex;
+            flex-direction: column;
             align-items: center;
-            justify-content: center;
-            padding: 20px;
+            padding: 26px 16px 40px;
         }
-        .success-container {
-            max-width: 600px;
-            background: white;
-            border-radius: 20px;
-            padding: 60px 40px;
-            text-align: center;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        }
-        .checkmark {
-            font-size: 80px;
-            margin-bottom: 20px;
-        }
-        h1 {
-            font-size: 32px;
-            color: #1a202c;
-            margin-bottom: 16px;
-        }
-        p {
-            font-size: 18px;
-            color: #4a5568;
-            line-height: 1.6;
-            margin-bottom: 30px;
-        }
-        .order-id {
-            background: #f7fafc;
-            padding: 16px;
-            border-radius: 8px;
-            font-family: monospace;
-            margin-bottom: 30px;
-        }
-        .info-box {
-            background: #ebf8ff;
-            border-left: 4px solid #4299e1;
-            padding: 20px;
-            text-align: left;
-            margin-bottom: 20px;
-            border-radius: 4px;
-        }
-        .info-box strong {
-            display: block;
-            margin-bottom: 8px;
-            color: #2c5282;
-        }
+        .brand { display: flex; align-items: center; gap: 10px; margin: 4px 0 26px; }
+        .logo { width: 34px; height: 34px; background: #00f0ff; border-radius: 7px; transform: rotate(45deg);
+            display: flex; align-items: center; justify-content: center; box-shadow: 0 0 18px rgba(0,240,255,.45); }
+        .logo span { transform: rotate(-45deg); color: #04121f; font-weight: 800; font-size: 17px; }
+        .brand b { font-size: 17px; letter-spacing: .2em; color: #fff; }
+        .card { width: 100%; max-width: 500px; background: rgba(18,24,48,.72);
+            -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+            border: 1px solid rgba(255,255,255,.10); border-radius: 20px; padding: 38px 26px;
+            text-align: center; box-shadow: 0 24px 60px rgba(0,0,0,.45); }
+        .check { width: 74px; height: 74px; border-radius: 50%; margin: 0 auto 18px; display: flex;
+            align-items: center; justify-content: center; background: rgba(16,185,129,.15);
+            border: 1px solid rgba(16,185,129,.5); color: #34d399; font-size: 38px;
+            box-shadow: 0 0 30px rgba(16,185,129,.25); }
+        h1 { font-size: 25px; color: #fff; margin-bottom: 10px; }
+        .sub { font-size: 14px; color: #94a3b8; line-height: 1.6; margin-bottom: 22px; }
+        .order { display: inline-flex; align-items: center; gap: 8px; background: rgba(0,240,255,.08);
+            border: 1px solid rgba(0,240,255,.25); color: #00f0ff; font-family: 'JetBrains Mono', monospace;
+            font-size: 14px; font-weight: 600; padding: 9px 16px; border-radius: 10px; margin-bottom: 22px; }
+        .rows { display: flex; flex-direction: column; gap: 10px; text-align: left; }
+        .row { display: flex; gap: 12px; align-items: flex-start; background: rgba(255,255,255,.04);
+            border: 1px solid rgba(255,255,255,.07); border-radius: 12px; padding: 14px 16px; }
+        .check svg { width: 40px; height: 40px; }
+        .row .ic { color: #38bdf8; flex-shrink: 0; display: flex; align-items: center; padding-top: 1px; }
+        .row .ic svg { width: 22px; height: 22px; display: block; }
+        .row b { display: block; color: #fff; font-size: 13px; margin-bottom: 3px; font-weight: 600; }
+        .row p { color: #94a3b8; font-size: 13px; line-height: 1.5; }
+        .paid { color: #34d399; font-weight: 700; }
+        .footer { margin-top: 26px; text-align: center; }
+        .footer-links { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; }
+        .footer-links a { color: #64748b; font-size: 12px; text-decoration: none; }
+        .footer-links a:hover { color: #00f0ff; }
+        .footer small { color: #475569; font-size: 12px; }
     </style>
 </head>
 <body>
-    <div class="success-container">
-        <div class="checkmark">✅</div>
-        <h1>Order Confirmed!</h1>
-        <p>Thank you for your purchase. Your order has been confirmed and will be shipped soon.</p>
+    <div class="brand"><div class="logo"><span>A</span></div><b>ARBI</b></div>
 
-        <div class="order-id">
-            Order ID: ${session.id}
-        </div>
+    <div class="card">
+        <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+        <h1>Order Confirmed</h1>
+        <p class="sub">Thank you for your purchase — your order is confirmed and will ship soon. A receipt is on its way to your inbox.</p>
 
-        <div class="info-box">
-            <strong>📧 Confirmation Email</strong>
-            A confirmation email has been sent to ${session.customer_details?.email || 'your email'}
-        </div>
+        <div class="order">Order #${orderRef}</div>
 
-        <div class="info-box">
-            <strong>🚚 Shipping</strong>
-            Your order will be shipped within 1-2 business days. You'll receive tracking information via email.
-        </div>
-
-        <div class="info-box">
-            <strong>💳 Payment</strong>
-            Charged: $${(session.amount_total! / 100).toFixed(2)}
+        <div class="rows">
+            <div class="row">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 6 10-6"/></svg></span>
+                <div><b>Confirmation email</b><p>Sent to ${email}</p></div>
+            </div>
+            <div class="row">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 17h4V5H2v12h3"/><path d="M20 17h2v-3.34a4 4 0 0 0-1.17-2.83L19 9h-5v8h1"/><circle cx="7.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></span>
+                <div><b>Shipping</b><p>Ships within 1–2 business days. Tracking will be emailed to you.</p></div>
+            </div>
+            <div class="row">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+                <div><b>Payment</b><p class="paid">$${amount} paid</p></div>
+            </div>
         </div>
     </div>
+
+    <footer class="footer">
+        <div class="footer-links">
+            <a href="https://api.arbi.creai.dev/contact">Contact</a>
+            <a href="https://api.arbi.creai.dev/returns">Returns &amp; Refunds</a>
+            <a href="https://api.arbi.creai.dev/shipping">Shipping</a>
+            <a href="https://api.arbi.creai.dev/privacy">Privacy Policy</a>
+            <a href="https://api.arbi.creai.dev/terms">Terms of Service</a>
+        </div>
+        <small>&copy; 2026 Activate LLC. All rights reserved. ARBI is a store operated by Activate LLC.</small>
+    </footer>
 </body>
 </html>
   `;

@@ -56,6 +56,57 @@ const MarketplaceListingModel: ModelDefinition = {
       type: 'decimal',
       allowNull: false
     },
+    demandScore: {
+      type: 'decimal', // proven-demand proxy (Amazon reviews / CJ listed count)
+      allowNull: true,
+      defaultValue: 0
+    },
+    // Realized-performance feedback (from campaign snapshots). Null = no data yet,
+    // so ranking falls back to the predicted demand/virality priors.
+    realizedScore: {
+      type: 'decimal',
+      allowNull: true
+    },
+    realizedConfidence: {
+      type: 'decimal',
+      allowNull: true
+    },
+    // Organic YouTube traction (free-exposure demand signal; proves a product
+    // before paid spend amplifies it).
+    organicViews: {
+      type: 'decimal',
+      allowNull: true,
+      defaultValue: 0
+    },
+    organicLikes: {
+      type: 'decimal',
+      allowNull: true,
+      defaultValue: 0
+    },
+    organicCheckedAt: {
+      type: 'date',
+      allowNull: true
+    },
+    cjVariantId: {
+      type: 'string', // CJ variant id (vid) — required for CJ auto-fulfillment
+      allowNull: true
+    },
+    cjProductId: {
+      type: 'string', // CJ product id (pid) — used to fetch variants/details
+      allowNull: true
+    },
+    variants: {
+      type: 'json', // selectable size/color variants [{ vid, label, price }]
+      allowNull: true
+    },
+    videoUrl: {
+      type: 'text', // primary/latest generated UGC video (YouTube watch URL or raw render)
+      allowNull: true
+    },
+    videoAssets: {
+      type: 'json', // history of generated videos [{ url, youtubeUrl?, model, format, durationSec?, prompt?, createdAt }]
+      allowNull: true
+    },
     status: {
       type: 'string',
       allowNull: false,
@@ -116,6 +167,19 @@ const BuyerOrderModel: ModelDefinition = {
     buyerEmail: {
       type: 'string',
       allowNull: false
+    },
+    quantity: {
+      type: 'integer',
+      allowNull: true,
+      defaultValue: 1
+    },
+    variantId: {
+      type: 'string',
+      allowNull: true
+    },
+    variantLabel: {
+      type: 'string',
+      allowNull: true
     },
     buyerShippingAddress: {
       type: 'json',

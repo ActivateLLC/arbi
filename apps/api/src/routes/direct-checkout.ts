@@ -9,6 +9,7 @@
 
 import { Router, Request, Response } from 'express';
 import Stripe from 'stripe';
+import { getListings } from './marketplace';
 
 const router = Router();
 
@@ -24,9 +25,9 @@ router.get('/checkout/:listingId', async (req: Request, res: Response) => {
   const { listingId } = req.params;
 
   try {
-    // Fetch listing
-    const listingResponse = await fetch(`http://localhost:3000/api/marketplace/listings`);
-    const { listings } = await listingResponse.json();
+    // Fetch listing directly from the data layer (no internal HTTP call — the
+    // old hardcoded http://localhost:3000 broke on Railway's dynamic PORT).
+    const listings = await getListings('active');
     const listing = listings.find((l: any) => l.listingId === listingId);
 
     if (!listing || listing.status !== 'active') {
@@ -74,6 +75,8 @@ router.get('/checkout/:listingId', async (req: Request, res: Response) => {
         opportunityId: listing.opportunityId,
         supplierPrice: listing.supplierPrice.toString(),
         estimatedProfit: listing.estimatedProfit.toString(),
+        supplierUrl: listing.supplierUrl || '',
+        quantity: '1',
       },
       // Optional: Pre-fill shipping (for faster checkout)
       shipping_address_collection: {
@@ -85,11 +88,25 @@ router.get('/checkout/:listingId', async (req: Request, res: Response) => {
     res.redirect(303, session.url!);
   } catch (error: any) {
     console.error('Direct checkout error:', error);
+    // ?debug=1 surfaces the real error (Stripe message/type/param) so failures
+    // can be diagnosed without server log access. No secrets are exposed.
+    const debug = req.query.debug === '1'
+      ? `<pre style="text-align:left;max-width:680px;margin:24px auto;white-space:pre-wrap;background:#f6f6f6;padding:16px;border-radius:8px;">${
+          JSON.stringify({
+            message: error?.message,
+            type: error?.type,
+            code: error?.code,
+            param: error?.param,
+            statusCode: error?.statusCode,
+          }, null, 2).replace(/</g, '&lt;')
+        }</pre>`
+      : '<p>Add <code>?debug=1</code> to the URL to see the underlying error.</p>';
     res.status(500).send(`
       <html>
         <body style="font-family: Arial; text-align: center; padding: 50px;">
           <h1>⚠️ Checkout Error</h1>
           <p>Unable to process checkout. Please try again later.</p>
+          ${debug}
         </body>
       </html>
     `);

@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { TransactionManager } from '@arbi/transaction';
 
 import { ApiError } from '../middleware/errorHandler';
+import { requireApiKey } from '../middleware/apiAuth';
 
 const router = Router();
 
@@ -148,7 +149,8 @@ router.post('/webhook', async (req: Request, res: Response, next: NextFunction) 
 });
 
 // POST /api/payment/encrypt
-router.post('/encrypt', async (req: Request, res: Response, next: NextFunction) => {
+// 🔒 requireApiKey: without it this is a public encrypt/decrypt ORACLE on the server key.
+router.post('/encrypt', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { data } = req.body;
 
@@ -169,7 +171,7 @@ router.post('/encrypt', async (req: Request, res: Response, next: NextFunction) 
 });
 
 // POST /api/payment/decrypt
-router.post('/decrypt', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/decrypt', requireApiKey, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { encryptedData, iv } = req.body;
 

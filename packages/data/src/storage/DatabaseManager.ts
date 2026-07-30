@@ -11,27 +11,49 @@ export class DatabaseManager {
   private models: Map<string, ModelCtor<Model>>;
 
   constructor(config: DatabaseConfig) {
-    this.sequelize = new Sequelize({
-      host: config.host,
-      port: config.port,
-      database: config.database,
-      username: config.username,
-      password: config.password,
-      dialect: config.dialect || 'postgres',
-      logging: config.logging ? console.log : false,
-      dialectOptions: {
-        ssl: config.ssl ? {
-          require: true,
-          rejectUnauthorized: false,
-        } : undefined,
-      },
-      pool: {
-        max: config.pool?.max || 5,
-        min: config.pool?.min || 0,
-        idle: config.pool?.idle || 10000,
-        acquire: config.pool?.acquire || 30000,
-      },
-    });
+    // Support both URL-based and config-based initialization
+    if ((config as any).url) {
+      // URL-based connection (e.g., from Railway's DATABASE_URL)
+      this.sequelize = new Sequelize((config as any).url, {
+        dialect: config.dialect || 'postgres',
+        logging: config.logging ? console.log : false,
+        dialectOptions: (config as any).dialectOptions || {
+          ssl: config.ssl ? {
+            require: true,
+            rejectUnauthorized: false,
+          } : undefined,
+        },
+        pool: {
+          max: config.pool?.max || 5,
+          min: config.pool?.min || 0,
+          idle: config.pool?.idle || 10000,
+          acquire: config.pool?.acquire || 30000,
+        },
+      });
+    } else {
+      // Individual config parameters
+      this.sequelize = new Sequelize({
+        host: config.host,
+        port: config.port,
+        database: config.database,
+        username: config.username,
+        password: config.password,
+        dialect: config.dialect || 'postgres',
+        logging: config.logging ? console.log : false,
+        dialectOptions: {
+          ssl: config.ssl ? {
+            require: true,
+            rejectUnauthorized: false,
+          } : undefined,
+        },
+        pool: {
+          max: config.pool?.max || 5,
+          min: config.pool?.min || 0,
+          idle: config.pool?.idle || 10000,
+          acquire: config.pool?.acquire || 30000,
+        },
+      });
+    }
 
     this.models = new Map();
   }
@@ -107,13 +129,21 @@ export class DatabaseManager {
           type = DataTypes.STRING;
       }
 
+      // Handle special default values
+      let defaultValue = def.defaultValue;
+      if (defaultValue === 'uuid_generate_v4()' || defaultValue === 'UUIDV4') {
+        defaultValue = DataTypes.UUIDV4;
+      } else if (defaultValue === 'NOW()' || defaultValue === 'CURRENT_TIMESTAMP') {
+        defaultValue = DataTypes.NOW;
+      }
+
       attributes[name] = {
         type,
         primaryKey: def.primaryKey || false,
         autoIncrement: def.autoIncrement || false,
         allowNull: def.allowNull !== undefined ? def.allowNull : true,
         unique: def.unique || false,
-        defaultValue: def.defaultValue,
+        defaultValue: defaultValue,
         references: def.references,
       };
     }

@@ -9,17 +9,17 @@ const router = Router();
 // Global instance (in production, use Redis/database for state management)
 const engine = new AutonomousEngine();
 
-// Default configuration
+// Default configuration - AGGRESSIVE MODE (10k in 10 hours strategy)
 const defaultConfig: AutonomousConfig = {
-  minScore: 70,
-  minROI: 20,
-  minProfit: 5,
-  maxPrice: 100,
+  minScore: 75,
+  minROI: 25,
+  minProfit: 3, // tiny fee-cover floor; ROI%/margin% gate the premium, not absolute $
+  maxPrice: 0, // 0 = no price ceiling; rank by demand + premium %, at any price point
   categories: [],
-  scanInterval: 15,
+  scanInterval: 5,
   autoBuyEnabled: false,
   autoBuyScore: 90,
-  dailyBudget: 500,
+  dailyBudget: 0, // Zero Capital Mode (List first)
 };
 
 let currentConfig = { ...defaultConfig };

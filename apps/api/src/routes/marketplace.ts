@@ -4,6 +4,10 @@ import Stripe from 'stripe';
 import { v2 as cloudinary } from 'cloudinary';
 import { getDatabase } from '../config/database';
 import { adCampaignManager } from '../services/adCampaigns';
+import { imageScraper } from '../services/imageScraper';
+// import { requireApiKey } from '../middleware/apiAuth'; // Optional: Uncomment to require API key authentication
+import { createListingSchema, checkoutSchema, validateSchema } from '../schemas/marketplace';
+import { isBrandRestricted, checkAdvertisable } from '../services/google-ads/advertisability';
 
 const router = Router();
 
@@ -11,7 +15,10 @@ const router = Router();
 let db: ReturnType<typeof getDatabase> | null = null;
 try {
   db = getDatabase();
-} catch (error) {
+  console.log('✅ Database initialized for marketplace routes');
+} catch (error: any) {
+  console.error('❌ Database initialization failed for marketplace:', error.message);
+  console.error('   Stack:', error.stack);
   console.log('⚠️  Database not available for marketplace - using in-memory storage');
 }
 
@@ -49,7 +56,7 @@ if (process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && proce
  * Timeline: 2-3 days
  */
 
-interface MarketplaceListing {
+export interface MarketplaceListing {
   listingId: string;
   opportunityId: string;
   productTitle: string;
@@ -57,10 +64,33 @@ interface MarketplaceListing {
   productImages: string[]; // Cloudinary URLs
   supplierPrice: number;
   supplierUrl: string;
-  supplierPlatform: string; // "amazon" | "walmart" | "target" | "ebay"
+  supplierPlatform: string; // "amazon" | "walmart" | "target" | "ebay" | "cj"
+  cjVariantId?: string; // CJ Dropshipping variant id (vid) — enables supplier->customer auto-fulfillment
+  cjProductId?: string; // CJ Dropshipping product id (pid), optional
+  // Selectable variants (e.g. size / color). When a product has more than one,
+  // the customer must choose at checkout so we fulfill the right supplier variant.
+  variants?: { vid: string; label: string; price?: number }[];
+  videoUrl?: string; // primary/latest generated UGC video — reviewable in the catalog
+  // Persisted history of generated video ASSETS (proof + downloadable), newest first.
+  videoAssets?: {
+    url: string;            // raw rendered video (downloadable .mp4)
+    youtubeUrl?: string;    // hosted YouTube watch URL, when posted
+    model?: string;         // Higgsfield model id used
+    format?: string;        // ad format (try-on/unboxing/demo/review/ugc)
+    durationSec?: number;
+    viralityScore?: number; // 0-100 predicted virality of the winning creative
+    posted?: boolean;       // auto-posted to YouTube (passed the virality gate)
+    createdAt: string;      // ISO timestamp
+  }[];
   marketplacePrice: number;
   estimatedProfit: number;
-  status: 'active' | 'sold' | 'expired';
+  demandScore?: number; // proven-demand proxy (Amazon reviews / CJ listed count)
+  realizedScore?: number;      // 0-100 realized performance (from campaign snapshots)
+  realizedConfidence?: number; // 0-1 — how much realizedScore should override priors
+  organicViews?: number;       // free YouTube views (organic-first demand proof)
+  organicLikes?: number;
+  organicCheckedAt?: Date;
+  status: 'active' | 'sold' | 'expired' | 'out_of_stock';
   listedAt: Date;
   expiresAt: Date;
   soldAt?: Date;
@@ -99,8 +129,9 @@ const orders: Map<string, BuyerOrder> = new Map();
 
 /**
  * Helper functions for database/memory abstraction
+ * EXPORTED for use by autonomousListing job
  */
-async function saveListing(listing: MarketplaceListing): Promise<void> {
+export async function saveListing(listing: MarketplaceListing): Promise<void> {
   if (db) {
     try {
       await db.create('MarketplaceListing', listing);
@@ -113,7 +144,7 @@ async function saveListing(listing: MarketplaceListing): Promise<void> {
   }
 }
 
-async function getListing(listingId: string): Promise<MarketplaceListing | null> {
+export async function getListing(listingId: string): Promise<MarketplaceListing | null> {
   if (db) {
     try {
       const result = await db.findOne('MarketplaceListing', { where: { listingId } });
@@ -126,28 +157,38 @@ async function getListing(listingId: string): Promise<MarketplaceListing | null>
   return listings.get(listingId) || null;
 }
 
-async function getListings(status?: string): Promise<MarketplaceListing[]> {
+export async function getListings(status?: string): Promise<MarketplaceListing[]> {
+  console.log(`🔍 getListings called with status: ${status || 'all'}`);
+  console.log(`   Database available: ${db ? 'YES' : 'NO'}`);
+  console.log(`   In-memory listings count: ${listings.size}`);
+
   if (db) {
     try {
       const where = status ? { status } : {};
+      console.log(`   Querying database with where:`, where);
       const results = await db.find('MarketplaceListing', {
         where,
         order: [['listedAt', 'DESC']]
       });
+      console.log(`   ✅ Database returned ${results.length} listings`);
       return results as MarketplaceListing[];
     } catch (error: any) {
       console.error('❌ Database query failed, using memory:', error.message);
+      console.error('   Error stack:', error.stack);
       const allListings = Array.from(listings.values());
-      return status ? allListings.filter(l => l.status === status) : allListings;
+      const filtered = status ? allListings.filter(l => l.status === status) : allListings;
+      console.log(`   Falling back to memory: ${filtered.length} listings`);
+      return filtered;
     }
   }
 
   const allListings = Array.from(listings.values());
   const filtered = status ? allListings.filter(l => l.status === status) : allListings;
+  console.log(`   ⚠️  No database, using memory: ${filtered.length} listings`);
   return filtered.sort((a, b) => b.listedAt.getTime() - a.listedAt.getTime());
 }
 
-async function updateListing(listingId: string, data: Partial<MarketplaceListing>): Promise<void> {
+export async function updateListing(listingId: string, data: Partial<MarketplaceListing>): Promise<void> {
   if (db) {
     try {
       await db.update('MarketplaceListing', data, { where: { listingId } });
@@ -192,7 +233,7 @@ async function getOrder(orderId: string): Promise<BuyerOrder | null> {
   return orders.get(orderId) || null;
 }
 
-async function getOrders(): Promise<BuyerOrder[]> {
+export async function getOrders(): Promise<BuyerOrder[]> {
   if (db) {
     try {
       const results = await db.find('BuyerOrder', {
@@ -229,9 +270,13 @@ async function updateOrder(orderId: string, data: Partial<BuyerOrder>): Promise<
 /**
  * POST /api/marketplace/list
  * Create marketplace listing from arbitrage opportunity
+ * NOTE: Add requireApiKey middleware when ready to enable authentication
  */
 router.post('/list', async (req: Request, res: Response, next: NextFunction) => {
   try {
+    // Validate request body
+    const validatedData = validateSchema(createListingSchema, req.body);
+
     const {
       opportunityId,
       productTitle,
@@ -240,23 +285,36 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       supplierPrice,
       supplierUrl,
       supplierPlatform,
-      markupPercentage = 30 // Default 30% markup
-    } = req.body;
-
-    if (!opportunityId || !productTitle || !supplierPrice || !supplierUrl) {
-      throw new ApiError(400, 'Missing required fields');
-    }
+      markupPercentage
+    } = validatedData;
 
     // Calculate marketplace price with markup
     const marketplacePrice = supplierPrice * (1 + markupPercentage / 100);
     const estimatedProfit = marketplacePrice - supplierPrice;
 
-    // Upload product images to Cloudinary for hosting
-    const cloudinaryUrls: string[] = [];
-    if (productImageUrls && productImageUrls.length > 0) {
-      console.log(`📸 Uploading ${productImageUrls.length} product images to Cloudinary...`);
+    // Step 1: Try to scrape real product images from multiple sources
+    let sourceImageUrls = productImageUrls || [];
 
-      for (const imageUrl of productImageUrls) {
+    // If no images provided or Cloudinary upload fails, scrape from web
+    if (!sourceImageUrls || sourceImageUrls.length === 0) {
+      console.log(`🔍 No images provided - scraping from web sources...`);
+      try {
+        const scraped = await imageScraper.scrapeProductImages(productTitle, undefined, 8);
+        if (scraped.images.length > 0) {
+          sourceImageUrls = scraped.images.map(img => img.url);
+          console.log(`   ✅ Scraped ${scraped.images.length} images from ${scraped.sources.join(', ')}`);
+        }
+      } catch (error: any) {
+        console.error(`   ⚠️  Image scraping failed: ${error.message}`);
+      }
+    }
+
+    // Step 2: Upload product images to Cloudinary for hosting
+    const cloudinaryUrls: string[] = [];
+    if (sourceImageUrls && sourceImageUrls.length > 0) {
+      console.log(`📸 Uploading ${sourceImageUrls.length} product images to Cloudinary...`);
+
+      for (const imageUrl of sourceImageUrls) {
         try {
           const result = await cloudinary.uploader.upload(imageUrl, {
             folder: 'arbi-marketplace',
@@ -267,8 +325,38 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
           console.log(`   ✅ Uploaded: ${result.secure_url}`);
         } catch (error: any) {
           console.error(`   ❌ Failed to upload ${imageUrl}:`, error.message);
+          // Don't use Amazon URLs - they get blocked by tracking prevention
+          // Instead, try to scrape alternative images if this was the only source
+          if (sourceImageUrls.length === 1 && !imageUrl.includes('cloudinary.com')) {
+            console.log(`   🔍 Attempting to find alternative images...`);
+            try {
+              const scraped = await imageScraper.scrapeProductImages(productTitle, undefined, 8);
+              for (const scrapedImg of scraped.images) {
+                try {
+                  const altResult = await cloudinary.uploader.upload(scrapedImg.url, {
+                    folder: 'arbi-marketplace',
+                    public_id: `${opportunityId}-${Date.now()}`,
+                    resource_type: 'image'
+                  });
+                  cloudinaryUrls.push(altResult.secure_url);
+                  console.log(`   ✅ Uploaded alternative: ${altResult.secure_url}`);
+                  break; // Stop after first successful upload
+                } catch (altError) {
+                  continue; // Try next image
+                }
+              }
+            } catch (scrapeError) {
+              console.error(`   ⚠️  Alternative image search failed`);
+            }
+          }
         }
       }
+    }
+
+    // Step 3: If still no images, use placeholder
+    if (cloudinaryUrls.length === 0) {
+      console.log(`   📋 No images available - using professional placeholder`);
+      cloudinaryUrls.push(`https://placehold.co/600x600/667eea/white?text=${encodeURIComponent(productTitle.substring(0, 30))}`);
     }
 
     // Create marketplace listing
@@ -282,6 +370,9 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       supplierPrice,
       supplierUrl,
       supplierPlatform,
+      // CJ variant/product ids (read raw — enables supplier->customer auto-fulfillment)
+      cjVariantId: req.body?.cjVariantId || undefined,
+      cjProductId: req.body?.cjProductId || undefined,
       marketplacePrice: parseFloat(marketplacePrice.toFixed(2)),
       estimatedProfit: parseFloat(estimatedProfit.toFixed(2)),
       status: 'active',
@@ -314,7 +405,10 @@ router.post('/list', async (req: Request, res: Response, next: NextFunction) => 
       console.error(`   ⚠️  Ad campaign creation failed: ${error.message}`);
     }
 
-    const baseUrl = process.env.PUBLIC_URL || 'https://arbi.creai.dev';
+    // Default to the API domain, which serves the product pages and has a valid
+    // cert. (www.arbi.creai.dev currently has no valid TLS cert.) Set PUBLIC_URL
+    // to the storefront domain once its certificate is provisioned.
+    const baseUrl = process.env.PUBLIC_URL || 'https://api.arbi.creai.dev';
     const publicUrl = `${baseUrl}/product/${listingId}`;
 
     res.status(201).json({
@@ -358,21 +452,69 @@ router.get('/listings', async (req: Request, res: Response) => {
 });
 
 /**
+ * DELETE /api/marketplace/listings/:listingId
+ * Delete a marketplace listing
+ * NOTE: Add requireApiKey middleware when ready to enable authentication
+ */
+router.delete('/listings/:listingId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { listingId } = req.params;
+
+    const listing = await getListing(listingId);
+    if (!listing) {
+      throw new ApiError(404, 'Listing not found');
+    }
+
+    // Delete from both database AND in-memory cache
+    if (db) {
+      try {
+        await db.destroy('MarketplaceListing', { where: { listingId } });
+        console.log(`✅ Deleted listing from database: ${listingId}`);
+      } catch (error: any) {
+        console.error('❌ Database delete failed:', error.message);
+      }
+    }
+
+    // Always delete from in-memory cache to keep them in sync
+    listings.delete(listingId);
+    console.log(`✅ Deleted listing from in-memory cache: ${listingId}`);
+
+    res.status(200).json({
+      success: true,
+      message: `Listing ${listingId} deleted`,
+      deletedListing: listing
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
  * POST /api/marketplace/checkout
- * Buyer initiates purchase (pays FIRST)
+ * ⛔ DISABLED — this legacy path charged real cards but SIMULATED fulfillment
+ * (fake supplier order + fake tracking via setTimeout/Date.now()). Taking money
+ * with no real fulfillment is a refund machine and a Misrepresentation
+ * violation. The real, live checkout is the Stripe Checkout Session flow on the
+ * product page (public-product.ts /product/:id/checkout and direct-checkout.ts),
+ * fulfilled by the Stripe webhook → CJ pipeline.
  */
 router.post('/checkout', async (req: Request, res: Response, next: NextFunction) => {
+  return res.status(410).json({
+    success: false,
+    error: 'This checkout endpoint is disabled. Use the product page checkout.',
+    checkoutUrl: `${process.env.PUBLIC_URL || 'https://api.arbi.creai.dev'}/product/${req.body?.listingId || ''}`,
+  });
+  /* eslint-disable no-unreachable */
   try {
+    // Validate checkout data
+    const validatedData = validateSchema(checkoutSchema, req.body);
+
     const {
       listingId,
       buyerEmail,
       shippingAddress,
       paymentMethodId // Stripe payment method from frontend
-    } = req.body;
-
-    if (!listingId || !buyerEmail || !shippingAddress || !paymentMethodId) {
-      throw new ApiError(400, 'Missing required checkout fields');
-    }
+    } = validatedData;
 
     const listing = await getListing(listingId);
     if (!listing) {
@@ -569,6 +711,74 @@ router.get('/orders', async (req: Request, res: Response) => {
     }
   });
 });
+
+/**
+ * POST /api/marketplace/purge-restricted
+ * Expire active listings that reference protected brands/trademarks (e.g. leftover
+ * demo rows like "Apple AirPods Pro 2", "Nintendo Switch OLED"). These can't be
+ * legitimately dropshipped and would get Google Ads disapproved. We set status to
+ * 'expired' (reversible — not a hard delete) so they drop out of the catalog and
+ * can never go live. ?preview=1 lists what WOULD be expired without changing it.
+ */
+async function handlePurgeRestricted(req: Request, res: Response) {
+  // GET is always a safe dry-run (browser-clickable). POST mutates unless
+  // ?preview=1 / {preview:true} is set.
+  const preview = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
+  const active = await getListings('active');
+  // Expire anything NOT advertisable — brand/trademark, placeholder/no real
+  // image (seed/demo junk like "Premium Espresso Machine", "Test - …"), no real
+  // supplier, etc. Real CJ products (real image + variant id) are kept. This is
+  // the comprehensive "remove anything that isn't a real sellable product" sweep.
+  const restricted = active.filter((l) => {
+    const g = checkAdvertisable(l);
+    return !g.ok;
+  });
+
+  if (!preview) {
+    for (const l of restricted) {
+      try { await updateListing(l.listingId, { status: 'expired' as any }); } catch { /* keep going */ }
+    }
+  }
+
+  res.status(200).json({
+    success: true,
+    preview,
+    method: req.method,
+    matched: restricted.length,
+    expired: preview ? 0 : restricted.length,
+    hint: preview ? 'This was a dry run. Send a POST (no ?preview) to actually expire these.' : undefined,
+    listings: restricted.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle, reason: checkAdvertisable(l).reason })),
+  });
+}
+
+// GET = browser-clickable dry run; POST = perform the purge.
+router.get('/purge-restricted', handlePurgeRestricted);
+router.post('/purge-restricted', handlePurgeRestricted);
+
+/**
+ * POST /api/marketplace/clear-out-of-stock
+ * Expire every out_of_stock listing (status -> expired) so they drop out of the
+ * catalog and the "products out of stock" alert resolves. Reversible-ish (not a
+ * hard delete). ?preview=1 / GET = dry run.
+ */
+async function handleClearOutOfStock(req: Request, res: Response) {
+  const preview = req.method === 'GET' || req.query.preview === '1' || req.body?.preview === true;
+  const oos = await getListings('out_of_stock');
+  if (!preview) {
+    for (const l of oos) {
+      try { await updateListing(l.listingId, { status: 'expired' as any }); } catch { /* keep going */ }
+    }
+  }
+  res.status(200).json({
+    success: true,
+    preview,
+    matched: oos.length,
+    expired: preview ? 0 : oos.length,
+    listings: oos.map((l) => ({ listingId: l.listingId, productTitle: l.productTitle })),
+  });
+}
+router.get('/clear-out-of-stock', handleClearOutOfStock);
+router.post('/clear-out-of-stock', handleClearOutOfStock);
 
 /**
  * GET /api/marketplace/health

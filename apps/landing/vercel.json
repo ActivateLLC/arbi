@@ -1,0 +1,20 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
+    {
+      "source": "/product/:listingId",
+      "destination": "https://api.arbi.creai.dev/product/:listingId"
+    },
+    {
+      "source": "/product/:listingId/checkout",
+      "destination": "https://api.arbi.creai.dev/product/:listingId/checkout"
+    },
+    {
+      "source": "/product/:listingId/success",
+      "destination": "https://api.arbi.creai.dev/product/:listingId/success"
+    }
+  ],
+  "installCommand": "npx pnpm@8.14.0 install --no-frozen-lockfile",
+  "ignoreCommand": "exit 0"
+}

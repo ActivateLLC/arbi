@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "cd ../.. && pnpm turbo build --filter=@arbi/dashboard",
-  "framework": "nextjs"
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": null,
+  "installCommand": "npx pnpm@8.14.0 install --no-frozen-lockfile",
+  "ignoreCommand": "exit 0"
 }

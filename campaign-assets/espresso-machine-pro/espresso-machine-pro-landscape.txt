@@ -1,0 +1,71 @@
+
+IMAGE SPECIFICATIONS FOR: Premium Espresso Machine - Barista Edition 15 Bar
+Size: 1200x628 (landscape)
+
+DESIGN REQUIREMENTS:
+- Background: Clean gradient (white to light gray, or brand colors)
+- Product image: High-quality photo of Premium Espresso Machine - Barista Edition 15 Bar
+- Price tag: $799.99 in bold, prominent position
+- Headline: "Barista-Quality Espresso at Home"
+- Call-to-action: "Shop Now" button
+- Trust badges: Free shipping, warranty, secure checkout
+
+LAYOUT:
+
+- Left 50%: Product image
+- Right 50%:
+  - Headline (top)
+  - Key benefits (3-4 bullet points)
+  - Price + CTA (bottom)
+
+
+KEY BENEFITS TO HIGHLIGHT:
+- 15 bar Italian pump
+- PID temperature control
+- Professional steam wand
+- Pre-infusion function
+- Large water reservoir
+
+COLOR SCHEME:
+- Primary: Deep blue or brand color
+- Accent: Orange/red for CTA
+- Text: Dark gray on white background
+- Price: Green (savings emphasis)
+
+FONTS:
+- Heading: Bold, modern sans-serif (e.g., Montserrat Bold)
+- Body: Clean sans-serif (e.g., Open Sans)
+- Price: Extra bold
+
+TOOLS TO USE:
+1. Canva Pro (recommended):
+   - Use "Ad" template
+   - Select 1200x628 custom size
+   - Upload product image or use stock photos
+   - Add text overlays and CTA button
+
+2. Adobe Express:
+   - Choose "Social media post" template
+   - Resize to 1200x628
+   - Add layers for text and product image
+
+3. Photoshop/Figma:
+   - Create canvas 1200x628
+   - Layer 1: Background gradient
+   - Layer 2: Product image (with clipping mask if needed)
+   - Layer 3: Text overlays
+   - Layer 4: CTA button
+   - Export as JPG (quality: 90)
+
+EXAMPLE TEXT PLACEMENT:
+
+┌─────────────────────────────┬─────────────────────────────┐
+│                             │  Barista-Quality Espr...│
+│                             │                             │
+│    [PRODUCT IMAGE]          │  ✓ 15 bar Italian pump│
+│                             │  ✓ PID temperature control│
+│                             │  ✓ Professional steam wand│
+│                             │                             │
+│                             │  $799.99   [Shop Now]    │
+└─────────────────────────────┴─────────────────────────────┘
+

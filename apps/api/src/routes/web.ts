@@ -2,8 +2,14 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { BrowserManager, Navigator } from '@arbi/web-automation';
 
 import { ApiError } from '../middleware/errorHandler';
+import { requireApiKey } from '../middleware/apiAuth';
 
 const router = Router();
+
+// 🔒 This whole surface drives a REAL headless Chromium (create session, navigate,
+// back/forward). Unauthenticated it is a public SSRF + resource-exhaustion vector,
+// so every route requires the API key.
+router.use(requireApiKey);
 
 // Initialize browser manager
 const browserManager = new BrowserManager();

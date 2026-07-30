@@ -1,0 +1,41 @@
+# Arbi System Design & Google Ads API Integration
+
+## Overview
+Arbi is an autonomous arbitrage and e-commerce automation platform. It discovers profitable opportunities, automates product listings, and manages ad campaigns across multiple platforms, including Google Ads, to maximize user revenue.
+
+## Architecture
+- **Core Engine:** AI-driven arbitrage and opportunity analysis
+- **Data Sources:** eBay, Amazon, Walmart, Target, Rainforest API, and more
+- **Automation:** Web scraping, product listing, order fulfillment, and ad campaign management
+- **Ad Integration:** Automated creation and optimization of Google Shopping and Display campaigns for listed products
+- **User Management:** Each user authorizes their own ad account; no data is shared between users
+
+## Google Ads API Usage
+- **Purpose:** Programmatically create, manage, and optimize ad campaigns for products listed by users
+- **Flow:**
+  1. User lists a product on Arbi
+  2. Arbi creates a landing page and launches a Google Shopping/Display campaign via the API
+  3. Campaign performance is monitored and optimized automatically
+  4. All actions require explicit user authorization
+- **Security:**
+  - OAuth2 is used for user consent and authentication
+  - No reselling or external sharing of Google Ads data
+  - All API usage is compliant with Google Ads API policies
+
+## Business Model
+- **Commission-based:** Arbi earns a percentage of profits generated for users
+- **No subscription fees:** Incentives are aligned with user success
+
+## Compliance & Best Practices
+- Only manages ads for authorized accounts
+- Follows Google Ads API Terms of Service and access level requirements
+- Data is isolated per user; no cross-account data sharing
+- Secure storage of all credentials and tokens
+
+## Contact
+Website: https://arbi.creai.dev
+Email: usualprovider@gmail.com
+
+---
+
+*This document is provided as part of the Google Ads API access application for Arbi. For more details, see README.md and ARBITRAGE_SYSTEM_DESIGN.md in the project repository.*

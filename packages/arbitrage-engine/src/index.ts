@@ -4,9 +4,10 @@ export * from './types';
 // Export scouts
 export * from './scouts/ECommerceScout';
 export * from './scouts/WebScraperScout';
-export * from './scouts/EbayScout'; // Implements OpportunityScout interface for arbitrage engine
 export * from './scouts/RainforestScout';
-export * from './scouts/EbayProductScout'; // Standalone eBay product search client
+export * from './scouts/FacebookMarketplaceScout';
+export * from './scouts/KalodataScout';
+export * from './scouts/ProductSourcingScout';
 
 // Export analyzer
 export * from './analyzer/OpportunityAnalyzer';
@@ -17,7 +18,15 @@ export * from './risk-manager/RiskManager';
 // Export autonomous components
 export * from './calculators/profitCalculator';
 export * from './scorers/opportunityScorer';
+export * from './scorers/expectedValue';
 export * from './autonomous/autonomousEngine';
+export * from './dropshipping/DropshippingEngine';
+
+// Export services
+export * from './services/VideoDownloader';
+
+// Export pipelines
+export * from './pipelines/TrendDetectionPipeline';
 
 // Export utilities
 export * from './utils/cache';
@@ -28,6 +37,7 @@ import { ECommerceScout } from './scouts/ECommerceScout';
 import { OpportunityAnalyzer } from './analyzer/OpportunityAnalyzer';
 import { RiskManager } from './risk-manager/RiskManager';
 import { SimpleCache } from './utils/cache';
+import { FacebookMarketplaceScout } from './scouts/FacebookMarketplaceScout';
 
 export class ArbitrageEngine {
   private scouts: Map<string, OpportunityScout> = new Map();
@@ -40,9 +50,9 @@ export class ArbitrageEngine {
     this.riskManager = new RiskManager();
     this.opportunityCache = new SimpleCache<Opportunity[]>(5 * 60 * 1000); // 5 minute cache
 
-    // PRODUCTION MODE: No default scouts
-    // Scouts must be explicitly registered with real data sources
-    // (RainforestScout, EbayScout, WebScraperScout)
+  // Register default scouts
+  this.registerScout(new ECommerceScout());
+  this.registerScout(new FacebookMarketplaceScout());
   }
 
   registerScout(scout: OpportunityScout): void {

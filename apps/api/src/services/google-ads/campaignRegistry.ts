@@ -1,0 +1,165 @@
+/**
+ * Campaign registry — the exactly-once layer (directive B: duplicates are
+ * structurally impossible, never detected/cleaned by the user).
+ *
+ * Every campaign-creation path RESERVES a slot keyed by (tenantId, listingId,
+ * channel) BEFORE calling Google Ads. The reservation is an INSERT guarded by a
+ * UNIQUE index, so:
+ *   - the writer that wins the insert is the SOLE creator → it calls Google,
+ *   - any concurrent/duplicate attempt (overlapping cycle, second Railway
+ *     instance, a cycle racing a manual launch, a retry after a mid-flight API
+ *     failure) hits the unique violation and is told to SKIP.
+ * This replaces fragile campaign-NAME matching and the per-process cycleRunning
+ * guard, which can't protect across restarts or instances.
+ *
+ * Persistence mirrors tenancy.ts: use the shared DatabaseManager when available,
+ * fall back to an in-memory Map (single-process safety only) otherwise.
+ */
+import { getDatabase } from '../../config/database';
+
+export type CampaignChannel = 'SEARCH' | 'VIDEO';
+export type ReserveResult = 'won' | 'exists';
+
+export interface CampaignSlot {
+  tenantId: string;
+  listingId: string;
+  channel: CampaignChannel;
+  googleCampaignId?: string;
+  campaignName?: string;
+  status: 'reserved' | 'created' | 'failed' | 'removed';
+  customerId?: string;
+}
+
+let db: ReturnType<typeof getDatabase> | null = null;
+try { db = getDatabase(); } catch { db = null; }
+
+// In-memory fallback (single-process). Key = `${tenantId}|${listingId}|${channel}`.
+const memory = new Map<string, CampaignSlot>();
+const key = (t: string, l: string, c: CampaignChannel) => `${t}|${l}|${c}`;
+
+/**
+ * Atomically claim the (tenant, listing, channel) slot. Returns 'won' if THIS
+ * caller is the sole creator (proceed to create in Google Ads), or 'exists' if
+ * the slot is already reserved/created by someone else (skip — no spend).
+ */
+export async function reserveCampaignSlot(
+  tenantId: string,
+  listingId: string,
+  channel: CampaignChannel,
+  opts: { customerId?: string } = {}
+): Promise<ReserveResult> {
+  if (db) {
+    try {
+      // Atomic claim against the unique slot index. ON CONFLICT DO UPDATE re-claims
+      // ONLY a previously-FAILED, never-created slot (so a retry works) — it never
+      // touches a 'reserved' (in-flight) or 'created' row, so the row is returned
+      // (→ 'won') only when we legitimately own it. A created/in-flight slot yields
+      // no returned row (→ 'exists'). This is fully atomic — no delete window where
+      // a slow/late Google response could let a duplicate slip in (review H2).
+      // id + timestamps supplied explicitly (Sequelize defaultValues are ORM-only).
+      const sql = `INSERT INTO "tenant_campaigns"
+          ("id","tenantId","listingId","channel","status","customerId","reservedAt","createdAt","updatedAt")
+        VALUES (gen_random_uuid(), :tenantId, :listingId, :channel, 'reserved', :customerId, NOW(), NOW(), NOW())
+        ON CONFLICT ("tenantId","listingId","channel") DO UPDATE
+          SET "status"='reserved', "reservedAt"=NOW(), "lastError"=NULL, "updatedAt"=NOW()
+          WHERE "tenant_campaigns"."googleCampaignId" IS NULL AND "tenant_campaigns"."status"='failed'
+        RETURNING "id";`;
+      const res: any = await (db as any).query(sql, {
+        replacements: { tenantId, listingId, channel, customerId: opts.customerId || null },
+      });
+      const rows = Array.isArray(res) ? res[0] : res?.rows;
+      const won = Array.isArray(rows) ? rows.length > 0 : (res?.rowCount ?? 0) > 0;
+      return won ? 'won' : 'exists';
+    } catch (e: any) {
+      console.error('⚠️  reserveCampaignSlot DB error, using memory:', e?.message || e);
+    }
+  }
+  const k = key(tenantId, listingId, channel);
+  if (memory.has(k)) return 'exists';
+  memory.set(k, { tenantId, listingId, channel, status: 'reserved', customerId: opts.customerId });
+  return 'won';
+}
+
+/** Mark a reserved slot as created once Google Ads returns the campaign id. */
+export async function markCampaignCreated(
+  tenantId: string, listingId: string, channel: CampaignChannel,
+  googleCampaignId: string, campaignName?: string
+): Promise<void> {
+  if (db) {
+    try {
+      await (db as any).query(
+        `UPDATE "tenant_campaigns" SET "googleCampaignId"=:gid, "campaignName"=:name,
+           "status"='created', "createdGoogleAt"=NOW(), "lastError"=NULL
+         WHERE "tenantId"=:tenantId AND "listingId"=:listingId AND "channel"=:channel;`,
+        { replacements: { gid: googleCampaignId, name: campaignName || null, tenantId, listingId, channel } }
+      );
+      return;
+    } catch (e: any) { console.error('⚠️  markCampaignCreated DB error:', e?.message || e); }
+  }
+  const k = key(tenantId, listingId, channel);
+  const s = memory.get(k);
+  if (s) memory.set(k, { ...s, googleCampaignId, campaignName, status: 'created' });
+}
+
+/** Release a reservation that failed to create, so a later cycle can retry the
+ *  SAME slot (never a second campaign). Keeps the row for audit. */
+export async function releaseFailedReservation(
+  tenantId: string, listingId: string, channel: CampaignChannel, error: string
+): Promise<void> {
+  if (db) {
+    try {
+      // Mark the slot 'failed' (NEVER delete) — only when it was never created.
+      // The next reserveCampaignSlot re-claims a 'failed' row atomically via its
+      // ON CONFLICT DO UPDATE, so a retry works without ever opening a window where
+      // a late/slow Google response could let a duplicate slip in (review H2).
+      await (db as any).query(
+        `UPDATE "tenant_campaigns" SET "status"='failed', "lastError"=:err, "updatedAt"=NOW()
+         WHERE "tenantId"=:tenantId AND "listingId"=:listingId AND "channel"=:channel AND "googleCampaignId" IS NULL;`,
+        { replacements: { err: String(error).slice(0, 500), tenantId, listingId, channel } }
+      );
+      return;
+    } catch (e: any) { console.error('⚠️  releaseFailedReservation DB error:', e?.message || e); }
+  }
+  memory.delete(key(tenantId, listingId, channel));
+}
+
+/** Count existing slots — used to decide whether the one-time backfill is needed. */
+export async function countSlots(): Promise<number> {
+  if (db) {
+    try {
+      const r: any = await (db as any).query(`SELECT COUNT(*)::int AS n FROM "tenant_campaigns";`);
+      const rows = Array.isArray(r) ? r[0] : r?.rows;
+      const n = Array.isArray(rows) ? Number(rows[0]?.n) : Number(r?.rows?.[0]?.n);
+      return Number.isFinite(n) ? n : 0;
+    } catch (e: any) { console.error('⚠️  countSlots DB error:', e?.message || e); }
+  }
+  return memory.size;
+}
+
+/** Verify the load-bearing UNIQUE index exists. Without it, exactly-once is not
+ *  guaranteed — log loudly so we never silently regress to duplicates. */
+export async function verifyUniqueIndex(): Promise<boolean> {
+  if (!db) return false;
+  try {
+    const r: any = await (db as any).query(
+      `SELECT 1 FROM pg_indexes WHERE indexname = 'uq_tenant_campaigns_slot' LIMIT 1;`
+    );
+    const rows = Array.isArray(r) ? r[0] : r?.rows;
+    const ok = Array.isArray(rows) ? rows.length > 0 : (r?.rowCount ?? 0) > 0;
+    if (!ok) console.error('🚨 CRITICAL: uq_tenant_campaigns_slot index is MISSING — exactly-once is not enforced!');
+    return ok;
+  } catch (e: any) {
+    console.error('⚠️  verifyUniqueIndex error:', e?.message || e);
+    return false;
+  }
+}
+
+export async function listSlots(tenantId: string): Promise<CampaignSlot[]> {
+  if (db) {
+    try {
+      const r = await db.find('TenantCampaign', { where: { tenantId } } as any);
+      return (r as any[]) as CampaignSlot[];
+    } catch (e: any) { console.error('⚠️  listSlots DB error:', e?.message || e); }
+  }
+  return Array.from(memory.values()).filter((s) => s.tenantId === tenantId);
+}

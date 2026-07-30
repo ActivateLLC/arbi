@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Dark background -->
+  <rect width="512" height="512" fill="#0a0a0a"/>
+
+  <!-- Rotated cyan square background -->
+  <rect x="181" y="181" width="150" height="150" fill="#00f0ff" transform="rotate(45 256 256)"/>
+
+  <!-- Rotated white border -->
+  <rect x="181" y="181" width="150" height="150" fill="none" stroke="white" stroke-width="6" transform="rotate(45 256 256)"/>
+
+  <!-- Letter A -->
+  <text x="256" y="320" font-family="Syne, sans-serif" font-size="160" font-weight="bold" fill="#000000" text-anchor="middle">A</text>
+</svg>

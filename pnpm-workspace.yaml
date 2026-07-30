@@ -1,3 +1,10 @@
 packages:
   - 'apps/*'
-  - 'packages/*'
+  - 'packages/ai-engine'
+  - 'packages/arbitrage-engine'
+  - 'packages/data'
+  - 'packages/eslint-config'
+  - 'packages/transaction'
+  - 'packages/tsconfig'
+  - 'packages/voice-interface'
+  - 'packages/web-automation'

@@ -1,0 +1,116 @@
+{
+  "campaign": {
+    "name": "Sony Alpha A7 IV - Professional Camera",
+    "type": "Performance Max",
+    "budget": {
+      "daily": 60,
+      "currency": "USD"
+    },
+    "bidding": {
+      "strategy": "Maximize Conversions",
+      "targetROAS": 400
+    },
+    "targeting": {
+      "location": "United States",
+      "language": "English",
+      "audiences": [
+        "Photography",
+        "Videography",
+        "Content Creation",
+        "Professional Photography",
+        "Wedding Photography",
+        "YouTube Creators"
+      ],
+      "demographics": {
+        "age": "25-65",
+        "income": "Top 30%"
+      }
+    }
+  },
+  "product": {
+    "name": "Sony Alpha A7 IV Mirrorless Full-Frame Camera Body",
+    "description": "Professional 33MP full-frame mirrorless camera with 4K60p video and advanced autofocus.",
+    "price": 3247.40,
+    "profit": 749.40,
+    "cost": 2498.00,
+    "image": "https://res.cloudinary.com/dyfumzftc/image/upload/v1766360580/arbi-marketplace/rainforest-B0C1SLD8VK-1766360579352.webp",
+    "landingPage": "https://api.arbi.creai.dev/product/listing_1766360580855_24nluy3za",
+    "features": [
+      "33MP Full-Frame Sensor",
+      "4K60p Video Recording",
+      "Advanced Real-Time Autofocus",
+      "Professional Image Quality",
+      "In-Body Image Stabilization"
+    ],
+    "benefits": [
+      "Free Fast Shipping",
+      "30-Day Money-Back Guarantee",
+      "Secure Payment Processing",
+      "Ships Within 1-2 Business Days"
+    ]
+  },
+  "adAssets": {
+    "finalURL": "https://api.arbi.creai.dev/product/listing_1766360580855_24nluy3za",
+    "headlines": [
+      "Sony A7 IV - $3,247",
+      "33MP Full-Frame Camera",
+      "4K60p Video - $812/mo",
+      "Professional Mirrorless",
+      "Sony Alpha A7 IV Body",
+      "Free Shipping - In Stock",
+      "Pay $812/mo with Klarna",
+      "Pro Camera - Best Price",
+      "Full-Frame Mirrorless",
+      "Limited Stock Available"
+    ],
+    "descriptions": [
+      "Sony Alpha A7 IV: 33MP full-frame sensor, 4K60p video, advanced autofocus. Free shipping!",
+      "Professional mirrorless camera with 33MP sensor. Pay just $812/month with Klarna. Order now!",
+      "Full-frame Sony A7 IV camera body. Real-time autofocus. Secure checkout. Ships in 1-2 days.",
+      "Get the Sony A7 IV for $3,247. Professional 33MP sensor. 30-day money-back guarantee.",
+      "33MP full-frame camera. 4K60p video recording. In-body stabilization. Best price online."
+    ],
+    "images": [
+      "https://res.cloudinary.com/dyfumzftc/image/upload/v1766360580/arbi-marketplace/rainforest-B0C1SLD8VK-1766360579352.webp"
+    ]
+  },
+  "negativeKeywords": [
+    "-used",
+    "-refurbished",
+    "-rental",
+    "-repair",
+    "-broken",
+    "-parts",
+    "-fake",
+    "-replica",
+    "-manual",
+    "-guide",
+    "-lens"
+  ],
+  "projections": {
+    "profitPerSale": 749.40,
+    "salesFor10k": 14,
+    "scenarios": {
+      "conservative": {
+        "costPerSale": 420,
+        "salesPerMonth": 4,
+        "monthlyProfit": 2997.60
+      },
+      "moderate": {
+        "costPerSale": 180,
+        "salesPerMonth": 10,
+        "monthlyProfit": 7494.00
+      },
+      "optimistic": {
+        "costPerSale": 90,
+        "salesPerMonth": 20,
+        "monthlyProfit": 14988.00
+      }
+    },
+    "klarnaConversion": {
+      "monthlyPayment": 812,
+      "numberOfPayments": 4,
+      "conversionBoost": "2-3x higher for products over $1,000"
+    }
+  }
+}

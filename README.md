@@ -73,6 +73,15 @@ cd apps/api
 node dist/index.js
 ```
 
+### Auto Ads Quickstart
+
+If you want listings to automatically generate Google/Facebook/TikTok campaigns, set a public base URL for product pages and follow the [Auto Ads Quickstart](ADS_AUTOMATION_QUICKSTART.md):
+
+```bash
+export AD_LANDING_BASE_URL="http://localhost:3000" # or your deployed domain
+pnpm dev:api
+```
+
 ### Test It
 
 ```bash

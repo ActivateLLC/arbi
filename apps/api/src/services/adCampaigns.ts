@@ -35,7 +35,7 @@ interface AdCampaign {
 export class AdCampaignManager {
   private readonly baseUrl: string;
 
-  constructor(baseUrl: string = 'https://arbi.creai.dev') {
+  constructor(baseUrl: string = process.env.AD_LANDING_BASE_URL || process.env.PUBLIC_URL || 'https://arbi.creai.dev') {
     this.baseUrl = baseUrl;
   }
 

@@ -167,6 +167,12 @@ const server = app.listen(port, '0.0.0.0', () => {
     }
   })();
 
+  // Loud boot warning: without CJ_AUTO_PAY, CJ orders are created UNPAID and
+  // never ship — a paid customer with no product. This must never be silent.
+  if (!/^(true|yes|1|on)$/i.test(String(process.env.CJ_AUTO_PAY || '').trim())) {
+    logger.warn('🚨 CJ_AUTO_PAY is not enabled: supplier orders will be created UNPAID and will NOT ship until paid manually in CJ. Set CJ_AUTO_PAY=true (and keep the CJ wallet funded) for hands-off fulfillment.');
+  }
+
   // 24/7 autonomous engine (no-op unless ENABLE_AUTONOMOUS=true).
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires

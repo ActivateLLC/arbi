@@ -100,7 +100,8 @@ export class CJDropshippingClient {
   }
 
   /** Authed request against the CJ API, returns the `data` payload. */
-  private async call<T = any>(method: 'GET' | 'POST', path: string, payload?: any): Promise<T> {
+  /** Authenticated CJ API call. Public so thin helpers (e.g. tracking lookup) can reuse it. */
+  async call<T = any>(method: 'GET' | 'POST', path: string, payload?: any): Promise<T> {
     const token = await this.getAccessToken();
     const res = await this.http.request({
       method,
@@ -235,3 +236,17 @@ export class CJDropshippingClient {
 }
 
 export const cjClient = new CJDropshippingClient();
+
+/**
+ * Tracking lookup for an already-created CJ order. Used by the engine's
+ * shipment sweep to catch tracking numbers that CJ assigns hours/days after
+ * order creation (they're almost never available synchronously at fulfill time).
+ */
+export async function getCjTracking(cjOrderId: string): Promise<{ trackingNumber?: string; carrier?: string; cjStatus?: string }> {
+  const detail = await cjClient.call<any>('GET', '/shopping/order/getOrderDetail', { orderId: cjOrderId });
+  return {
+    trackingNumber: detail?.trackNumber || detail?.trackingNumber || undefined,
+    carrier: detail?.logisticName || undefined,
+    cjStatus: detail?.orderStatus || undefined,
+  };
+}

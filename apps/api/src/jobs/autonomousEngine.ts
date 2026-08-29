@@ -446,6 +446,18 @@ async function cycle(): Promise<void> {
   } catch (e: any) {
     logger.error('📦 FULFILL sweep error:', e?.message || e);
   }
+
+  // 6) SHIPPING SWEEP — CJ assigns tracking numbers well after order creation;
+  //    poll for them, mark orders shipped, and email the customer. Runs even
+  //    when other automation flags are off (a paid customer must always get
+  //    their shipped notification).
+  try {
+    const { syncShipmentTracking } = await import('../services/shipmentTracking');
+    const st = await syncShipmentTracking();
+    if (st.shipped) logger.info(`📦 SHIPPED: ${st.shipped}/${st.checked} order(s) got tracking; customers emailed`);
+  } catch (e: any) {
+    logger.error('📦 SHIPPING sweep error:', e?.message || e);
+  }
 }
 
 // Guard so overlapping triggers (interval + a dashboard toggle) don't run the

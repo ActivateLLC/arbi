@@ -24,6 +24,7 @@ import axios from 'axios';
 // shortProductName). The cycle is safe — both sides only touch each other at
 // call-time (inside async fns), never at module init.
 import { generateAdCopy } from './aiAdCopy';
+import { getStoredRefreshToken } from './googleAuthStore';
 
 const API_VERSION = 'v23'; // matches the google-ads-api package we had installed
 const ADS_BASE = `https://googleads.googleapis.com/${API_VERSION}`;
@@ -246,7 +247,10 @@ async function getAccessToken(): Promise<string> {
   const body = new URLSearchParams({
     client_id: trimEnv('GOOGLE_ADS_CLIENT_ID'),
     client_secret: trimEnv('GOOGLE_ADS_CLIENT_SECRET'),
-    refresh_token: trimEnv('GOOGLE_ADS_REFRESH_TOKEN'),
+    // Dashboard-connected token (DB) wins over the env var, matching
+    // googleAdsRest.getAccessToken — a one-tap connect must be able to run
+    // campaign mutations too, not just YouTube uploads.
+    refresh_token: getStoredRefreshToken() || trimEnv('GOOGLE_ADS_REFRESH_TOKEN'),
     grant_type: 'refresh_token',
   }).toString();
   const r = await axios.post('https://oauth2.googleapis.com/token', body, {

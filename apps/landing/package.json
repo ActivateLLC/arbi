@@ -22,7 +22,7 @@
     "@types/three": "^0.182.0",
     "gsap": "3.12.5",
     "rxjs": "^7.8.2",
-    "tailwindcss": "latest",
+    "tailwindcss": "^3.4.17",
     "three": "^0.182.0"
   },
   "devDependencies": {

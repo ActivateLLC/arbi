@@ -18,6 +18,11 @@ import { googleAdsGlobalTagHtml, googleAdsConversionEventHtml } from '../service
 import { cjClient, isCJConfigured } from '../services/cjDropshipping';
 import { extractVariants, extractImages, extractReviews, SupplierReview } from '../services/cjSourcing';
 
+// Customer-facing storefront base for canonical/share (OG) URLs. The Vercel
+// storefront rewrites /product/* to this API, so shared links stay on the
+// branded domain instead of exposing api.arbi.creai.dev.
+const SHARE_BASE = (process.env.PUBLIC_URL || 'https://arbi.creai.dev').replace(/\/+$/, '');
+
 // --- CJ response cache (keyed by cjProductId) ---------------------------------
 // Product pages are ad destinations hit repeatedly; without caching, each view
 // fires up to 2 CJ calls (detail + reviews) and would rate-limit under traffic.
@@ -330,7 +335,9 @@ function generateProductLandingPage(listing: any): string {
        </div>`
     : '';
 
-  const imageUrl = mainImageUrl;
+  // Branded share image: real product photo when we have one, else the Arbi
+  // brand card — a shared link must never preview blank.
+  const imageUrl = mainImageUrl || `${SHARE_BASE}/og-image.png`;
 
   // Real supplier reviews (clearly attributed). Build the section + use them for
   // the rating/count when present (more honest than synthetic numbers).
@@ -380,12 +387,12 @@ function generateProductLandingPage(listing: any): string {
     <title>${listing.productTitle} - Digital Vending Machine | Arbi</title>
     <meta name="description" content="${listing.productDescription} | Free shipping, 30-day returns, secure checkout. Buy now at Arbi.">
     <meta name="keywords" content="${listing.productTitle}, buy ${listing.productTitle.toLowerCase()}, best price, free shipping">
-    <link rel="canonical" href="https://api.arbi.creai.dev/product/${listing.listingId}">
+    <link rel="canonical" href="${SHARE_BASE}/product/${listing.listingId}">
     ${googleAdsGlobalTagHtml()}
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="product">
-    <meta property="og:url" content="https://api.arbi.creai.dev/product/${listing.listingId}">
+    <meta property="og:url" content="${SHARE_BASE}/product/${listing.listingId}">
     <meta property="og:title" content="${listing.productTitle}">
     <meta property="og:description" content="${listing.productDescription}">
     <meta property="og:image" content="${imageUrl}">
@@ -397,7 +404,7 @@ function generateProductLandingPage(listing: any): string {
 
     <!-- Twitter Card -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:url" content="https://api.arbi.creai.dev/product/${listing.listingId}">
+    <meta name="twitter:url" content="${SHARE_BASE}/product/${listing.listingId}">
     <meta name="twitter:title" content="${listing.productTitle}">
     <meta name="twitter:description" content="${listing.productDescription}">
     <meta name="twitter:image" content="${imageUrl}">
@@ -420,7 +427,7 @@ function generateProductLandingPage(listing: any): string {
       },
       "offers": {
         "@type": "Offer",
-        "url": "https://api.arbi.creai.dev/product/${listing.listingId}",
+        "url": "${SHARE_BASE}/product/${listing.listingId}",
         "priceCurrency": "USD",
         "price": "${Number(listing.marketplacePrice).toFixed(2)}",
         "priceValidUntil": "${new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]}",

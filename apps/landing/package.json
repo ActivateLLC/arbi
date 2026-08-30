@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "ng serve",
     "build": "ng build && npm run copy-assets",
-    "copy-assets": "cp favicon.svg logo.svg og-image.svg dist/browser/ 2>/dev/null || cp favicon.svg logo.svg og-image.svg dist/",
+    "copy-assets": "cp favicon.svg logo.svg og-image.svg og-image.png dist/browser/ 2>/dev/null || cp favicon.svg logo.svg og-image.svg og-image.png dist/",
     "preview": "ng serve --configuration=production"
   },
   "dependencies": {

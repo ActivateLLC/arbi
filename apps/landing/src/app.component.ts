@@ -52,6 +52,7 @@ gsap.registerPlugin(ScrollTrigger);
             <a href="#features" class="hover:text-[#00f0ff] hover:text-glow transition-all uppercase text-[11px] tracking-[0.2em]">Features</a>
             <a href="#calculator" class="hover:text-[#00f0ff] hover:text-glow transition-all uppercase text-[11px] tracking-[0.2em]">Calculator</a>
             <a href="#pricing" class="hover:text-[#00f0ff] hover:text-glow transition-all uppercase text-[11px] tracking-[0.2em]">Pricing</a>
+            <a href="/store" class="hover:text-[#00f0ff] hover:text-glow transition-all uppercase text-[11px] tracking-[0.2em]">Store</a>
           </div>
 
           <button
@@ -89,6 +90,7 @@ gsap.registerPlugin(ScrollTrigger);
                 <a href="#features" (click)="closeMobileMenu()" class="text-sm font-semibold tracking-wide text-slate-400 hover:text-[#00f0ff] transition-all uppercase tracking-[0.2em] py-2">Features</a>
                 <a href="#calculator" (click)="closeMobileMenu()" class="text-sm font-semibold tracking-wide text-slate-400 hover:text-[#00f0ff] transition-all uppercase tracking-[0.2em] py-2">Calculator</a>
                 <a href="#pricing" (click)="closeMobileMenu()" class="text-sm font-semibold tracking-wide text-slate-400 hover:text-[#00f0ff] transition-all uppercase tracking-[0.2em] py-2">Pricing</a>
+                <a href="/store" (click)="closeMobileMenu()" class="text-sm font-semibold tracking-wide text-slate-400 hover:text-[#00f0ff] transition-all uppercase tracking-[0.2em] py-2">Store</a>
                 <button
                   *ngIf="!isLoggedIn()"
                   (click)="openLoginModal(); closeMobileMenu()"

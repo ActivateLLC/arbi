@@ -105,13 +105,19 @@ router.get('/', async (_req: Request, res: Response) => {
   let cards = '';
   try {
     const listings = (await getListings('active')) || [];
-    cards = listings.slice(0, 24).map((l: any) => {
+    cards = listings.slice(0, 24).map((l: any, i: number) => {
       const img = Array.isArray(l.productImages) ? l.productImages[0] : '';
       const price = Number(l.marketplacePrice).toFixed(2);
       const title = String(l.productTitle || '').replace(/</g, '&lt;');
-      return `<a class="card" href="/product/${l.listingId}">
-        ${img ? `<img src="${img}" alt="${title}" loading="lazy">` : '<div class="ph">A</div>'}
-        <div class="ci"><div class="t">${title}</div><div class="p">$${price}</div></div>
+      return `<a class="card" style="--d:${(i % 8) * 70}ms" href="/product/${l.listingId}">
+        <div class="imgwrap">${img ? `<img src="${img}" alt="${title}" loading="lazy">` : '<div class="ph">A</div>'}
+          <div class="shine"></div>
+          <span class="stock"><i></i>IN STOCK</span>
+        </div>
+        <div class="ci">
+          <div class="t">${title}</div>
+          <div class="row"><span class="p">$${price}</span><span class="open">TAP TO OPEN ▸</span></div>
+        </div>
       </a>`;
     }).join('\n');
   } catch { /* render the shell even if the catalog is briefly unavailable */ }
@@ -135,25 +141,82 @@ router.get('/', async (_req: Request, res: Response) => {
   <meta name="twitter:image" content="${SHARE_BASE}/og-image.png">
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
-    body{background:#020617;color:#e2e8f0;font-family:Arial,Helvetica,sans-serif;min-height:100vh}
-    header{padding:28px 20px;text-align:center;border-bottom:1px solid rgba(0,240,255,.15)}
-    header h1{font-size:28px;letter-spacing:4px;color:#fff}h1 b{color:#00f0ff}
-    header p{color:#94a3b8;font-size:13px;margin-top:6px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;max-width:1100px;margin:24px auto;padding:0 16px}
-    .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;text-decoration:none;color:inherit;transition:border-color .15s}
-    .card:hover{border-color:rgba(0,240,255,.5)}
-    .card img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#0f172a}
-    .ph{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:800;color:#00f0ff;background:#0f172a}
-    .ci{padding:10px}.t{font-size:12px;line-height:1.35;max-height:2.7em;overflow:hidden}
-    .p{color:#00f0ff;font-weight:700;margin-top:6px;font-size:14px}
-    .empty{color:#64748b;text-align:center;padding:60px 20px;font-size:14px}
-    footer{color:#475569;text-align:center;font-size:11px;padding:26px 16px;border-top:1px solid rgba(255,255,255,.06);margin-top:30px}
-    footer a{color:#64748b}
+    body{background:#020617;color:#e2e8f0;font-family:Arial,Helvetica,sans-serif;min-height:100vh;overflow-x:hidden}
+    /* --- Animated machine backdrop --- */
+    .bg{position:fixed;inset:0;z-index:-2;
+      background-image:linear-gradient(rgba(0,240,255,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(0,240,255,.05) 1px,transparent 1px);
+      background-size:44px 44px;animation:gridPulse 5s ease-in-out infinite}
+    @keyframes gridPulse{0%,100%{opacity:.55}50%{opacity:1}}
+    .orb{position:fixed;border-radius:50%;filter:blur(10px);z-index:-1;pointer-events:none}
+    .o1{width:60vw;height:60vw;top:-30vw;right:-20vw;background:radial-gradient(circle,rgba(0,240,255,.14),transparent 65%);animation:drift 14s ease-in-out infinite}
+    .o2{width:50vw;height:50vw;bottom:-25vw;left:-15vw;background:radial-gradient(circle,rgba(99,102,241,.13),transparent 65%);animation:drift 18s ease-in-out infinite reverse}
+    @keyframes drift{0%,100%{transform:translate(0,0)}50%{transform:translate(4vw,3vw)}}
+    #spot{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0;transition:opacity .4s;
+      background:radial-gradient(500px circle at var(--mx,50%) var(--my,30%),rgba(0,240,255,.07),transparent 70%)}
+    /* --- Hero --- */
+    header{position:relative;z-index:1;text-align:center;padding:52px 20px 34px}
+    .status{display:inline-flex;align-items:center;gap:8px;font-size:10px;letter-spacing:3px;color:#34d399;border:1px solid rgba(52,211,153,.3);border-radius:999px;padding:6px 16px;margin-bottom:22px}
+    .status i{width:7px;height:7px;border-radius:50%;background:#34d399;box-shadow:0 0 8px #34d399;animation:blink 2s infinite}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:.35}}
+    h1{font-size:clamp(44px,9vw,84px);font-weight:800;letter-spacing:.12em;color:#fff;line-height:1}
+    h1 b{color:#00f0ff;text-shadow:0 0 24px rgba(0,240,255,.6)}
+    .tag{color:#94a3b8;font-size:clamp(13px,2.4vw,17px);margin-top:14px}
+    .chips{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:24px}
+    .chip{font-size:11px;letter-spacing:2px;color:#7dd3fc;border:1px solid rgba(0,240,255,.25);background:rgba(0,240,255,.05);border-radius:999px;padding:7px 14px}
+    /* --- Catalog --- */
+    .grid{position:relative;z-index:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:16px;max-width:1140px;margin:10px auto 30px;padding:0 16px}
+    .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:14px;overflow:hidden;text-decoration:none;color:inherit;
+      opacity:0;transform:translateY(26px);transition:transform .25s ease,border-color .25s,box-shadow .25s}
+    .card.in{animation:rise .6s cubic-bezier(.2,.8,.25,1) var(--d) forwards}
+    @keyframes rise{to{opacity:1;transform:translateY(0)}}
+    .card:hover{transform:translateY(-6px);border-color:rgba(0,240,255,.55);box-shadow:0 14px 40px rgba(0,240,255,.14),0 0 0 1px rgba(0,240,255,.2)}
+    .imgwrap{position:relative;overflow:hidden;background:#0f172a}
+    .imgwrap img{width:100%;aspect-ratio:1;object-fit:cover;display:block;transition:transform .5s ease}
+    .card:hover .imgwrap img{transform:scale(1.07)}
+    .ph{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:800;color:#00f0ff}
+    .shine{position:absolute;top:0;left:-80%;width:60%;height:100%;transform:skewX(-20deg);
+      background:linear-gradient(90deg,transparent,rgba(255,255,255,.16),transparent);transition:left .55s ease;pointer-events:none}
+    .card:hover .shine{left:120%}
+    .stock{position:absolute;top:9px;left:9px;display:inline-flex;align-items:center;gap:5px;font-size:8.5px;letter-spacing:1.5px;color:#34d399;background:rgba(2,6,23,.72);border:1px solid rgba(52,211,153,.35);border-radius:999px;padding:4px 9px;backdrop-filter:blur(4px)}
+    .stock i{width:5px;height:5px;border-radius:50%;background:#34d399;box-shadow:0 0 6px #34d399;animation:blink 2s infinite}
+    .ci{padding:11px 12px 13px}
+    .t{font-size:12px;line-height:1.35;height:2.7em;overflow:hidden}
+    .row{display:flex;align-items:center;justify-content:space-between;margin-top:9px}
+    .p{color:#00f0ff;font-weight:700;font-size:15px;font-family:monospace;text-shadow:0 0 12px rgba(0,240,255,.45)}
+    .open{font-size:8.5px;letter-spacing:1.5px;color:#64748b;opacity:0;transform:translateX(-6px);transition:all .25s}
+    .card:hover .open{opacity:1;transform:translateX(0);color:#7dd3fc}
+    .empty{position:relative;z-index:1;color:#64748b;text-align:center;padding:70px 20px;font-size:14px}
+    footer{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;color:#475569;font-size:10.5px;letter-spacing:1.5px;padding:22px 22px;border-top:1px solid rgba(255,255,255,.07);max-width:1140px;margin:26px auto 0}
+    footer a{color:#64748b;text-decoration:none}footer a:hover{color:#7dd3fc}
+    .fstat{display:inline-flex;align-items:center;gap:7px;color:#34d399}
+    .fstat i{width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 7px #34d399;animation:blink 2s infinite}
+    @media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}.card{opacity:1;transform:none}}
   </style>
 </head><body>
-  <header><h1>ARB<b>I</b> STORE</h1><p>Trending finds · Free US shipping · 30-day returns · Secure checkout</p></header>
+  <div class="bg"></div><div class="orb o1"></div><div class="orb o2"></div><div id="spot"></div>
+  <header>
+    <div class="status"><i></i>SYSTEM OPERATIONAL</div>
+    <h1>ARB<b>I</b> STORE</h1>
+    <p class="tag">Trending products, dispensed on demand.</p>
+    <div class="chips"><span class="chip">FREE US SHIPPING</span><span class="chip">30-DAY RETURNS</span><span class="chip">SECURE STRIPE CHECKOUT</span></div>
+  </header>
   ${cards ? `<div class="grid">${cards}</div>` : '<div class="empty">New drops landing soon — check back shortly.</div>'}
-  <footer>© Arbi · <a href="/returns">Returns</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
+  <footer>
+    <span class="fstat"><i></i>DIGITAL VENDING MACHINE™</span>
+    <span>© Arbi · <a href="/returns">Returns</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></span>
+  </footer>
+  <script>
+    // Staggered card reveal as they scroll into view.
+    const io = new IntersectionObserver((es) => es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }), { threshold: .12 });
+    document.querySelectorAll('.card').forEach(c => io.observe(c));
+    // Cursor spotlight (desktop).
+    const spot = document.getElementById('spot');
+    if (matchMedia('(pointer:fine)').matches) addEventListener('mousemove', (e) => {
+      spot.style.opacity = '1';
+      spot.style.setProperty('--mx', e.clientX + 'px');
+      spot.style.setProperty('--my', e.clientY + 'px');
+    }, { passive: true });
+  </script>
 </body></html>`);
 });
 

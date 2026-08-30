@@ -98,6 +98,48 @@ router.get('/og-image.png', (_req: Request, res: Response) => {
   res.send(OG_IMAGE_BUF);
 });
 
+// robots.txt — welcome crawlers to the store, keep them out of checkout/API.
+router.get('/robots.txt', (_req: Request, res: Response) => {
+  res.set('Content-Type', 'text/plain');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.send(`User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /checkout/
+Disallow: /buy/
+
+Sitemap: ${SHARE_BASE}/sitemap.xml
+`);
+});
+
+// sitemap.xml — DYNAMIC: rebuilt from the live catalog on request, so every
+// product the engine sources is indexable within minutes, and expired ones
+// drop out on their own. lastmod comes from each listing's own updatedAt.
+router.get('/sitemap.xml', async (_req: Request, res: Response) => {
+  const today = new Date().toISOString().slice(0, 10);
+  let productUrls = '';
+  try {
+    const listings = (await getListings('active')) || [];
+    productUrls = listings.map((l: any) => {
+      const mod = (l.updatedAt ? new Date(l.updatedAt) : new Date()).toISOString().slice(0, 10);
+      return `  <url><loc>${SHARE_BASE}/product/${l.listingId}</loc><lastmod>${mod}</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>`;
+    }).join('\n');
+  } catch { /* serve the static pages even if the catalog is briefly unavailable */ }
+
+  res.set('Content-Type', 'application/xml');
+  res.set('Cache-Control', 'public, max-age=3600');
+  res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>${SHARE_BASE}/</loc><lastmod>${today}</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>
+${productUrls}
+  <url><loc>${SHARE_BASE}/returns</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>${SHARE_BASE}/shipping</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>${SHARE_BASE}/privacy</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>${SHARE_BASE}/terms</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.4</priority></url>
+  <url><loc>${SHARE_BASE}/contact</loc><lastmod>${today}</lastmod><changefreq>yearly</changefreq><priority>0.4</priority></url>
+</urlset>`);
+});
+
 // Storefront home — the bare domain previously 404'd, so a texted/shared
 // arbi.creai.dev link previewed as a blank gray card and a curious click went
 // nowhere. Serve a branded index of the live catalog with full OG meta.
@@ -139,6 +181,24 @@ router.get('/', async (_req: Request, res: Response) => {
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Arbi Store — Trending Finds">
   <meta name="twitter:image" content="${SHARE_BASE}/og-image.png">
+  <script type="application/ld+json">
+  [{
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": "${SHARE_BASE}/#organization",
+    "name": "Arbi",
+    "url": "${SHARE_BASE}",
+    "logo": { "@type": "ImageObject", "@id": "${SHARE_BASE}/#logo", "url": "${SHARE_BASE}/og-image.png", "width": 1200, "height": 630, "caption": "Arbi" },
+    "description": "Hand-picked trending products at honest prices. Free shipping, 30-day returns, secure checkout."
+  },{
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": "${SHARE_BASE}/#website",
+    "name": "Arbi Store",
+    "url": "${SHARE_BASE}",
+    "publisher": { "@id": "${SHARE_BASE}/#organization" }
+  }]
+  </script>
   <style>
     *{margin:0;padding:0;box-sizing:border-box}
     body{background:#020617;color:#e2e8f0;font-family:Arial,Helvetica,sans-serif;min-height:100vh;overflow-x:hidden}
@@ -594,6 +654,16 @@ function generateProductLandingPage(listing: any): string {
         "ratingValue": "${realRating}",
         "reviewCount": "${realReviewCount}"
       }` : ''}
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      "itemListElement": [
+        { "@type": "ListItem", "position": 1, "name": "Arbi Store", "item": "${SHARE_BASE}/" },
+        { "@type": "ListItem", "position": 2, "name": "${listing.productTitle.replace(/"/g, '&quot;')}", "item": "${SHARE_BASE}/product/${listing.listingId}" }
+      ]
     }
     </script>
 

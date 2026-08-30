@@ -23,6 +23,11 @@ import { extractVariants, extractImages, extractReviews, SupplierReview } from '
 // branded domain instead of exposing api.arbi.creai.dev.
 const SHARE_BASE = (process.env.PUBLIC_URL || 'https://arbi.creai.dev').replace(/\/+$/, '');
 
+// Brand share card for link previews (iMessage/social need a real PNG at a
+// stable URL; arbi.creai.dev resolves to this API, so we serve it ourselves).
+import { OG_IMAGE_PNG_BASE64 } from '../assets/ogImage';
+const OG_IMAGE_BUF = Buffer.from(OG_IMAGE_PNG_BASE64, 'base64');
+
 // --- CJ response cache (keyed by cjProductId) ---------------------------------
 // Product pages are ad destinations hit repeatedly; without caching, each view
 // fires up to 2 CJ calls (detail + reviews) and would rate-limit under traffic.
@@ -84,6 +89,73 @@ async function ensureReviews(listing: any): Promise<SupplierReview[]> {
 }
 
 const router = Router();
+
+// Branded 1200x630 share card — referenced by every page's og:image fallback
+// and by the landing/dashboard meta tags.
+router.get('/og-image.png', (_req: Request, res: Response) => {
+  res.set('Content-Type', 'image/png');
+  res.set('Cache-Control', 'public, max-age=86400');
+  res.send(OG_IMAGE_BUF);
+});
+
+// Storefront home — the bare domain previously 404'd, so a texted/shared
+// arbi.creai.dev link previewed as a blank gray card and a curious click went
+// nowhere. Serve a branded index of the live catalog with full OG meta.
+router.get('/', async (_req: Request, res: Response) => {
+  let cards = '';
+  try {
+    const listings = (await getListings('active')) || [];
+    cards = listings.slice(0, 24).map((l: any) => {
+      const img = Array.isArray(l.productImages) ? l.productImages[0] : '';
+      const price = Number(l.marketplacePrice).toFixed(2);
+      const title = String(l.productTitle || '').replace(/</g, '&lt;');
+      return `<a class="card" href="/product/${l.listingId}">
+        ${img ? `<img src="${img}" alt="${title}" loading="lazy">` : '<div class="ph">A</div>'}
+        <div class="ci"><div class="t">${title}</div><div class="p">$${price}</div></div>
+      </a>`;
+    }).join('\n');
+  } catch { /* render the shell even if the catalog is briefly unavailable */ }
+
+  res.set('Cache-Control', 'public, max-age=300');
+  res.send(`<!DOCTYPE html>
+<html lang="en"><head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Arbi Store — Trending Finds, Fast US Shipping</title>
+  <meta name="description" content="Hand-picked trending products at honest prices. Free shipping, 30-day returns, secure checkout.">
+  <link rel="canonical" href="${SHARE_BASE}/">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="${SHARE_BASE}/">
+  <meta property="og:title" content="Arbi Store — Trending Finds">
+  <meta property="og:description" content="Hand-picked trending products at honest prices. Free shipping, 30-day returns, secure checkout.">
+  <meta property="og:image" content="${SHARE_BASE}/og-image.png">
+  <meta property="og:image:width" content="1200"><meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="Arbi">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Arbi Store — Trending Finds">
+  <meta name="twitter:image" content="${SHARE_BASE}/og-image.png">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{background:#020617;color:#e2e8f0;font-family:Arial,Helvetica,sans-serif;min-height:100vh}
+    header{padding:28px 20px;text-align:center;border-bottom:1px solid rgba(0,240,255,.15)}
+    header h1{font-size:28px;letter-spacing:4px;color:#fff}h1 b{color:#00f0ff}
+    header p{color:#94a3b8;font-size:13px;margin-top:6px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px;max-width:1100px;margin:24px auto;padding:0 16px}
+    .card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;text-decoration:none;color:inherit;transition:border-color .15s}
+    .card:hover{border-color:rgba(0,240,255,.5)}
+    .card img{width:100%;aspect-ratio:1;object-fit:cover;display:block;background:#0f172a}
+    .ph{width:100%;aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-size:48px;font-weight:800;color:#00f0ff;background:#0f172a}
+    .ci{padding:10px}.t{font-size:12px;line-height:1.35;max-height:2.7em;overflow:hidden}
+    .p{color:#00f0ff;font-weight:700;margin-top:6px;font-size:14px}
+    .empty{color:#64748b;text-align:center;padding:60px 20px;font-size:14px}
+    footer{color:#475569;text-align:center;font-size:11px;padding:26px 16px;border-top:1px solid rgba(255,255,255,.06);margin-top:30px}
+    footer a{color:#64748b}
+  </style>
+</head><body>
+  <header><h1>ARB<b>I</b> STORE</h1><p>Trending finds · Free US shipping · 30-day returns · Secure checkout</p></header>
+  ${cards ? `<div class="grid">${cards}</div>` : '<div class="empty">New drops landing soon — check back shortly.</div>'}
+  <footer>© Arbi · <a href="/returns">Returns</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
+</body></html>`);
+});
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY, { apiVersion: '2024-11-20.acacia' })

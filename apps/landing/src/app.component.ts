@@ -62,6 +62,15 @@ gsap.registerPlugin(ScrollTrigger);
           >
             Sign In
           </button>
+          <a
+            *ngIf="userRole() === 'admin'"
+            href="https://arbi-command-center-production.vercel.app"
+            target="_blank" rel="noopener"
+            class="hidden md:flex items-center gap-2 px-6 py-3 border border-[#00f0ff] text-[#00f0ff] font-bold text-xs uppercase tracking-widest hover:bg-[#00f0ff] hover:text-black transition-colors cyber-clip-sm"
+          >
+            <span class="w-1.5 h-1.5 rounded-full bg-[#00f0ff] animate-pulse"></span>
+            Command Center
+          </a>
           <button
             *ngIf="isLoggedIn()"
             (click)="showDashboard()"
@@ -215,6 +224,8 @@ export class AppComponent implements OnInit, AfterViewInit {
   // User auth state
   isLoggedIn = signal(false);
   userEmail = signal('');
+  userRole = signal<'admin' | 'customer' | ''>('');
+  userPlan = signal('');
   userPassword = '';
   authMode = signal<'login' | 'signup' | null>(null);
   showDashboardView = signal(false);
@@ -233,6 +244,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       if (session?.user) {
         this.isLoggedIn.set(true);
         this.userEmail.set(session.user.email || '');
+        this.loadProfile();
       }
     } catch (error) {
       console.error('Error checking session:', error);
@@ -243,6 +255,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       if (event === 'SIGNED_IN' && session?.user) {
         this.isLoggedIn.set(true);
         this.userEmail.set(session.user.email || '');
+        this.loadProfile();
         this.closeAuthModal();
 
         // If user was signing up from pricing, continue to payment flow
@@ -255,8 +268,17 @@ export class AppComponent implements OnInit, AfterViewInit {
       } else if (event === 'SIGNED_OUT') {
         this.isLoggedIn.set(false);
         this.userEmail.set('');
+        this.userRole.set('');
+        this.userPlan.set('');
       }
     });
+  }
+
+  private async loadProfile() {
+    try {
+      const p = await supabaseService.getProfile();
+      if (p) { this.userRole.set(p.role as 'admin' | 'customer'); this.userPlan.set(p.plan); }
+    } catch { /* profile is additive — the app works without it */ }
   }
 
   ngAfterViewInit() {

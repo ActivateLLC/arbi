@@ -54,6 +54,21 @@ class SupabaseService {
     return data;
   }
 
+  // The signed-in user's account profile (role + plan). role/plan are
+  // server-controlled: 'admin' is the operator (CEO) seat, customers carry
+  // a plan that Stripe upgrades server-side. Returns null when signed out.
+  async getProfile(): Promise<{ role: string; plan: string } | null> {
+    const { data: { user } } = await this.supabase.auth.getUser();
+    if (!user) return null;
+    const { data, error } = await this.supabase
+      .from('profiles')
+      .select('role, plan')
+      .eq('user_id', user.id)
+      .single();
+    if (error) return null;
+    return data as { role: string; plan: string };
+  }
+
   // Sign out
   async signOut() {
     const { error } = await this.supabase.auth.signOut();

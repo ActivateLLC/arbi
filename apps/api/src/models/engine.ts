@@ -21,7 +21,7 @@ const EngineStateModel: ModelDefinition = {
     tenantId: { type: 'string', primaryKey: true, allowNull: false },
     // Full AutonomousSettings snapshot (intent + flags + guardrails) as JSON.
     settings: { type: 'json', allowNull: false },
-    updatedAt: { type: 'date', allowNull: false, defaultValue: 'NOW()' },
+    updatedAt: { type: 'date', allowNull: false },
     updatedBy: { type: 'string', allowNull: true },
   },
   options: {
@@ -33,7 +33,7 @@ const EngineStateModel: ModelDefinition = {
 const TenantCampaignModel: ModelDefinition = {
   name: 'TenantCampaign',
   attributes: {
-    id: { type: 'uuid', primaryKey: true, defaultValue: 'uuid_generate_v4()', allowNull: false },
+    id: { type: 'uuid', primaryKey: true, allowNull: false },
     tenantId: { type: 'string', allowNull: false },
     listingId: { type: 'string', allowNull: false },
     channel: { type: 'string', allowNull: false },          // 'SEARCH' | 'VIDEO'
@@ -41,7 +41,7 @@ const TenantCampaignModel: ModelDefinition = {
     campaignName: { type: 'text', allowNull: true },
     status: { type: 'string', allowNull: false, defaultValue: 'reserved' }, // reserved|created|failed|removed
     customerId: { type: 'string', allowNull: true },
-    reservedAt: { type: 'date', allowNull: false, defaultValue: 'NOW()' },
+    reservedAt: { type: 'date', allowNull: false },
     createdGoogleAt: { type: 'date', allowNull: true },
     lastError: { type: 'text', allowNull: true },
   },
@@ -68,7 +68,7 @@ const TenantCampaignModel: ModelDefinition = {
 const CampaignPerformanceSnapshotModel: ModelDefinition = {
   name: 'CampaignPerformanceSnapshot',
   attributes: {
-    id: { type: 'uuid', primaryKey: true, defaultValue: 'gen_random_uuid()', allowNull: false },
+    id: { type: 'uuid', primaryKey: true, allowNull: false },
     tenantId: { type: 'string', allowNull: false },
     googleCampaignId: { type: 'string', allowNull: false },
     listingId: { type: 'string', allowNull: true },
@@ -81,7 +81,7 @@ const CampaignPerformanceSnapshotModel: ModelDefinition = {
     conversionValue: { type: 'number', allowNull: true },
     roas: { type: 'number', allowNull: true },
     ctr: { type: 'number', allowNull: true },
-    capturedAt: { type: 'date', allowNull: false, defaultValue: 'NOW()' },
+    capturedAt: { type: 'date', allowNull: false },
   },
   options: {
     tableName: 'campaign_performance_snapshots',

@@ -246,15 +246,24 @@ export async function initializeDatabase(): Promise<DatabaseManager> {
     await db.connect();
     console.log('✅ Database connected successfully');
 
-    // Sync models (create tables if they don't exist)
-    await db.syncModels(false); // false = don't drop existing tables
-    console.log('✅ Database models synchronized');
+    // Raw idempotent migrations run FIRST: they create the engine tables with
+    // their real DB-level defaults and add columns that models grew after
+    // their tables existed. Running them before sync means a database that is
+    // missing tables or columns is healed even if model sync has a problem —
+    // previously a sync failure skipped them and every catalog SELECT died on
+    // "column does not exist".
+    await runColumnMigrations(db);
 
-    // Lightweight idempotent migrations. syncModels(false) creates missing
-    // tables but does NOT add new columns to existing ones, so a model field
-    // added after a table already exists (e.g. demandScore) would make every
-    // SELECT fail ("column does not exist"). ADD COLUMN IF NOT EXISTS is safe
-    // on both fresh and pre-existing tables and never drops data.
+    // Sync models (create any remaining missing tables). A sync failure must
+    // never take the migrations or the app down with it.
+    try {
+      await db.syncModels(false); // false = don't drop existing tables
+      console.log('✅ Database models synchronized');
+    } catch (e: any) {
+      console.error('⚠️  Model sync failed (continuing — tables/columns are managed by migrations):', e?.message || e);
+    }
+
+    // Second pass: tables sync just created get any columns added since.
     await runColumnMigrations(db);
 
     return db;

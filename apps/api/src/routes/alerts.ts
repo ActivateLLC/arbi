@@ -20,6 +20,7 @@ import { getAutonomousSettings } from '../services/autonomousSettings';
 import { listCampaigns } from '../services/google-ads/campaignAutomation';
 import { checkAdvertisable } from '../services/google-ads/advertisability';
 import { getListings, MarketplaceListing } from '../routes/marketplace';
+import { youtubeConnected } from '../services/google-ads/googleAuthStore';
 
 const router = Router();
 
@@ -103,6 +104,26 @@ router.get('/', async (_req: Request, res: Response) => {
       // the campaign registry), so there is nothing for the operator to detect,
       // approve, or clean up. The system never surfaces a problem it prevents
       // itself; brand/duplicate removal is a silent, internal concern.
+
+      // Free-traffic channel. Without a connected YouTube account no organic
+      // Short ever posts; with it connected but Organic-first off, videos post
+      // unlisted (zero reach). Both are one-tap fixes, so they belong here, on
+      // every screen — not buried in a collapsed panel.
+      if (!youtubeConnected()) {
+        alerts.push({
+          id: 'youtube-not-connected', severity: 'warning',
+          title: 'YouTube not connected — organic posting is paused',
+          message: 'Connect your channel once and the engine posts every UGC video as a public Short for free traffic (no ad spend).',
+          action: { label: 'Connect YouTube', internal: 'connectYouTube' },
+        });
+      } else if (!settings.organicFirst) {
+        alerts.push({
+          id: 'organic-off', severity: 'info',
+          title: 'Organic-first is off — videos post unlisted',
+          message: 'YouTube is connected, but Organic-first is off so Shorts stay unlisted. Turn it on to post publicly and let free views prove products before any paid spend.',
+          action: { label: 'Turn on Organic-first', internal: 'organicFirst' },
+        });
+      }
 
       // Engine off while there's something ready to launch.
       if (!settings.autonomous && (advertisable.length > 0 || campaigns.some((c) => c.status === 'PAUSED'))) {

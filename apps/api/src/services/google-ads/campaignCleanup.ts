@@ -275,3 +275,61 @@ export async function cleanupCampaigns(opts: { dryRun?: boolean; customerId?: st
 
   return { dryRun, totalCampaigns: ours.length, keep, toRemove, removed, failed, errors, duplicateListings: dl.duplicates, expiredListings: dl.expired };
 }
+
+
+/**
+ * DATA-DRIVEN CATALOG ROTATION. A listing earns its slot with evidence: an
+ * order, organic views, or a live campaign. One with none of those, past its
+ * expiry plus a grace period, is dead weight that blocks fresh discovery — so
+ * it is retired (status 'expired'), oldest first. The machine is never emptied:
+ * retirement only runs while the catalog is above MIN_CATALOG, so new products
+ * from sourcing replace stale ones instead of leaving the shelves bare.
+ */
+const STALE_GRACE_DAYS = 14;
+const MIN_CATALOG = 8;
+const stripVideoName = (n: string) => String(n || '').replace(/^Arbi Video\s*-\s*/i, '').replace(/\s*-\s*[A-Za-z]{2}\s*-\s*\d+\s*$/, '').trim();
+
+export async function retireStaleListings(opts: { dryRun?: boolean } = {}): Promise<{ retired: number; kept: number; candidates: number }> {
+  const active = (await getListings('active')) as any[];
+  const now = Date.now();
+  const grace = STALE_GRACE_DAYS * 24 * 60 * 60 * 1000;
+
+  // Products with a live campaign are earning their keep (or being tested).
+  const liveKeys = new Set<string>();
+  try {
+    for (const c of (await listCampaigns()) as any[]) {
+      if (c.status !== 'ENABLED') continue;
+      const name = c.name || '';
+      if (!/^Arbi (Video )?- /i.test(name)) continue;
+      const key = /^Arbi Video - /i.test(name) ? productCampaignKey(stripVideoName(name)) : campaignProductKey(name);
+      if (key) liveKeys.add(key);
+    }
+  } catch { /* no campaign data → protect nothing extra, still guarded by orders/views */ }
+
+  const { getDatabase } = await import('../../config/database');
+  const db = getDatabase();
+
+  const candidates: any[] = [];
+  for (const l of active) {
+    const exp = l.expiresAt ? new Date(l.expiresAt).getTime() : 0;
+    if (!exp || now < exp + grace) continue;
+    if (Number(l.organicViews) > 0) continue;
+    const key = productCampaignKey(String(l.productTitle || ''));
+    if (key && liveKeys.has(key)) continue;
+    let orders = 0;
+    try { orders = ((await db.find('BuyerOrder', { where: { listingId: l.listingId } })) as any[]).length; }
+    catch { continue; } // can't verify → keep
+    if (orders > 0) continue;
+    candidates.push(l);
+  }
+  candidates.sort((a, b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime());
+
+  const room = Math.max(0, active.length - MIN_CATALOG);
+  const toRetire = candidates.slice(0, room);
+  let retired = 0;
+  for (const l of toRetire) {
+    retired++;
+    if (!opts.dryRun) { try { await updateListing(l.listingId, { status: 'expired' as any }); } catch { /* keep going */ } }
+  }
+  return { retired, kept: active.length - retired, candidates: candidates.length };
+}

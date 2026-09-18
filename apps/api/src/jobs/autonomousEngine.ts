@@ -36,7 +36,7 @@ import { refreshObservedCpa, getCachedObservedCpa } from '../services/scoring/ob
 import { expectedRoiScore, bestVirality } from '../services/scoring/expectedRoi';
 import { refreshOrganicStats, ORGANIC_PROOF_VIEWS } from '../services/google-ads/organicTraction';
 import { checkStopLoss } from '../services/google-ads/stopLoss';
-import { enforceAdvertisable, cleanupCampaigns } from '../services/google-ads/campaignCleanup';
+import { enforceAdvertisable, cleanupCampaigns, retireStaleListings } from '../services/google-ads/campaignCleanup';
 import { reserveCampaignSlot, markCampaignCreated, releaseFailedReservation } from '../services/google-ads/campaignRegistry';
 import { DEFAULT_TENANT_ID } from '../services/tenantContext';
 
@@ -137,6 +137,19 @@ async function cycle(): Promise<void> {
       if (!cj.sourced && (cj as any).skipReasons) logger.warn(`🤖 AUTO_SOURCE CJ added nothing — pool ${(cj as any).poolSize} over ${(cj as any).pagesFetched} page(s), skipped ${JSON.stringify((cj as any).skipReasons)}`);
     } catch (e: any) {
       logger.error('🤖 AUTO_SOURCE error:', e?.message || e);
+    }
+  }
+
+  // 0.4) ROTATE — data-driven: retire listings past expiry+grace that earned no
+  //      evidence (no orders, no organic views, no live campaign), oldest first,
+  //      only while the catalog stays above its minimum. Runs after sourcing so
+  //      fresh products replace stale ones — the shelves never sit stale or bare.
+  if (cfg.autoSource) {
+    try {
+      const rot = await retireStaleListings();
+      if (rot.retired) logger.info(`🤖 ROTATE: retired ${rot.retired} stale listing(s) with no traction (${rot.candidates} eligible, ${rot.kept} kept)`);
+    } catch (e: any) {
+      logger.error('🤖 ROTATE error:', e?.message || e);
     }
   }
 

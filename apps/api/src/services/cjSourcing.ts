@@ -128,16 +128,41 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
   // margin floor + ROI ranking reflect what ads actually cost.
   const thresholds = thresholdsFromConfig(srcCfg, getCachedObservedCpa());
 
+  // De-dupe against the existing catalog so we never re-add a product that's
+  // already listed (CJ Trending returns the same items every cycle → this was
+  // the source of the duplicate listings + duplicate campaigns).
+  const existing = await getListings('active').catch(() => [] as MarketplaceListing[]);
+  const existingPids = new Set(existing.map((l) => String(l.opportunityId || '')));
+  const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 60);
+  const existingTitles = new Set(existing.map((l) => norm(l.productTitle)));
+
   // Over-fetch a real pool so selection is by expected value, not by whatever
-  // CJ returns first (which trends cheap). Ordered by listed-count (demand), not price.
-  const pool = await cjClient.searchProducts({
-    keyword: opts.keyword,
-    categoryId: opts.categoryId,
-    // Trending only for generic discovery; a keyword/category searches the full
-    // catalog (otherwise Trending ∩ keyword returns almost nothing).
-    productFlag: (opts.keyword || opts.categoryId) ? undefined : 0,
-    size: Math.min(Math.max(count * 4, 20), 100),
-  });
+  // CJ returns first (which trends cheap). Ordered by listed-count (demand), not
+  // price. Walk PAGES until enough genuinely-new candidates exist: page 1 of
+  // Trending is the same 20 items every cycle, and once they're all in the
+  // catalog a single-page fetch de-dupes to nothing — the catalog never rotates.
+  const pageSize = Math.min(Math.max(count * 4, 20), 100);
+  const MAX_PAGES = 6;
+  const pool: any[] = [];
+  let pagesFetched = 0;
+  let freshCandidates = 0;
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const batch = await cjClient.searchProducts({
+      keyword: opts.keyword,
+      categoryId: opts.categoryId,
+      // Trending only for generic discovery; a keyword/category searches the full
+      // catalog (otherwise Trending ∩ keyword returns almost nothing).
+      productFlag: (opts.keyword || opts.categoryId) ? undefined : 0,
+      page,
+      size: pageSize,
+    });
+    pagesFetched = page;
+    if (!batch.length) break;
+    pool.push(...batch);
+    freshCandidates += batch.filter((p) => !existingPids.has(`cj_${str(p.pid, p.id)}`)).length;
+    if (freshCandidates >= count * 3) break;
+    await new Promise((r) => setTimeout(r, 400)); // pace CJ
+  }
 
   // Rank price-agnostically by expected value (demand × premium). listedNum is
   // the demand proxy; profit-per-unit scales with the product's own price, so a
@@ -168,14 +193,6 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
 
   const created: any[] = [];
   const skipped: any[] = [];
-
-  // De-dupe against the existing catalog so we never re-add a product that's
-  // already listed (CJ Trending returns the same items every cycle → this was
-  // the source of the duplicate listings + duplicate campaigns).
-  const existing = await getListings('active').catch(() => [] as MarketplaceListing[]);
-  const existingPids = new Set(existing.map((l) => String(l.opportunityId || '')));
-  const norm = (s: string) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 60);
-  const existingTitles = new Set(existing.map((l) => norm(l.productTitle)));
 
   for (const { p } of ranked) {
     if (created.length >= count) break;
@@ -259,12 +276,21 @@ export async function sourceTrendingFromCJ(opts: CJSourceOptions = {}) {
     });
   }
 
+  // Why-nothing-happened is the most important output of a sourcing run: a
+  // histogram of skip reasons, logged AND returned, so "Sourced 0" is never a
+  // silent wall (pool exhausted vs. auth failure vs. everything already listed).
+  const skipReasons: Record<string, number> = {};
+  for (const sk of skipped) skipReasons[sk.reason] = (skipReasons[sk.reason] || 0) + 1;
+  console.log(`🛒 CJ sourcing: +${created.length} new of ${pool.length} candidates across ${pagesFetched} page(s); skipped ${JSON.stringify(skipReasons)}`);
+
   return {
     success: true,
     preview: !!opts.preview,
     sourced: created.length,
     created,
     skippedCount: skipped.length,
+    skipReasons,
+    pagesFetched,
     poolSize: pool.length,
     // a raw sample helps confirm CJ field names on first live run
     sample: pool[0] ? { keys: Object.keys(pool[0]) } : null,

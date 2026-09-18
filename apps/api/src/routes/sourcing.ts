@@ -52,6 +52,8 @@ router.post('/scan', async (req: Request, res: Response, next: NextFunction) => 
       sourced: created.length,
       sources: { cj: (cj.created || []).length, amazon: (amazon.created || []).length },
       errors: [cj.error, amazon.error].filter(Boolean),
+      // Why nothing was added, so the operator never sees a bare "Sourced 0".
+      cj: { poolSize: cj.poolSize ?? 0, pagesFetched: cj.pagesFetched ?? 0, skipReasons: cj.skipReasons ?? {} },
       created,
     });
   } catch (error: any) {

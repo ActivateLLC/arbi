@@ -133,6 +133,8 @@ async function cycle(): Promise<void> {
       let amz: any = { sourced: 0 };
       if (isAmazonSourcingConfigured()) amz = await sourceTrendingFromAmazon({ count: 5 }).catch((e) => ({ sourced: 0, error: e?.message }));
       logger.info(`🤖 AUTO_SOURCE: CJ +${cj.sourced || 0}, Amazon +${amz.sourced || 0}`);
+      if ((cj as any).error) logger.error(`🤖 AUTO_SOURCE CJ error: ${(cj as any).error}`);
+      if (!cj.sourced && (cj as any).skipReasons) logger.warn(`🤖 AUTO_SOURCE CJ added nothing — pool ${(cj as any).poolSize} over ${(cj as any).pagesFetched} page(s), skipped ${JSON.stringify((cj as any).skipReasons)}`);
     } catch (e: any) {
       logger.error('🤖 AUTO_SOURCE error:', e?.message || e);
     }
